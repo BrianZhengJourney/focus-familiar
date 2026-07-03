@@ -70,14 +70,43 @@ let deepDomains: [String: String] = [
     "wandb.ai": "code", "docs.google.com": "notes", "notion.so": "notes",
 ]
 
+// ── user rule overrides (Rules… window), persisted to UserDefaults ──
+// key = bundle id or domain, value = kind
+var ruleOverrides: [String: String] =
+    UserDefaults.standard.dictionary(forKey: "ruleOverrides")?.compactMapValues { $0 as? String } ?? [:]
+
+func saveOverrides() { UserDefaults.standard.set(ruleOverrides, forKey: "ruleOverrides") }
+
+func overrideFor(host: String?) -> String? {
+    guard let h = host else { return nil }
+    if let o = ruleOverrides[h] { return o }
+    for (k, v) in ruleOverrides where h.hasSuffix("." + k) { return v }
+    return nil
+}
+
+// built-in classification, before user overrides (also used to show
+// defaults in the Rules window, where key is a bundle id or domain)
+func defaultKind(_ key: String) -> String {
+    if browserApps.contains(key) { return "neutral" }
+    if let k = deepApps[key] { return k }
+    for (p, k) in deepPrefixes where key.hasPrefix(p) { return k }
+    if distractionApps.contains(key) { return "distraction" }
+    for d in distractionDomains where key == d || key.hasSuffix("." + d) { return "distraction" }
+    for (d, k) in deepDomains where key == d || key.hasSuffix("." + d) { return k }
+    return "neutral"
+}
+
 func classify(bundleId: String, title: String?, url: String?) -> String {
+    let host = url.flatMap { URL(string: $0.lowercased())?.host }
+    if let o = overrideFor(host: host) { return o }
+    if let o = ruleOverrides[bundleId] { return o }
     if let k = deepApps[bundleId] { return k }
     for (p, k) in deepPrefixes where bundleId.hasPrefix(p) { return k }
     if distractionApps.contains(bundleId) { return "distraction" }
     if browserApps.contains(bundleId) {
-        if let u = url?.lowercased(), let host = URL(string: u)?.host {
-            for d in distractionDomains where host == d || host.hasSuffix("." + d) { return "distraction" }
-            for (d, k) in deepDomains where host == d || host.hasSuffix("." + d) { return k }
+        if let h = host {
+            for d in distractionDomains where h == d || h.hasSuffix("." + d) { return "distraction" }
+            for (d, k) in deepDomains where h == d || h.hasSuffix("." + d) { return k }
             return "neutral"
         }
         guard let t = title?.lowercased() else { return "neutral" }
@@ -241,6 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         pause.target = self; menu.addItem(pause)
 
         menu.addItem(NSMenuItem.separator())
+        let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: ",")
+        rules.target = self; menu.addItem(rules)
+
         let ax = NSMenuItem(title: "Enable browser awareness…", action: #selector(enableAX), keyEquivalent: "")
         ax.target = self; menu.addItem(ax)
 
@@ -290,9 +322,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         }
         let kind = classify(bundleId: bid, title: title, url: url)
+        remember(key: bid, label: name)
         var display = name
         if let host = url.flatMap({ URL(string: $0)?.host }) {
-            display = "\(name) — \(host.replacingOccurrences(of: "www.", with: ""))"
+            let h = host.replacingOccurrences(of: "www.", with: "")
+            remember(key: h, label: h)
+            display = "\(name) — \(h)"
         }
         let detail = (title ?? "").prefix(90)
         let key = "\(display)|\(kind)|\(detail)"
@@ -395,6 +430,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         // if not trusted, macOS shows the System Settings prompt itself
     }
 
+    // — Rules… window: reclassify any seen app or site —
+    var rulesWindow: NSWindow?
+    var rulesTable: NSTableView?
+    var rulesKeys: [String] = []          // row → key (bundle id or domain)
+    var seenItems: [String: String] {     // key → display label
+        get { UserDefaults.standard.dictionary(forKey: "seenItems")?.compactMapValues { $0 as? String } ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "seenItems") }
+    }
+    func remember(key: String, label: String) {
+        var s = seenItems
+        if s[key] != label { s[key] = label; seenItems = s }
+    }
+
+    static let kinds: [(id: String, label: String)] = [
+        ("code", "Deep — code"), ("term", "Deep — terminal"), ("cad", "Deep — CAD/design"),
+        ("paper", "Deep — reading"), ("notes", "Deep — notes"),
+        ("neutral", "Neutral"), ("distraction", "Distraction"),
+    ]
+
+    @objc func openRules() {
+        let seen = seenItems
+        rulesKeys = seen.keys.sorted { (seen[$0] ?? $0).lowercased() < (seen[$1] ?? $1).lowercased() }
+
+        if rulesWindow == nil {
+            let table = NSTableView()
+            table.rowHeight = 26
+            table.dataSource = self
+            table.delegate = self
+            let cName = NSTableColumn(identifier: .init("name")); cName.title = "App / site"; cName.width = 250
+            let cKind = NSTableColumn(identifier: .init("kind")); cKind.title = "Counts as"; cKind.width = 150
+            table.addTableColumn(cName); table.addTableColumn(cKind)
+
+            let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 430, height: 380))
+            scroll.documentView = table
+            scroll.hasVerticalScroller = true
+
+            let win = NSWindow(contentRect: scroll.frame,
+                               styleMask: [.titled, .closable, .resizable],
+                               backing: .buffered, defer: false)
+            win.title = "Focus Rules — what counts as deep work"
+            win.contentView = scroll
+            win.isReleasedWhenClosed = false
+            win.center()
+            rulesWindow = win
+            rulesTable = table
+        }
+        rulesTable?.reloadData()
+        NSApp.activate(ignoringOtherApps: true)
+        rulesWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc func rulePicked(_ sender: NSPopUpButton) {
+        let row = sender.tag
+        guard row >= 0, row < rulesKeys.count,
+              let kind = sender.selectedItem?.representedObject as? String else { return }
+        let key = rulesKeys[row]
+        if kind == defaultKind(key) { ruleOverrides.removeValue(forKey: key) }
+        else { ruleOverrides[key] = kind }
+        saveOverrides()
+        lastSent = ""                     // force re-send so the change shows immediately
+        if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
+    }
+
     // — JS bridge —
     func js(_ script: String) {
         webView.evaluateJavaScript(script, completionHandler: nil)
@@ -415,6 +513,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         default:
             break
         }
+    }
+}
+
+extension AppDelegate: NSTableViewDataSource, NSTableViewDelegate {
+    func numberOfRows(in tableView: NSTableView) -> Int { rulesKeys.count }
+
+    func tableView(_ tv: NSTableView, viewFor col: NSTableColumn?, row: Int) -> NSView? {
+        guard row < rulesKeys.count else { return nil }
+        let key = rulesKeys[row]
+        if col?.identifier.rawValue == "name" {
+            let label = seenItems[key] ?? key
+            let tf = NSTextField(labelWithString: label == key ? key : "\(label)  ·  \(key)")
+            tf.lineBreakMode = .byTruncatingTail
+            tf.toolTip = key
+            return tf
+        }
+        let pop = NSPopUpButton()
+        pop.bezelStyle = .rounded
+        pop.controlSize = .small
+        for k in Self.kinds {
+            pop.addItem(withTitle: k.label)
+            pop.lastItem?.representedObject = k.id
+        }
+        let current = ruleOverrides[key] ?? defaultKind(key)
+        if let idx = Self.kinds.firstIndex(where: { $0.id == current }) { pop.selectItem(at: idx) }
+        pop.tag = row
+        pop.target = self
+        pop.action = #selector(rulePicked(_:))
+        return pop
     }
 }
 

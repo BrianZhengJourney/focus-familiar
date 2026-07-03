@@ -243,6 +243,46 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 .j-strip .deep{ background:#2fae8f; } .j-strip .neut{ background:#3d3a52; } .j-strip .dist{ background:#c14a6a; }
 .j-strip i:hover{ filter:brightness(1.25); }
 .j-strip-cap{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-dim); margin:-7px 0 8px; }
+/* quest view */
+.q-wrap{ padding:2px 0; }
+.q-node{ display:flex; gap:10px; padding:5px 0 5px 2px; position:relative; }
+.q-node::before{ content:""; position:absolute; left:13px; top:30px; bottom:-6px;
+  width:1.5px; background:repeating-linear-gradient(#b9a5ff44 0 4px, transparent 4px 9px); }
+.q-node:last-of-type::before{ display:none; }
+.q-ico{ width:26px; height:26px; flex:none; display:flex; align-items:center; justify-content:center;
+  font-size:15px; background:#241f42; border:1px solid #ffffff22; border-radius:50%; z-index:1; }
+.q-node.main .q-ico{ background:#2b2450; border-color:#b9a5ff66; }
+.q-node.bad .q-ico{ background:#3c2b3a; border-color:#e88fae55; }
+.q-node.gold .q-ico{ background:#3d3420; border-color:#ffd76a88; }
+.q-title{ font-family:var(--font-magic); font-size:13px; color:#f4f1ff; line-height:1.3; padding-top:3px; }
+.q-node.main .q-title{ color:#cabcf5; }
+.q-node.bad .q-title{ color:#e88fae; }
+.q-node.gold .q-title{ color:#ffd76a; }
+.q-sub{ font-size:11px; color:var(--ink-dim); margin-top:1px; }
+
+/* week heatmap */
+.wk-grid{ display:grid; grid-template-columns:34px repeat(24, 1fr); gap:2px; align-items:center; margin:6px 0 4px; }
+.wk-day{ font-size:9.5px; color:var(--ink-dim); text-align:right; padding-right:4px; }
+.wk-cell{ aspect-ratio:1; border-radius:2px; background:#ffffff0a; min-width:0; }
+.wk-row-total{ font-size:10px; color:var(--ink); }
+.wk-legend{ display:flex; gap:10px; font-size:9.5px; color:var(--ink-dim); margin-top:6px; align-items:center; }
+.wk-legend i{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:3px; }
+.wk-days{ margin-top:8px; }
+.wk-dayline{ display:flex; align-items:center; gap:8px; font-size:11px; padding:2px 0; }
+.wk-dayline .n{ width:34px; color:var(--ink-dim); text-align:right; font-size:10px; }
+.wk-bar{ flex:1; height:7px; border-radius:3px; background:#ffffff0c; overflow:hidden; display:flex; }
+.wk-bar i{ height:100%; }
+.wk-dayline .v{ width:74px; font-size:10px; color:var(--ink-dim); font-variant-numeric:tabular-nums; }
+
+/* pomodoro hunt chip */
+.pomo-wrap{ position:absolute; right:0; bottom:226px; display:none; }
+.pomo-wrap.on{ display:block; }
+.chip.pomo{ cursor:pointer; border-color:#ffd76a66; }
+.chip.pomo b{ color:#ffd76a; font-variant-numeric:tabular-nums; }
+.pomobar{ display:inline-block; width:40px; height:4px; border-radius:2px; background:#ffffff20;
+  overflow:hidden; margin-left:4px; vertical-align:1px; }
+.pomobar span{ display:block; height:100%; background:linear-gradient(90deg,#f0a832,#ffd76a); }
+
 .j-tip{ position:fixed; z-index:999; pointer-events:none; opacity:0; transition:opacity .12s;
   background:rgba(14,11,28,.96); border:1px solid rgba(185,165,255,.35); border-radius:8px;
   padding:5px 9px; font-size:10.5px; color:var(--ink); max-width:260px; white-space:nowrap;
@@ -268,6 +308,9 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
       <span class="chip streak">◇ <b id="streak">0m</b></span>
       <span class="chip lvl" id="lvlChip"></span>
     </div>
+  </div>
+  <div class="pomo-wrap" id="pomoWrap">
+    <span class="chip pomo" onclick="famPomodoro(0)" title="click to call off the hunt">🏹 <b id="pomoTime">25:00</b><span class="pomobar"><span id="pomoFill"></span></span></span>
   </div>
   <div class="toast" id="toast"></div>
   <div class="bubble" id="bubble">
@@ -795,20 +838,29 @@ function famToggleContext(){
   bridge({ type: 'bubble', on: true });
 }
 
-/* ── journal render + toggle: one active timeframe, expandable sections ── */
+/* ── journal render + toggle: time views, quest story, week heatmap ── */
 const J_TIMEFRAMES = [
   { label: '30 min', min: 30 },
   { label: '1 h',    min: 60 },
-  { label: '2 h',    min: 120 },
   { label: 'today',  min: 1440 },
 ];
+const J_VIEWS = [ { id: 'quest', label: '⚔️ quest' }, { id: 'week', label: '▦ week' } ];
 const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
                    built:   { icon: '🛠️', title: 'built',      cls: '' },
                    distracted: { icon: '🕳️', title: 'distracted', cls: 'bad' } };
-const J = { tf: 30, open: { read: false, built: false, distracted: false } };
+const J = { tf: 30, view: 'time', open: { read: false, built: false, distracted: false } };
 
-function jSetTf(min){ J.tf = min; renderJournal(); }
+function jSetTf(min){ J.view = 'time'; J.tf = min; renderJournal(); }
+function jSetView(v){ J.view = v; renderJournal(); }
 function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
+
+function renderTabs(){
+  document.getElementById('journalTabs').innerHTML =
+    J_TIMEFRAMES.map(t =>
+      `<button class="j-tab ${J.view === 'time' && t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${t.label}</button>`).join('') +
+    J_VIEWS.map(v =>
+      `<button class="j-tab ${J.view === v.id ? 'cur' : ''}" onclick="jSetView('${v.id}')">${v.label}</button>`).join('');
+}
 
 /* ── segment strip: merged per-activity bars with hover tooltips.
    consecutive checkpoints of the same thing fuse into one bar, so you
@@ -868,15 +920,13 @@ const J_NOTES = [
 ];
 
 function renderJournal(){
+  renderTabs();
+  if (J.view === 'quest') return renderQuest();
+  if (J.view === 'week')  return renderWeek();
+
   const now = Date.now();
   const w0 = now - J.tf * 60000;
-  const fmtM = ms => {
-    const m = Math.max(1, Math.round(ms / 60000));
-    return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : m + 'm';
-  };
-  document.getElementById('journalTabs').innerHTML = J_TIMEFRAMES.map(t =>
-    `<button class="j-tab ${t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${t.label}</button>`).join('');
-
+  const fmtM = fmtDur;
   const labels = labelMap();
 
   // clip entries to the window for the stacked deep/neutral/distraction bar
@@ -930,6 +980,179 @@ function renderJournal(){
   document.getElementById('journalBody').innerHTML =
     html || `<div class="j-empty">the pages for this window are blank.<br>
       go build something, read something, break something —<br>i'll write it down. ✦</div>`;
+}
+
+/* ── quest view: the day retold as an RPG ── */
+function renderQuest(){
+  const now = Date.now();
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const w0 = dayStart.getTime();
+  const labels = labelMap();
+  const groups = aggregate(w0, now, labels);
+  const deepG = groups.filter(g => g.sec !== 'distracted').sort((a, b) => b.ms - a.ms);
+  const distG = groups.filter(g => g.sec === 'distracted').sort((a, b) => b.ms - a.ms);
+
+  const entries = windowEntries()
+    .map(h => ({ ...h, a: Math.max(h.t0, w0), b: Math.min(h.t1, now) }))
+    .filter(h => h.b - h.a > 1000)
+    .sort((x, y) => x.a - y.a);
+  let neut = 0, deepTotal = 0;
+  for (const h of entries){
+    const d = h.b - h.a;
+    if (DEEP_KINDS.has(h.kind)) deepTotal += d;
+    else if (h.kind !== 'distraction') neut += d;
+  }
+  const distTotal = distG.reduce((s, g) => s + g.ms, 0);
+
+  // best streak: longest run of deep entries with <3min gaps
+  let best = 0, run = 0, lastEnd = 0;
+  for (const h of entries){
+    if (DEEP_KINDS.has(h.kind)) {
+      run = (h.a - lastEnd < 180000) ? run + (h.b - h.a) : (h.b - h.a);
+      lastEnd = h.b;
+      best = Math.max(best, run);
+    }
+  }
+
+  const node = (ico, title, sub, cls = '') => `
+    <div class="q-node ${cls}">
+      <div class="q-ico">${ico}</div>
+      <div class="q-body"><div class="q-title">${title}</div>${sub ? `<div class="q-sub">${sub}</div>` : ''}</div>
+    </div>`;
+
+  let html = '';
+  if (!entries.length) {
+    html = '<div class="j-empty">the quest log is blank — the adventure hasn\'t started yet. ✦</div>';
+  } else {
+    html += node('🏰', 'dawn', `first sighted at ${fmtClock(entries[0].a)}`);
+    if (deepG[0]) html += node('⚔️', `MAIN QUEST — ${deepG[0].label}`,
+      `${fmtDur(deepG[0].ms)} of honest work`, 'main');
+    deepG.slice(1, 4).filter(g => g.ms > 8 * 60000).forEach(g =>
+      html += node('🗡️', `side quest — ${g.label}`, fmtDur(g.ms)));
+    if (neut > 5 * 60000) html += node('🧾', 'admin tax', `${fmtDur(neut)} — tolerated, grudgingly`);
+    if (distTotal > 3 * 60000) html += node('🕳️', 'the distraction pit',
+      `−${fmtDur(distTotal)} · ` + distG.slice(0, 2).map(g => `${g.label} (${fmtDur(g.ms)})`).join(' · '), 'bad');
+    html += node('✦', `lv.${Fam.level} · ${Fam.xp}/${Fam.xpToNext()} XP`,
+      best > 60000 ? `best streak: ${fmtDur(best)} unbroken` : 'no streak worth singing about yet', 'gold');
+    const pct = deepTotal + neut + distTotal > 0 ? Math.round(100 * deepTotal / (deepTotal + neut + distTotal)) : 0;
+    html += `<div class="j-note" style="margin-top:8px">${J_NOTES.find(n => pct >= n.min).note}</div>`;
+  }
+  document.getElementById('journalBody').innerHTML = `<div class="q-wrap">${html}</div>`;
+}
+
+/* ── week view: hour-by-day heatmap + per-day focus bars ── */
+function famLoadWeek(entries){ Fam.week = Array.isArray(entries) ? entries : []; }
+
+function renderWeek(){
+  const days = [...Array(7)].map((_, i) => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - i)); return d;
+  });
+  const dayMs = 86400000;
+  // past days come from famLoadWeek (yesterday and older); today from live history
+  const all = [...(Fam.week || []), ...windowEntries()];
+  // cells[day][hour] = {deep, dist}; daily totals
+  const cells = days.map(() => [...Array(24)].map(() => ({ deep: 0, dist: 0 })));
+  const totals = days.map(() => ({ deep: 0, dist: 0, neut: 0 }));
+  for (const h of all){
+    if (!h.t0 || !h.t1) continue;
+    for (let di = 0; di < 7; di++){
+      const d0 = days[di].getTime(), d1 = d0 + dayMs;
+      const a = Math.max(h.t0, d0), b = Math.min(h.t1, d1);
+      if (b <= a) continue;
+      const deep = DEEP_KINDS.has(h.kind), dist = h.kind === 'distraction';
+      if (deep) totals[di].deep += b - a; else if (dist) totals[di].dist += b - a; else totals[di].neut += b - a;
+      // split into hour buckets
+      let t = a;
+      while (t < b){
+        const hr = new Date(t).getHours();
+        const hrEnd = Math.min(b, new Date(t).setMinutes(59, 59, 999) + 1);
+        if (deep) cells[di][hr].deep += hrEnd - t;
+        else if (dist) cells[di][hr].dist += hrEnd - t;
+        t = hrEnd;
+      }
+    }
+  }
+  const dayName = d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + (d.toDateString() === new Date().toDateString() ? '·' : '');
+  let grid = '';
+  days.forEach((d, di) => {
+    grid += `<div class="wk-day">${dayName(d)}</div>`;
+    for (let hr = 0; hr < 24; hr++){
+      const c = cells[di][hr];
+      let style = '';
+      if (c.dist > c.deep && c.dist > 3 * 60000) style = `background:rgba(193,74,106,${Math.min(.9, .25 + c.dist / 3600000)})`;
+      else if (c.deep > 60000) style = `background:rgba(47,174,143,${Math.min(.95, .2 + c.deep / 3600000)})`;
+      const tip = `${dayName(d)} ${String(hr).padStart(2,'0')}:00 — ${fmtDur(c.deep)} deep${c.dist > 60000 ? ', ' + fmtDur(c.dist) + ' distracted' : ''}`;
+      grid += `<div class="wk-cell" style="${style}" data-tip="${c.deep + c.dist > 60000 ? tip : ''}"></div>`;
+    }
+  });
+  let dayLines = '';
+  days.forEach((d, di) => {
+    const t = totals[di], tot = t.deep + t.dist + t.neut;
+    if (!tot) return;
+    dayLines += `<div class="wk-dayline"><span class="n">${dayName(d)}</span>
+      <span class="wk-bar">
+        <i style="width:${100*t.deep/tot}%;background:#2fae8f"></i>
+        <i style="width:${100*t.neut/tot}%;background:#3d3a52"></i>
+        <i style="width:${100*t.dist/tot}%;background:#c14a6a"></i></span>
+      <span class="v">${fmtDur(t.deep)} · ${Math.round(100*t.deep/tot)}%</span></div>`;
+  });
+  document.getElementById('journalBody').innerHTML = `
+    <div class="wk-grid" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">${grid}</div>
+    <div class="wk-legend"><span><i style="background:rgba(47,174,143,.7)"></i>deep</span>
+      <span><i style="background:rgba(193,74,106,.6)"></i>distracted</span><span>hours 0–23 →</span></div>
+    <div class="wk-days">${dayLines || '<div class="j-empty">one day of data so far — the map fills in as the week goes.</div>'}</div>`;
+}
+
+/* ── pomodoro: the hunt ── */
+const Pomo = { until: 0, dur: 0, timer: null, wounded: false };
+
+function famPomodoro(min){
+  if (Pomo.timer){ endPomo(false); return; }        // toggle = call off
+  if (!min) return;
+  Pomo.dur = min * 60000;
+  Pomo.until = Date.now() + Pomo.dur;
+  Pomo.wounded = false;
+  document.getElementById('pomoWrap').classList.add('on');
+  Pomo.timer = setInterval(pomoTick, 1000);
+  toast(`🏹 the hunt begins — ${min} minutes`);
+  sound('streak');
+  pomoTick();
+}
+function pomoTick(){
+  const left = Pomo.until - Date.now();
+  if (left <= 0) return endPomo(true);
+  const mm = Math.floor(left / 60000), ss = Math.floor(left % 60000 / 1000);
+  document.getElementById('pomoTime').textContent = `${mm}:${String(ss).padStart(2, '0')}`;
+  document.getElementById('pomoFill').style.width = (100 * (1 - left / Pomo.dur)).toFixed(1) + '%';
+  if (Fam.cur && Fam.cur.kind === 'distraction' && !Pomo.wounded){
+    Pomo.wounded = true;
+    Fam.setState('poisoned');
+    toast('🩸 the hunt is wounded — come back');
+    sound('poison');
+  }
+}
+function endPomo(success){
+  clearInterval(Pomo.timer); Pomo.timer = null;
+  document.getElementById('pomoWrap').classList.remove('on');
+  if (success && !Pomo.wounded){ toast('🏹 hunt complete · +35 XP'); Fam.addXP(35); Fam.sparkle(7); sound('streak'); }
+  else if (success){ toast('🏹 hunt finished — limping, but done · +15 XP'); Fam.addXP(15); }
+  else toast('🏹 hunt called off');
+}
+
+/* ── markdown export (Swift pulls this string and writes/copies it) ── */
+function famExportMD(){
+  const now = Date.now();
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const labels = labelMap();
+  const groups = aggregate(dayStart.getTime(), now, labels);
+  const sec = (name, s) => {
+    const items = groups.filter(g => g.sec === s).sort((a, b) => b.ms - a.ms);
+    return items.length ? `\n\n## ${name}\n` + items.map(g => `- ${g.label} — ${fmtDur(g.ms)}`).join('\n') : '';
+  };
+  const st = windowStats(24 * 60);
+  return `# Focus Journal — ${new Date().toDateString()}\n\n` +
+    `**${st.pct}% deep** · ${fmtDur(st.deepMin * 60000)} deep work · familiar lv.${Fam.level} (${Fam.xp}/${Fam.xpToNext()} XP)` +
+    sec('📖 Read', 'read') + sec('🛠️ Built', 'built') + sec('🕳️ Distractions', 'distracted') + '\n';
 }
 
 function famToggleJournal(){

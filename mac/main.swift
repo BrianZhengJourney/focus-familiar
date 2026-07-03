@@ -195,6 +195,20 @@ func readTodayLog() -> String {
     return "[\(items)]"
 }
 
+// past 6 days (today comes from the live in-page history, so skip it)
+func readWeekLog() -> String {
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+    var lines: [String] = []
+    for i in 1...6 {
+        guard let d = Calendar.current.date(byAdding: .day, value: -i, to: Date()) else { continue }
+        let url = logDir.appendingPathComponent("activity-\(f.string(from: d)).jsonl")
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            lines.append(contentsOf: text.split(separator: "\n").map(String.init))
+        }
+    }
+    return "[\(lines.joined(separator: ","))]"
+}
+
 // ── on-device AI classifier (Apple FoundationModels, macOS 26+).
 // one call per unique (host, title), verdict cached forever in UserDefaults;
 // heuristics remain the instant fallback ──
@@ -463,6 +477,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let journal = NSMenuItem(title: "Today's journal", action: #selector(openJournal), keyEquivalent: "j")
         journal.target = self; menu.addItem(journal)
 
+        let huntMenu = NSMenu()
+        for min in [25, 50] {
+            let item = NSMenuItem(title: "\(min) minutes", action: #selector(startHunt(_:)), keyEquivalent: "")
+            item.representedObject = min; item.target = self
+            huntMenu.addItem(item)
+        }
+        let huntRoot = NSMenuItem(title: "Begin a hunt 🏹", action: nil, keyEquivalent: "")
+        menu.addItem(huntRoot)
+        menu.setSubmenu(huntMenu, for: huntRoot)
+
+        let export = NSMenuItem(title: "Export today's journal", action: #selector(exportJournal), keyEquivalent: "e")
+        export.target = self; menu.addItem(export)
+
         let click = NSMenuItem(title: "Always clickable", action: #selector(toggleClickable(_:)), keyEquivalent: "")
         click.target = self; menu.addItem(click)
 
@@ -691,6 +718,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let d = UserDefaults.standard
         d.set(!d.bool(forKey: "soundOn"), forKey: "soundOn")
     }
+    @objc func startHunt(_ sender: NSMenuItem) {
+        guard let min = sender.representedObject as? Int else { return }
+        js("famPomodoro(\(min))")
+    }
+
+    // write today's journal as markdown next to the activity logs + clipboard
+    @objc func exportJournal() {
+        webView.evaluateJavaScript("famExportMD()") { result, _ in
+            guard let md = result as? String else { return }
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+            let dir = logDir.appendingPathComponent("exports")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).md")
+            try? md.write(to: url, atomically: true, encoding: .utf8)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(md, forType: .string)
+            let a = NSAlert()
+            a.messageText = "Journal exported"
+            a.informativeText = "Copied to clipboard and saved to \(url.path)"
+            NSApp.activate(ignoringOtherApps: true)
+            a.runModal()
+        }
+    }
+
     // show the level-up spectacle without granting XP
     @objc func previewEvolution() {
         js("""
@@ -842,6 +893,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // then greet with whatever is frontmost right now
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         js("famLoadHistory(\(readTodayLog()))")
+        js("famLoadWeek(\(readWeekLog()))")
         if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
     }
 }

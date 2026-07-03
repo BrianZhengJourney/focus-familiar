@@ -397,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     // — panel + webview —
     func buildPanel() {
-        let size = NSSize(width: 500, height: 320)
+        let size = NSSize(width: 560, height: 320)
         guard let screen = NSScreen.main else { fatalError("no screen") }
         let vf = screen.visibleFrame
         var origin = NSPoint(x: vf.maxX - size.width - 12, y: vf.minY + 4)
@@ -666,7 +666,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func hide(vf: NSRect, left: Bool) {
         if !hidden { savedOrigin = NSPoint(x: vf.maxX - panel.frame.width - 12, y: panel.frame.origin.y) }
         hidden = true
-        let x = left ? vf.minX + 40 - panel.frame.width : vf.maxX - 370
+        let x = left ? vf.minX + 40 - panel.frame.width : vf.maxX + 130 - panel.frame.width
         panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.origin.y))
     }
     func unhide() {
@@ -797,10 +797,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
         case "levelUp":
             victoryWalk()
-            if UserDefaults.standard.bool(forKey: "soundOn") { NSSound(named: "Glass")?.play() }
+            playSound("Glass")
+        case "sound":
+            // gain = soft tick, streak = bright ping, poison = low thud
+            let map = ["gain": "Tink", "streak": "Ping", "poison": "Basso"]
+            if let n = body["name"] as? String, let snd = map[n] { playSound(snd) }
         default:
             break
         }
+    }
+
+    func playSound(_ name: String) {
+        guard UserDefaults.standard.bool(forKey: "soundOn") else { return }
+        NSSound(named: name)?.play()
     }
 
     // ── milestone moment: waddle across the screen bottom and back ──
@@ -809,7 +818,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard walkTimer == nil, !dragging, !overlayHidden, !hidden else { return }
         let vf = (panel.screen ?? NSScreen.main!).visibleFrame
         let home = panel.frame.origin
-        let target = vf.minX - 340          // creature reaches the left screen edge
+        let target = vf.minX + 160 - panel.frame.width   // creature reaches the left screen edge
         let start = Date()
         let dur = 10.0
         js("document.getElementById('familiar').classList.add('walking')")

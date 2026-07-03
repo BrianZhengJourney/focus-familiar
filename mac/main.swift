@@ -490,6 +490,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let export = NSMenuItem(title: "Export today's journal", action: #selector(exportJournal), keyEquivalent: "e")
         export.target = self; menu.addItem(export)
 
+        let page = NSMenuItem(title: "Open journal as page ↗", action: #selector(openJournalPage), keyEquivalent: "o")
+        page.target = self; menu.addItem(page)
+
         let click = NSMenuItem(title: "Always clickable", action: #selector(toggleClickable(_:)), keyEquivalent: "")
         click.target = self; menu.addItem(click)
 
@@ -739,6 +742,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             a.informativeText = "Copied to clipboard and saved to \(url.path)"
             NSApp.activate(ignoringOtherApps: true)
             a.runModal()
+        }
+    }
+
+    // render today's journal as a standalone page and open it in the browser.
+    // same dated filename each time — newer exports overwrite older ones.
+    @objc func openJournalPage() {
+        webView.evaluateJavaScript("famExportHTML()") { result, _ in
+            guard let html = result as? String else { return }
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+            let dir = logDir.appendingPathComponent("exports")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).html")
+            try? html.write(to: url, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.open(url)
         }
     }
 

@@ -68,6 +68,19 @@ open "/Applications/Focus Familiar.app"
   app thread (Carbon hotkey, no permissions needed).
 - All tracking is local; nothing leaves the machine.
 
+### Exports
+
+- `◐ → Export today's journal` — markdown to
+  `~/Library/Application Support/FocusFamiliar/exports/journal-YYYY-MM-DD.md`
+  (+ clipboard). `◐ → Open journal as page ↗` renders the full journal
+  (strip, quest log, complete lists, week heatmap) as a standalone HTML page
+  in the browser.
+- Exports are **idempotent**: one dated file per day, newer exports overwrite
+  older ones. The same rule applies to Notion pushes — a day page
+  ("Focus Journal — <date>") lives under the current week's Reflection page
+  and is **updated in place** (`replace_content`) when newer data exists,
+  never duplicated.
+
 ## Files
 
 - `index.html` — desktop shell, familiar SVG, overlays

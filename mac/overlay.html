@@ -1155,6 +1155,69 @@ function famExportMD(){
     sec('📖 Read', 'read') + sec('🛠️ Built', 'built') + sec('🕳️ Distractions', 'distracted') + '\n';
 }
 
+/* ── full-page HTML export: standalone journal for the browser.
+   reuses the live CSS + renderers so it matches the in-app journal. ── */
+function famExportHTML(){
+  const now = Date.now();
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const w0 = dayStart.getTime();
+  const labels = labelMap();
+  const groups = aggregate(w0, now, labels);
+  const st = windowStats(24 * 60);
+
+  // borrow the quest renderer via a save/render/restore round-trip
+  const jb = document.getElementById('journalBody');
+  const savedHTML = jb.innerHTML, savedView = J.view;
+  J.view = 'quest'; renderQuest();
+  const questHTML = jb.innerHTML;
+  J.view = 'week'; renderWeek();
+  const weekHTML = jb.innerHTML;
+  jb.innerHTML = savedHTML; J.view = savedView;
+
+  const fullSec = (name, s) => {
+    const items = groups.filter(g => g.sec === s).sort((a, b) => b.ms - a.ms);
+    return items.length ? `<h2>${name}</h2>` + items.map(g =>
+      `<div class="j-item"><span class="lbl">${g.label}</span><span class="min">${fmtDur(g.ms)}</span></div>`).join('') : '';
+  };
+
+  const css = document.querySelector('style').textContent;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus Journal — ${new Date().toDateString()}</title>
+<style>${css}</style>
+<style>
+  html, body{ overflow:auto !important; height:auto !important;
+    background:linear-gradient(160deg,#191534,#201a44) fixed !important; }
+  .page{ max-width:720px; margin:0 auto; padding:44px 28px 80px; }
+  .page h1{ font-family:Georgia,'Fraunces',serif; font-weight:600; font-size:30px; margin:0 0 4px; color:#f4f1ff; }
+  .page .meta{ color:#9d97b8; font-size:13.5px; margin-bottom:24px; }
+  .page h2{ font-family:Georgia,serif; font-size:17px; color:#cabcf5; margin:28px 0 8px; font-weight:500; }
+  .page .j-item{ font-size:13.5px; display:flex; }
+  .page .j-item .lbl{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .page .j-item .min{ color:#9d97b8; font-size:12px; }
+  .page .j-strip{ height:24px; }
+  .page .j-strip i span{ line-height:24px; font-size:10px; }
+  .page .q-title{ font-size:15px; }
+  .page .wk-grid{ max-width:560px; }
+</style></head>
+<body><div class="page">
+  <h1>✦ Focus Journal</h1>
+  <div class="meta">${new Date().toDateString()} · recorded by your familiar (lv.${Fam.level}) ·
+    <b style="color:#7df0cf">${st.pct}% deep</b> · ${fmtDur(st.deepMin * 60000)} deep work</div>
+  <h2>the day, hour by hour</h2>
+  ${buildStrip(w0, now, labels)}
+  <h2>⚔️ quest log</h2>
+  ${questHTML}
+  ${fullSec('📖 everything read', 'read')}
+  ${fullSec('🛠️ everything built', 'built')}
+  ${fullSec('🕳️ every distraction', 'distracted')}
+  <h2>▦ the week so far</h2>
+  ${weekHTML}
+</div>
+<script>document.querySelectorAll('[data-tip]').forEach(e => { if (e.dataset.tip) e.title = e.dataset.tip; });<\/script>
+</body></html>`;
+}
+
 function famToggleJournal(){
   const j = document.getElementById('journal');
   if (j.classList.contains('on')) {

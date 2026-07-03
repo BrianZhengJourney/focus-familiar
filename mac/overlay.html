@@ -216,10 +216,18 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 .j-legend b{ font-weight:600; }
 .j-legend .ld{ color:#7df0cf; } .j-legend .ln{ color:#8f8aa8; } .j-legend .lx{ color:#e88fae; }
 .j-note{ font-family:var(--font-magic); font-size:12px; color:#cabcf5; margin:2px 0 8px; }
-.j-strip{ display:flex; height:14px; border-radius:4px; overflow:hidden; margin:2px 0 10px; background:#ffffff08; }
-.j-strip i{ display:block; height:100%; min-width:1px; }
+.j-strip{ display:flex; height:16px; border-radius:4px; overflow:hidden; margin:2px 0 10px; background:#ffffff08; }
+.j-strip i{ display:block; height:100%; min-width:1px; font-style:normal; overflow:hidden; }
+.j-strip i span{ display:block; font-size:8.5px; line-height:16px; color:rgba(255,255,255,.95);
+  padding:0 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  text-shadow:0 1px 2px rgba(0,0,0,.55); pointer-events:none; }
 .j-strip .deep{ background:#2fae8f; } .j-strip .neut{ background:#3d3a52; } .j-strip .dist{ background:#c14a6a; }
+.j-strip i:hover{ filter:brightness(1.25); }
 .j-strip-cap{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-dim); margin:-7px 0 8px; }
+.j-tip{ position:fixed; z-index:999; pointer-events:none; opacity:0; transition:opacity .12s;
+  background:rgba(14,11,28,.96); border:1px solid rgba(185,165,255,.35); border-radius:8px;
+  padding:5px 9px; font-size:10.5px; color:var(--ink); max-width:260px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; box-shadow:0 6px 20px #000a; }
 
 /* toast */
 .toast{ position:absolute; right:150px; bottom:96px; padding:8px 16px; border-radius:12px;
@@ -717,6 +725,7 @@ function famToggleContext(){
     <div class="bb-head">✦ here's your thread</div>
     ${curLine}
     <div class="bb-cols">${col('LAST 25 MIN', s25)}${col('LAST HOUR', s60)}</div>
+    ${buildStrip(now - 3600000, now, labels, { minLabelPct: 18 })}
     ${read ? `<div class="bb-sec"><div class="sh">READ</div>${read}</div>` : ''}
     ${built ? `<div class="bb-sec"><div class="sh">BUILT</div>${built}</div>` : ''}
     ${!read && !built ? '<div class="bb-line bb-dim">…still getting to know your rhythm. give me a few minutes.</div>' : ''}
@@ -742,6 +751,56 @@ const J = { tf: 30, open: { read: false, built: false, distracted: false } };
 function jSetTf(min){ J.tf = min; renderJournal(); }
 function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
 
+/* ── segment strip: merged per-activity bars with hover tooltips.
+   consecutive checkpoints of the same thing fuse into one bar, so you
+   see "Cursor · 20m" not twenty 1-minute stripes. ── */
+const fmtDur = ms => {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : m + 'm';
+};
+const fmtClock = t => new Date(t).toTimeString().slice(0, 5);
+
+function buildStrip(w0, now, labels, { minLabelPct = 12 } = {}){
+  const segs = windowEntries()
+    .map(x => ({ ...x, a: Math.max(x.t0, w0), b: Math.min(x.t1, now) }))
+    .filter(x => x.b - x.a > 1000)
+    .sort((x, y) => x.a - y.a);
+  if (!segs.length) return '';
+  const merged = [];
+  for (const s of segs){
+    const key = canonKey(s) + '|' + (DEEP_KINDS.has(s.kind) ? 'deep' : s.kind);
+    const last = merged[merged.length - 1];
+    if (last && last.key === key && s.a - last.b < 120000) last.b = Math.max(last.b, s.b);
+    else merged.push({ a: s.a, b: s.b, key, kind: s.kind,
+                       label: (labels && labels[canonKey(s)]) || normTitle(s.detail) || s.app });
+  }
+  const total = merged.reduce((acc, s) => acc + (s.b - s.a), 0);
+  const inner = merged.map(s => {
+    const pct = 100 * (s.b - s.a) / total;
+    const cls = DEEP_KINDS.has(s.kind) ? 'deep' : s.kind === 'distraction' ? 'dist' : 'neut';
+    const tip = `${s.label} — ${fmtDur(s.b - s.a)} · ${fmtClock(s.a)}–${fmtClock(s.b)}`;
+    const inline = pct >= minLabelPct ? `<span>${s.label} · ${fmtDur(s.b - s.a)}</span>` : '';
+    return `<i class="${cls}" style="width:${pct.toFixed(2)}%" data-tip="${tip.replace(/"/g, '&quot;')}">${inline}</i>`;
+  }).join('');
+  return `<div class="j-strip" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">${inner}</div>
+          <div class="j-strip-cap"><span>${fmtClock(merged[0].a)}</span><span>now</span></div>`;
+}
+
+function stripTip(e){
+  let tip = document.getElementById('stripTip');
+  if (!tip){
+    tip = document.createElement('div');
+    tip.id = 'stripTip'; tip.className = 'j-tip';
+    document.body.appendChild(tip);
+  }
+  const t = e && e.target && e.target.dataset ? e.target.dataset.tip : null;
+  if (!t){ tip.style.opacity = 0; return; }
+  tip.textContent = t;
+  tip.style.opacity = 1;
+  tip.style.left = Math.max(4, Math.min(e.clientX + 10, innerWidth - 270)) + 'px';
+  tip.style.top = Math.max(4, e.clientY - 32) + 'px';
+}
+
 const J_NOTES = [
   { min: 70, note: 'an honest stretch of work. i am well fed. ✦' },
   { min: 40, note: 'decent — the flame flickers, but holds.' },
@@ -759,11 +818,12 @@ function renderJournal(){
   document.getElementById('journalTabs').innerHTML = J_TIMEFRAMES.map(t =>
     `<button class="j-tab ${t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${t.label}</button>`).join('');
 
-  // clip entries to the window, chronological, for bar + strip
+  const labels = labelMap();
+
+  // clip entries to the window for the stacked deep/neutral/distraction bar
   const segs = windowEntries()
     .map(h => ({ ...h, a: Math.max(h.t0, w0), b: Math.min(h.t1, now) }))
-    .filter(h => h.b - h.a > 1000)
-    .sort((x, y) => x.a - y.a);
+    .filter(h => h.b - h.a > 1000);
   let deep = 0, dist = 0, neut = 0;
   for (const s of segs){
     const d = s.b - s.a;
@@ -786,20 +846,11 @@ function renderJournal(){
         <span class="ld"><b>${pct(deep)}%</b> deep · ${fmtM(deep)}</span>
         <span class="ln"><b>${pct(neut)}%</b> neutral</span>
         <span class="lx"><b>${pct(dist)}%</b> distracted · ${fmtM(dist)}</span>
-      </div>
-      <div class="j-strip">` +
-        segs.map(s => {
-          const cls = DEEP_KINDS.has(s.kind) ? 'deep' : s.kind === 'distraction' ? 'dist' : 'neut';
-          const w = (100 * (s.b - s.a) / total).toFixed(2);
-          const t = (s.canon || normTitle(s.detail) || s.app).replace(/"/g, '');
-          return `<i class="${cls}" style="width:${w}%" title="${t} — ${fmtM(s.b - s.a)}"></i>`;
-        }).join('') +
-      `</div>
-      <div class="j-strip-cap"><span>${new Date(Math.max(w0, segs[0]?.a || w0)).toTimeString().slice(0,5)}</span><span>now</span></div>
-      <div class="j-note">${note}</div>`;
+      </div>` +
+      buildStrip(w0, now, labels) +
+      `<div class="j-note">${note}</div>`;
   }
 
-  const labels = labelMap();
   const groups = aggregate(w0, now, labels);
   let html = head;
   for (const s of ['read', 'built', 'distracted']){

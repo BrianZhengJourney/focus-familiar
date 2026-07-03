@@ -177,7 +177,8 @@ func todayLogURL() -> URL {
 
 func appendLog(_ entry: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: entry),
-          let line = String(data: data, encoding: .utf8) else { return }
+          let line = String(data: data, encoding: .utf8) else { NSLog("FF appendLog serialize FAILED"); return }
+    NSLog("FF appendLog writing %d bytes", line.count)
     let url = todayLogURL()
     if let h = try? FileHandle(forWritingTo: url) {
         h.seekToEndOfFile()
@@ -362,6 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var dragging = false
     var hidden = false             // tucked away at the right screen edge
     var savedOrigin = NSPoint.zero // where to restore after unhiding
+    var activationToken: NSObjectProtocol?  // MUST retain, or the observer dies
 
     static let characters: [(id: String, name: String)] = [
         ("wisp", "Wisp"), ("robocat", "Robo-cat"), ("panda", "Panda"),
@@ -374,8 +376,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         watchApps()
         registerHotKey()
         startHoverTracking()
-        // greet with whatever is frontmost right now
-        if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
+        // NOTE: initial send happens in webView(_:didFinish:) — calling
+        // famSetApp before the page loads silently drops the event
     }
 
     // — panel + webview —
@@ -469,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     // — app watching —
     func watchApps() {
-        NSWorkspace.shared.notificationCenter.addObserver(
+        activationToken = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main
         ) { [weak self] note in
@@ -493,6 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func send(app: NSRunningApplication) {
         guard app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         let bid = app.bundleIdentifier ?? "?"
+        guard bid != "com.apple.loginwindow", bid != "com.apple.ScreenSaver.Engine" else { return }
         let name = shortName(app.localizedName ?? bid)
         var title: String? = nil
         var url: String? = nil
@@ -527,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let key = "\(display)|\(kind)|\(detail)|\(canon)"
         guard key != lastSent else { return }
         lastSent = key
+        NSLog("FF send: %@ kind=%@", display, kind)
         js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))), \(jsonStr(url ?? "")), \(jsonStr(canon)))")
     }
 
@@ -716,15 +720,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "famClick":
             if hidden { unhide() } else { showContext() }
         case "log":
-            if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
+            NSLog("FF bridge log received")
+            if let entry = body["entry"] as? [String: Any] { appendLog(entry) } else { NSLog("FF log cast FAILED") }
         default:
             break
         }
     }
 
-    // replay today's persisted history once the overlay page is ready
+    // replay today's persisted history once the overlay page is ready,
+    // then greet with whatever is frontmost right now
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         js("famLoadHistory(\(readTodayLog()))")
+        if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
     }
 }
 

@@ -374,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var dragFrameStart = NSPoint.zero
     var dragging = false
     var hidden = false             // tucked away at the right screen edge
+    var overlayHidden = false      // fully hidden via the menu bar toggle
     var savedOrigin = NSPoint.zero // where to restore after unhiding
     var activationToken: NSObjectProtocol?  // MUST retain, or the observer dies
     var lockTokens: [NSObjectProtocol] = []
@@ -430,7 +431,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let url = dir.appendingPathComponent("overlay.html")
         webView.loadFileURL(url, allowingReadAccessTo: dir)
         panel.contentView = webView
-        panel.orderFrontRegardless()
+        overlayHidden = UserDefaults.standard.bool(forKey: "overlayHidden")
+        if !overlayHidden { panel.orderFrontRegardless() }
     }
 
     // — status bar —
@@ -451,6 +453,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.setSubmenu(charMenu, for: charRoot)
 
         menu.addItem(NSMenuItem.separator())
+        let hide = NSMenuItem(title: "Hide familiar", action: #selector(toggleOverlay(_:)), keyEquivalent: "h")
+        hide.identifier = .init("hideToggle")
+        hide.target = self; menu.addItem(hide)
+
         let ctx = NSMenuItem(title: "What was I doing?  (⌥Space)", action: #selector(toggleContextMenu), keyEquivalent: "")
         ctx.target = self; menu.addItem(ctx)
 
@@ -666,6 +672,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         paused.toggle()
         js("famPause(\(paused))")
     }
+    @objc func toggleOverlay(_ sender: NSMenuItem) {
+        overlayHidden.toggle()
+        UserDefaults.standard.set(overlayHidden, forKey: "overlayHidden")
+        if overlayHidden { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+    }
     @objc func toggleLogin(_ sender: NSMenuItem) {
         let svc = SMAppService.mainApp
         if svc.status == .enabled { try? svc.unregister() } else { try? svc.register() }
@@ -815,6 +826,7 @@ extension AppDelegate: NSMenuDelegate {
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
             if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }
             if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
+            if item.identifier?.rawValue == "hideToggle" { item.title = overlayHidden ? "Show familiar" : "Hide familiar" }
         }
     }
 }

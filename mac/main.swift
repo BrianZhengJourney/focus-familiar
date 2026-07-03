@@ -159,6 +159,166 @@ let shortNames: [String: String] = [
 ]
 func shortName(_ n: String) -> String { shortNames[n] ?? n }
 
+// ── activity log: one JSONL file per day in Application Support.
+// working memory (JS, in-RAM) → episodic log (disk) → replayed on launch ──
+
+let logDir: URL = {
+    let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("FocusFamiliar")
+    try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    return d
+}()
+
+func todayLogURL() -> URL {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    return logDir.appendingPathComponent("activity-\(f.string(from: Date())).jsonl")
+}
+
+func appendLog(_ entry: [String: Any]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: entry),
+          let line = String(data: data, encoding: .utf8) else { return }
+    let url = todayLogURL()
+    if let h = try? FileHandle(forWritingTo: url) {
+        h.seekToEndOfFile()
+        h.write((line + "\n").data(using: .utf8)!)
+        try? h.close()
+    } else {
+        try? (line + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+
+func readTodayLog() -> String {
+    guard let text = try? String(contentsOf: todayLogURL(), encoding: .utf8) else { return "[]" }
+    let items = text.split(separator: "\n").joined(separator: ",")
+    return "[\(items)]"
+}
+
+// ── on-device AI classifier (Apple FoundationModels, macOS 26+).
+// one call per unique (host, title), verdict cached forever in UserDefaults;
+// heuristics remain the instant fallback ──
+
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+let aiInstructions = """
+    You classify what someone is doing in a browser tab, and name the content.
+    Categories (pick exactly one):
+      code — programming, github, technical docs, terminals
+      paper — reading papers/articles, lectures, educational videos, learning
+      notes — writing, planning, note-taking
+      neutral — email, search, shopping, logistics, misc
+      distraction — social feeds, short videos, entertainment, gossip
+    Canonical name: the underlying content's short natural name — a paper's
+    title without site suffixes or IDs, a video's topic, or the site name.
+    Reply with exactly one line, no explanation:  CATEGORY|CANONICAL NAME
+    """
+
+final class SmartClassifier {
+    static let shared = SmartClassifier()
+    private var cache: [String: String] =
+        UserDefaults.standard.dictionary(forKey: "aiVerdicts")?.compactMapValues { $0 as? String } ?? [:]
+    private var inFlight = Set<String>()
+
+    // local OpenAI-compatible fallback (e.g. `mlx_lm.server --port 8080`)
+    private let endpoint = UserDefaults.standard.string(forKey: "aiEndpoint") ?? "http://127.0.0.1:8080/v1"
+    private var localAlive = false
+    private var lastPing = Date.distantPast
+
+    private var appleAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *), case .available = SystemLanguageModel.default.availability { return true }
+        #endif
+        return false
+    }
+
+    var statusLine: String {
+        pingLocal()
+        if appleAvailable { return "AI: Apple on-device model active" }
+        if localAlive { return "AI: local model at \(endpoint)" }
+        return "AI: off — heuristics only (run mlx_lm.server on :8080)"
+    }
+
+    func pingLocal() {
+        guard Date().timeIntervalSince(lastPing) > 60 else { return }
+        lastPing = Date()
+        guard let u = URL(string: endpoint + "/models") else { return }
+        var req = URLRequest(url: u); req.timeoutInterval = 1.5
+        URLSession.shared.dataTask(with: req) { _, r, _ in
+            DispatchQueue.main.async { self.localAlive = (r as? HTTPURLResponse)?.statusCode == 200 }
+        }.resume()
+    }
+
+    // returns cached verdict "(kind, canonicalLabel)" if known; else nil and
+    // (optionally) kicks off a background classification
+    func verdict(host: String, title: String, onNew: @escaping () -> Void) -> (kind: String, label: String)? {
+        let key = host + "|" + title
+        if let v = cache[key] {
+            let parts = v.split(separator: "|", maxSplits: 1).map(String.init)
+            return parts.count == 2 ? (parts[0], parts[1]) : nil
+        }
+        classifyInBackground(key: key, host: host, title: title, onDone: onNew)
+        return nil
+    }
+
+    private func classifyInBackground(key: String, host: String, title: String, onDone: @escaping () -> Void) {
+        pingLocal()
+        guard !inFlight.contains(key), appleAvailable || localAlive else { return }
+        inFlight.insert(key)
+        let prompt = "Site: \(host)\nTab title: \(title)"
+        let finish: (String?) -> Void = { reply in
+            DispatchQueue.main.async {
+                self.inFlight.remove(key)
+                guard let reply else { return }
+                let line = reply.split(separator: "\n").first.map(String.init) ?? ""
+                let parts = line.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+                let kinds = ["code", "paper", "notes", "neutral", "distraction"]
+                guard parts.count == 2, kinds.contains(parts[0].lowercased()) else { return }
+                self.cache[key] = "\(parts[0].lowercased())|\(parts[1].prefix(70))"
+                UserDefaults.standard.set(self.cache, forKey: "aiVerdicts")
+                onDone()
+            }
+        }
+        if appleAvailable {
+            #if canImport(FoundationModels)
+            if #available(macOS 26.0, *) {
+                Task {
+                    let session = LanguageModelSession(instructions: aiInstructions)
+                    finish(try? await session.respond(to: prompt).content)
+                }
+            }
+            #endif
+        } else {
+            classifyViaLocal(prompt: prompt, finish: finish)
+        }
+    }
+
+    // OpenAI-compatible /chat/completions against the local server
+    private func classifyViaLocal(prompt: String, finish: @escaping (String?) -> Void) {
+        guard let u = URL(string: endpoint + "/chat/completions") else { return finish(nil) }
+        var req = URLRequest(url: u)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 20
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "messages": [["role": "system", "content": aiInstructions],
+                         ["role": "user", "content": prompt]],
+            "temperature": 0, "max_tokens": 50,
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data,
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let choices = obj["choices"] as? [[String: Any]],
+                  let msg = choices.first?["message"] as? [String: Any],
+                  let content = msg["content"] as? String
+            else { return finish(nil) }
+            finish(content)
+        }.resume()
+    }
+}
+
 // ── accessibility (optional, for browser tab titles) ────────
 
 func axTrusted(prompt: Bool) -> Bool {
@@ -184,7 +344,7 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
     var panel: OverlayPanel!
     var webView: WKWebView!
     var statusItem: NSStatusItem!
@@ -246,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "bridge")
         webView = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: cfg)
+        webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) { webView.underPageBackgroundColor = .clear }
 
@@ -293,6 +454,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let ax = NSMenuItem(title: "Enable browser awareness…", action: #selector(enableAX), keyEquivalent: "")
         ax.target = self; menu.addItem(ax)
 
+        let ai = NSMenuItem(title: "AI: checking…", action: nil, keyEquivalent: "")
+        ai.isEnabled = false
+        ai.identifier = .init("aiStatus")
+        menu.addItem(ai)
+
         menu.addItem(NSMenuItem.separator())
         let quit = NSMenuItem(title: "Quit Focus Familiar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
@@ -338,19 +504,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 title = focusedWindowTitle(pid: app.processIdentifier)
             }
         }
-        let kind = classify(bundleId: bid, title: title, url: url)
+        var kind = classify(bundleId: bid, title: title, url: url)
+        var canon = ""
         remember(key: bid, label: name)
         var display = name
         if let host = url.flatMap({ URL(string: $0)?.host }) {
             let h = host.replacingOccurrences(of: "www.", with: "")
             remember(key: h, label: h)
             display = "\(name) — \(h)"
+            // user override > on-device AI > heuristics
+            let hasOverride = overrideFor(host: host) != nil || ruleOverrides[bid] != nil
+            if !hasOverride, let t = title, !t.isEmpty,
+               let v = SmartClassifier.shared.verdict(host: h, title: t, onNew: { [weak self] in
+                   self?.lastSent = ""
+                   if let front = NSWorkspace.shared.frontmostApplication { self?.send(app: front) }
+               }) {
+                kind = v.kind
+                canon = v.label
+            }
         }
         let detail = (title ?? "").prefix(90)
-        let key = "\(display)|\(kind)|\(detail)"
+        let key = "\(display)|\(kind)|\(detail)|\(canon)"
         guard key != lastSent else { return }
         lastSent = key
-        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))), \(jsonStr(url ?? "")))")
+        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))), \(jsonStr(url ?? "")), \(jsonStr(canon)))")
     }
 
     // — hotkey (⌥Space) via Carbon: works without accessibility permission —
@@ -538,9 +715,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             endDrag()
         case "famClick":
             if hidden { unhide() } else { showContext() }
+        case "log":
+            if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
         default:
             break
         }
+    }
+
+    // replay today's persisted history once the overlay page is ready
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        js("famLoadHistory(\(readTodayLog()))")
     }
 }
 
@@ -582,6 +766,7 @@ extension AppDelegate: NSMenuDelegate {
             }
             if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
+            if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
         }
     }
 }

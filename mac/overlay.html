@@ -183,10 +183,22 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 .j-close{ font-family:inherit; font-size:11px; color:var(--ink-dim); background:none;
   border:none; cursor:pointer; padding:2px 4px; }
 .j-close:hover{ color:var(--ink); }
+.j-tabs{ display:flex; gap:5px; padding:8px 14px 2px; flex:none; }
+.j-tab{ font-family:inherit; font-size:10.5px; color:var(--ink-dim); background:#ffffff0a;
+  border:1px solid #ffffff14; border-radius:14px; padding:3px 10px; cursor:pointer; }
+.j-tab:hover{ color:var(--ink); }
+.j-tab.cur{ color:#14102b; background:#cabcf5; border-color:#cabcf5; font-weight:600; }
 .j-body{ overflow-y:auto; padding:8px 14px 12px; }
 .j-bucket{ margin-bottom:10px; }
 .j-bh{ font-size:10px; color:var(--ink-dim); letter-spacing:.06em; text-transform:uppercase;
   margin-bottom:4px; padding-bottom:2px; border-bottom:1px dashed #ffffff14; }
+.j-sh{ cursor:pointer; user-select:none; }
+.j-sh .arr{ display:inline-block; transition:transform .2s; font-size:9px; margin-right:2px; }
+.j-sh.open .arr{ transform:rotate(90deg); }
+.j-more{ font-size:10.5px; color:var(--ink-dim); cursor:pointer; padding:2px 0;
+  text-decoration:underline; text-underline-offset:2px; }
+.j-more:hover{ color:var(--ink); }
+.j-total{ font-size:10.5px; color:var(--ink-dim); margin-left:6px; font-weight:400; }
 .j-sec{ margin:4px 0 2px; }
 .j-sh{ font-size:10.5px; color:#cabcf5; margin-bottom:2px; }
 .j-sh.bad{ color:#e88fae; }
@@ -225,6 +237,7 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
       <span>✦ today's journal</span>
       <button class="j-close" onclick="famToggleJournal()">✕</button>
     </div>
+    <div class="j-tabs" id="journalTabs"></div>
     <div class="j-body" id="journalBody"></div>
   </div>
   <div class="familiar" id="familiar"></div>
@@ -506,10 +519,15 @@ setInterval(() => {
 }, 4600);
 
 /* ═══ API called from Swift ═══ */
-function famSetApp(appName, kind, detail, url){
+function famSetApp(appName, kind, detail, url, canon){
   const now = Date.now();
-  if (Fam.cur) { Fam.cur.t1 = now; Fam.history.push(Fam.cur); if (Fam.history.length > 600) Fam.history.shift(); }
-  Fam.cur = { app: appName, kind, detail: detail || '', url: url || '', t0: now };
+  if (Fam.cur) {
+    Fam.cur.t1 = now;
+    Fam.history.push(Fam.cur);
+    if (Fam.history.length > 600) Fam.history.shift();
+    if (Fam.cur.t1 - Fam.cur.t0 >= 5000) bridge({ type: 'log', entry: Fam.cur });  // persist to disk
+  }
+  Fam.cur = { app: appName, kind, detail: detail || '', url: url || '', canon: canon || '', t0: now };
   // frantic switching → ghost
   Fam.switches = Fam.switches.filter(t => now - t < 8000);
   Fam.switches.push(now);
@@ -521,6 +539,13 @@ function famSetApp(appName, kind, detail, url){
 
 function famSetCharacter(id){ Fam.setCharacter(id); toast(CHARACTERS[id].name); }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
+
+/* called by Swift on launch with today's persisted entries (JSONL replay) */
+function famLoadHistory(entries){
+  if (!Array.isArray(entries)) return;
+  Fam.history = entries.filter(e => e && e.t0 && e.t1).concat(Fam.history);
+  if (Fam.history.length > 600) Fam.history = Fam.history.slice(-600);
+}
 
 function bridge(msg){
   try { window.webkit.messageHandlers.bridge.postMessage(msg); } catch(e) {}
@@ -543,6 +568,7 @@ function normTitle(t){
     .replace(/\s+/g, ' ').trim();
 }
 function canonKey(h){
+  if (h.canon) return 'ai:' + h.canon.toLowerCase();   // on-device model's canonical name
   const arx = (h.url || '').match(/arxiv\.org\/(?:abs|pdf|html)\/(\d{4}\.\d{4,5})/i);
   if (arx) return 'arxiv:' + arx[1];       // 2606.10305 pdf == abs == html page
   const t = normTitle(h.detail);
@@ -562,7 +588,7 @@ function labelMap(){
   const m = {};
   for (const h of windowEntries()){
     const k = canonKey(h);
-    m[k] = bestLabel(m[k], normTitle(h.detail) || h.app);
+    m[k] = bestLabel(m[k], h.canon || normTitle(h.detail) || h.app);
   }
   return m;
 }
@@ -653,38 +679,50 @@ function famToggleContext(){
   bridge({ type: 'bubble', on: true });
 }
 
-/* ── journal render + toggle ── */
-const J_BUCKETS = [
-  { label: 'last 30 min',   from: 30 },
-  { label: '30–60 min ago', from: 60,  to: 30 },
-  { label: '1–2 h ago',     from: 120, to: 60 },
-  { label: 'earlier today', from: 720, to: 120 },
+/* ── journal render + toggle: one active timeframe, expandable sections ── */
+const J_TIMEFRAMES = [
+  { label: '30 min', min: 30 },
+  { label: '1 h',    min: 60 },
+  { label: '2 h',    min: 120 },
+  { label: 'today',  min: 1440 },
 ];
 const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
                    built:   { icon: '🛠️', title: 'built',      cls: '' },
                    distracted: { icon: '🕳️', title: 'distracted', cls: 'bad' } };
+const J = { tf: 30, open: { read: false, built: false, distracted: false } };
+
+function jSetTf(min){ J.tf = min; renderJournal(); }
+function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
 
 function renderJournal(){
   const now = Date.now();
-  const fmtM = ms => Math.max(1, Math.round(ms / 60000)) + 'm';
+  const fmtM = ms => {
+    const m = Math.max(1, Math.round(ms / 60000));
+    return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : m + 'm';
+  };
+  document.getElementById('journalTabs').innerHTML = J_TIMEFRAMES.map(t =>
+    `<button class="j-tab ${t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${t.label}</button>`).join('');
+
   const labels = labelMap();
+  const groups = aggregate(now - J.tf * 60000, now, labels);
   let html = '';
-  for (const b of J_BUCKETS){
-    const groups = aggregate(now - b.from * 60000, now - (b.to || 0) * 60000, labels);
-    if (!groups.length) continue;
-    let sec = '';
-    for (const s of ['read', 'built', 'distracted']){
-      const items = groups.filter(g => g.sec === s).sort((a, c) => c.ms - a.ms).slice(0, 5);
-      if (!items.length) continue;
-      const m = SEC_META[s];
-      sec += `<div class="j-sec"><div class="j-sh ${m.cls}">${m.icon} ${m.title}</div>` +
-        items.map(g => `<div class="j-item"><span class="lbl">${g.label}</span><span class="min">${fmtM(g.ms)}</span></div>`).join('') +
-        `</div>`;
-    }
-    html += `<div class="j-bucket"><div class="j-bh">${b.label}</div>${sec}</div>`;
+  for (const s of ['read', 'built', 'distracted']){
+    const items = groups.filter(g => g.sec === s).sort((a, c) => c.ms - a.ms);
+    if (!items.length) continue;
+    const m = SEC_META[s];
+    const total = fmtM(items.reduce((acc, g) => acc + g.ms, 0));
+    const open = J.open[s];
+    const shown = open ? items : items.slice(0, 3);
+    html += `<div class="j-sec">
+      <div class="j-sh ${m.cls} ${open ? 'open' : ''}" onclick="jToggleSec('${s}')">
+        <span class="arr">▶</span>${m.icon} ${m.title}<span class="j-total">${total} · ${items.length}</span>
+      </div>` +
+      shown.map(g => `<div class="j-item"><span class="lbl">${g.label}</span><span class="min">${fmtM(g.ms)}</span></div>`).join('') +
+      (!open && items.length > 3 ? `<div class="j-more" onclick="jToggleSec('${s}')">+ ${items.length - 3} more</div>` : '') +
+      `</div>`;
   }
   document.getElementById('journalBody').innerHTML =
-    html || '<div class="j-empty">nothing logged yet — go do something worth remembering.</div>';
+    html || '<div class="j-empty">nothing logged in this window — go do something worth remembering.</div>';
 }
 
 function famToggleJournal(){

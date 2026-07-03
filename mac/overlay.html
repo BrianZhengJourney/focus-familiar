@@ -692,12 +692,15 @@ function famToggleContext(){
        <div class="pct ${pctCls(s.pct)}">${s.pct}%</div>
        <div class="sub">${s.deepMin}m deep work</div></div>`;
 
-  // 📖 read: deep reading entries with real titles, most recent first, deduped
-  const seen = new Set();
+  // 📖 read: deep reading entries, deduped by canonical key so the same
+  // paper under different titles collapses to its best-known name
+  const labels = labelMap();
+  const seenK = new Set();
   const read = windowEntries().reverse()
-    .filter(h => h.kind === 'paper' && h.detail && !seen.has(h.detail) && seen.add(h.detail))
+    .filter(h => h.kind === 'paper' && (h.detail || h.canon))
+    .filter(h => { const k = canonKey(h); if (seenK.has(k)) return false; seenK.add(k); return true; })
     .slice(0, 3)
-    .map(h => `<div class="bb-item">📖 ${h.detail}</div>`).join('');
+    .map(h => `<div class="bb-item">📖 ${labels[canonKey(h)] || normTitle(h.detail)}</div>`).join('');
 
   // 🛠️ built: deep tool time in the last hour, aggregated by app
   const w0 = now - 3600000, byApp = {};

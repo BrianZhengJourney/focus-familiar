@@ -6,6 +6,7 @@
 import Cocoa
 import WebKit
 import Carbon.HIToolbox
+import ServiceManagement
 
 // ── app classification ──────────────────────────────────────
 // kind strings understood by overlay.html:
@@ -462,6 +463,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let pause = NSMenuItem(title: "Pause watching", action: #selector(togglePause(_:)), keyEquivalent: "")
         pause.target = self; menu.addItem(pause)
 
+        let login = NSMenuItem(title: "Start at login", action: #selector(toggleLogin(_:)), keyEquivalent: "")
+        login.target = self; menu.addItem(login)
+
         menu.addItem(NSMenuItem.separator())
         let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: ",")
         rules.target = self; menu.addItem(rules)
@@ -662,6 +666,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         paused.toggle()
         js("famPause(\(paused))")
     }
+    @objc func toggleLogin(_ sender: NSMenuItem) {
+        let svc = SMAppService.mainApp
+        if svc.status == .enabled { try? svc.unregister() } else { try? svc.register() }
+    }
     @objc func enableAX() {
         if axTrusted(prompt: true) {
             let a = NSAlert()
@@ -805,6 +813,7 @@ extension AppDelegate: NSMenuDelegate {
             }
             if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
+            if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }
             if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
         }
     }

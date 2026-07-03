@@ -157,6 +157,17 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 .bb-btn{ font-family:inherit; font-size:11.5px; padding:5px 10px; margin-top:8px; margin-right:6px;
   border-radius:8px; color:#e9e6f7; background:#7e68dc33; border:1px solid #7e68dc66; cursor:pointer; }
 .bb-btn:hover{ background:#7e68dc55; }
+.bb-cols{ display:flex; gap:8px; margin:8px 0; }
+.bb-col{ flex:1; background:#ffffff08; border:1px solid #ffffff10; border-radius:10px; padding:7px 10px; }
+.bb-col .k{ font-size:10px; color:var(--ink-dim); letter-spacing:.03em; }
+.bb-col .pct{ font-family:var(--font-magic); font-size:19px; margin:1px 0 2px; }
+.bb-col .pct.good{ color:#7df0cf; } .bb-col .pct.mid{ color:#ffd479; } .bb-col .pct.bad{ color:#e88fae; }
+.bb-col .sub{ font-size:10.5px; color:var(--ink-dim); }
+.bb-sec{ margin-top:8px; }
+.bb-sec .sh{ font-size:10.5px; color:#cabcf5; letter-spacing:.03em; margin-bottom:3px; }
+.bb-item{ font-size:11.5px; color:var(--ink); padding:1.5px 0; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; max-width:100%; }
+.bb-item .t{ color:var(--ink-dim); font-size:10.5px; margin-left:5px; }
 
 /* toast */
 .toast{ position:absolute; right:150px; bottom:96px; padding:8px 16px; border-radius:12px;
@@ -423,7 +434,7 @@ const RESOURCE_FOR = k => ({ code:'protein', term:'iron', cad:'iron', paper:'spe
 setInterval(() => {
   if (Fam.paused || !Fam.cur) return;
   const kind = Fam.cur.kind;
-  if (kind === 'deep' || kind === 'code' || kind === 'term' || kind === 'cad' || kind === 'paper' || kind === 'notes') {
+  if (DEEP_KINDS.has(kind)) {
     Fam.deepSec++; Fam.distractSec = Math.max(0, Fam.distractSec - 2);
     Fam.setFocus(Fam.focus + 0.25);
     if (!Fam.streakStart) Fam.streakStart = Date.now();
@@ -487,21 +498,68 @@ function closeBubble(){
   bridge({ type: 'bubble', on: false });
 }
 
+const DEEP_KINDS = new Set(['deep','code','term','cad','paper','notes']);
+
+function windowEntries(){
+  const now = Date.now();
+  return Fam.cur ? [...Fam.history, {...Fam.cur, t1: now}] : [...Fam.history];
+}
+
+function windowStats(minutes){
+  const now = Date.now(), w0 = now - minutes * 60000;
+  let deep = 0, total = 0;
+  for (const h of windowEntries()){
+    const a = Math.max(h.t0, w0), b = Math.min(h.t1, now);
+    if (b <= a) continue;
+    total += b - a;
+    if (DEEP_KINDS.has(h.kind)) deep += b - a;
+  }
+  return { pct: total ? Math.round(100 * deep / total) : 0, deepMin: Math.round(deep / 60000), total };
+}
+
+function pctCls(p){ return p >= 65 ? 'good' : p >= 35 ? 'mid' : 'bad'; }
+
 function famToggleContext(){
   const b = document.getElementById('bubble');
   if (b.classList.contains('on')) { closeBubble(); return; }
   const fmt = ms => { const m = Math.round(ms/60000); return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`; };
   const now = Date.now();
-  const recent = [...Fam.history.slice(-6)].reverse();
+  const s25 = windowStats(25), s60 = windowStats(60);
+
   const curLine = Fam.cur
     ? `<div class="bb-line">You're in <b>${Fam.cur.app}</b> — ${fmt(now - Fam.cur.t0)} so far.</div>` : '';
-  const hist = recent.map(h =>
-    `<div class="bb-line bb-dim">· ${h.app} — ${fmt(h.t1 - h.t0)}${h.kind === 'distraction' ? ' 🕳️' : ''}</div>`).join('')
-    || '<div class="bb-line bb-dim">…still getting to know your rhythm. give me a few minutes.</div>';
+
+  const col = (label, s) => s.total < 30000
+    ? `<div class="bb-col"><div class="k">${label}</div><div class="sub" style="margin-top:6px">not enough data yet</div></div>`
+    : `<div class="bb-col"><div class="k">${label}</div>
+       <div class="pct ${pctCls(s.pct)}">${s.pct}%</div>
+       <div class="sub">${s.deepMin}m deep work</div></div>`;
+
+  // 📖 read: deep reading entries with real titles, most recent first, deduped
+  const seen = new Set();
+  const read = windowEntries().reverse()
+    .filter(h => h.kind === 'paper' && h.detail && !seen.has(h.detail) && seen.add(h.detail))
+    .slice(0, 3)
+    .map(h => `<div class="bb-item">📖 ${h.detail}</div>`).join('');
+
+  // 🛠️ built: deep tool time in the last hour, aggregated by app
+  const w0 = now - 3600000, byApp = {};
+  for (const h of windowEntries()){
+    if (!DEEP_KINDS.has(h.kind) || h.kind === 'paper') continue;
+    const a = Math.max(h.t0, w0), bb = Math.min(h.t1, now);
+    if (bb > a) byApp[h.app] = (byApp[h.app] || 0) + (bb - a);
+  }
+  const built = Object.entries(byApp).sort((x, y) => y[1] - x[1]).slice(0, 3)
+    .map(([app, ms]) => `<div class="bb-item">🛠️ ${app}<span class="t">${fmt(ms)}</span></div>`).join('');
+
   const streak = Fam.streakMin();
   document.getElementById('bubbleInner').innerHTML = `
     <div class="bb-head">✦ here's your thread</div>
-    ${curLine}${hist}
+    ${curLine}
+    <div class="bb-cols">${col('LAST 25 MIN', s25)}${col('LAST HOUR', s60)}</div>
+    ${read ? `<div class="bb-sec"><div class="sh">READ</div>${read}</div>` : ''}
+    ${built ? `<div class="bb-sec"><div class="sh">BUILT</div>${built}</div>` : ''}
+    ${!read && !built ? '<div class="bb-line bb-dim">…still getting to know your rhythm. give me a few minutes.</div>' : ''}
     <div class="bb-line" style="margin-top:7px">${streak > 0 ? `focus streak: <b>${streak}m</b> 🔥` : 'no active streak — feed me.'}</div>
     <button class="bb-btn" onclick="closeBubble()">ok, back to work</button>`;
   b.classList.add('on');

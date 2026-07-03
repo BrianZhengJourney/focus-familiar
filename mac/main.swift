@@ -90,21 +90,31 @@ func classify(bundleId: String, title: String?, url: String?) -> String {
 
 // ── browser tab URL via AppleScript (prompts for Automation once) ──
 
+// returns "URL\ntitle" so one round-trip gets both
 let appleScriptForBrowser: [String: String] = [
-    "com.google.Chrome": "tell application \"Google Chrome\" to if (count of windows) > 0 then return URL of active tab of front window",
-    "com.brave.Browser": "tell application \"Brave Browser\" to if (count of windows) > 0 then return URL of active tab of front window",
-    "com.microsoft.edgemac": "tell application \"Microsoft Edge\" to if (count of windows) > 0 then return URL of active tab of front window",
-    "company.thebrowser.Browser": "tell application \"Arc\" to if (count of windows) > 0 then return URL of active tab of front window",
-    "com.apple.Safari": "tell application \"Safari\" to if (count of documents) > 0 then return URL of front document",
+    "com.google.Chrome": "tell application \"Google Chrome\" to if (count of windows) > 0 then return (URL of active tab of front window) & \"\n\" & (title of active tab of front window)",
+    "com.brave.Browser": "tell application \"Brave Browser\" to if (count of windows) > 0 then return (URL of active tab of front window) & \"\n\" & (title of active tab of front window)",
+    "com.microsoft.edgemac": "tell application \"Microsoft Edge\" to if (count of windows) > 0 then return (URL of active tab of front window) & \"\n\" & (title of active tab of front window)",
+    "company.thebrowser.Browser": "tell application \"Arc\" to if (count of windows) > 0 then return (URL of active tab of front window) & \"\n\" & (title of active tab of front window)",
+    "com.apple.Safari": "tell application \"Safari\" to if (count of documents) > 0 then return (URL of front document) & \"\n\" & (name of front document)",
 ]
 
-func activeTabURL(bundleId: String) -> String? {
+func activeTab(bundleId: String) -> (url: String, title: String)? {
     guard let src = appleScriptForBrowser[bundleId],
           let script = NSAppleScript(source: src) else { return nil }
     var err: NSDictionary?
-    let result = script.executeAndReturnError(&err)
-    return result.stringValue
+    guard let s = script.executeAndReturnError(&err).stringValue else { return nil }
+    let parts = s.split(separator: "\n", maxSplits: 1).map(String.init)
+    return (parts.first ?? "", parts.count > 1 ? parts[1] : "")
 }
+
+// "Google Chrome" → "Chrome" etc. for the bubble
+let shortNames: [String: String] = [
+    "Google Chrome": "Chrome", "Visual Studio Code": "VS Code",
+    "Microsoft Edge": "Edge", "Brave Browser": "Brave",
+    "Adobe Acrobat Reader": "Acrobat",
+]
+func shortName(_ n: String) -> String { shortNames[n] ?? n }
 
 // ── accessibility (optional, for browser tab titles) ────────
 
@@ -253,12 +263,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func send(app: NSRunningApplication) {
         guard app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         let bid = app.bundleIdentifier ?? "?"
-        let name = app.localizedName ?? bid
+        let name = shortName(app.localizedName ?? bid)
         var title: String? = nil
         var url: String? = nil
         if browserApps.contains(bid) {
-            url = activeTabURL(bundleId: bid)
-            if url == nil, AXIsProcessTrusted() {
+            if let tab = activeTab(bundleId: bid) {
+                url = tab.url
+                title = tab.title.isEmpty ? nil : tab.title
+            } else if AXIsProcessTrusted() {
                 title = focusedWindowTitle(pid: app.processIdentifier)
             }
         }
@@ -266,13 +278,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         var display = name
         if let host = url.flatMap({ URL(string: $0)?.host }) {
             display = "\(name) — \(host.replacingOccurrences(of: "www.", with: ""))"
-        } else if let t = title, !t.isEmpty {
-            display = "\(name) — \(t.prefix(48))"
         }
-        let key = "\(display)|\(kind)"
+        let detail = (title ?? "").prefix(90)
+        let key = "\(display)|\(kind)|\(detail)"
         guard key != lastSent else { return }
         lastSent = key
-        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), '')")
+        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))))")
     }
 
     // — hotkey (⌥Space) via Carbon: works without accessibility permission —

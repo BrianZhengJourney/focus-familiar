@@ -169,6 +169,32 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
   text-overflow:ellipsis; max-width:100%; }
 .bb-item .t{ color:var(--ink-dim); font-size:10.5px; margin-left:5px; }
 
+/* ── journal: full openable history, bucketed by time ── */
+.journal{ position:absolute; right:150px; bottom:10px; width:334px; max-height:300px;
+  display:none; flex-direction:column; border-radius:15px; overflow:hidden;
+  background:rgba(24,19,46,.95); backdrop-filter:blur(20px);
+  border:1px solid rgba(185,165,255,.3);
+  box-shadow:0 16px 44px rgba(0,0,0,.5), 0 0 26px var(--fam-glow);
+  color:var(--ink); font-size:12px; }
+.journal.on{ display:flex; }
+.j-head{ display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px 8px; font-family:var(--font-magic); font-size:13.5px; color:#cabcf5;
+  border-bottom:1px solid #ffffff12; flex:none; }
+.j-close{ font-family:inherit; font-size:11px; color:var(--ink-dim); background:none;
+  border:none; cursor:pointer; padding:2px 4px; }
+.j-close:hover{ color:var(--ink); }
+.j-body{ overflow-y:auto; padding:8px 14px 12px; }
+.j-bucket{ margin-bottom:10px; }
+.j-bh{ font-size:10px; color:var(--ink-dim); letter-spacing:.06em; text-transform:uppercase;
+  margin-bottom:4px; padding-bottom:2px; border-bottom:1px dashed #ffffff14; }
+.j-sec{ margin:4px 0 2px; }
+.j-sh{ font-size:10.5px; color:#cabcf5; margin-bottom:2px; }
+.j-sh.bad{ color:#e88fae; }
+.j-item{ display:flex; gap:6px; align-items:baseline; padding:1.5px 0; }
+.j-item .lbl{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.j-item .min{ color:var(--ink-dim); font-size:10.5px; flex:none; font-variant-numeric:tabular-nums; }
+.j-empty{ color:var(--ink-dim); font-size:11.5px; padding:6px 0; }
+
 /* toast */
 .toast{ position:absolute; right:150px; bottom:96px; padding:8px 16px; border-radius:12px;
   font-family:var(--font-magic); font-size:13px; color:#ffe9b0; white-space:nowrap;
@@ -193,6 +219,13 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
   <div class="bubble" id="bubble">
     <div class="bubble-inner" id="bubbleInner"></div>
     <div class="bubble-tail"></div>
+  </div>
+  <div class="journal" id="journal">
+    <div class="j-head">
+      <span>✦ today's journal</span>
+      <button class="j-close" onclick="famToggleJournal()">✕</button>
+    </div>
+    <div class="j-body" id="journalBody"></div>
   </div>
   <div class="familiar" id="familiar"></div>
   <div class="shadow"></div>
@@ -473,10 +506,10 @@ setInterval(() => {
 }, 4600);
 
 /* ═══ API called from Swift ═══ */
-function famSetApp(appName, kind, detail){
+function famSetApp(appName, kind, detail, url){
   const now = Date.now();
-  if (Fam.cur) { Fam.cur.t1 = now; Fam.history.push(Fam.cur); if (Fam.history.length > 200) Fam.history.shift(); }
-  Fam.cur = { app: appName, kind, detail: detail || '', t0: now };
+  if (Fam.cur) { Fam.cur.t1 = now; Fam.history.push(Fam.cur); if (Fam.history.length > 600) Fam.history.shift(); }
+  Fam.cur = { app: appName, kind, detail: detail || '', url: url || '', t0: now };
   // frantic switching → ghost
   Fam.switches = Fam.switches.filter(t => now - t < 8000);
   Fam.switches.push(now);
@@ -499,6 +532,59 @@ function closeBubble(){
 }
 
 const DEEP_KINDS = new Set(['deep','code','term','cad','paper','notes']);
+
+/* ── canonicalization: same thing under different names → one entry.
+   heuristics for now; an on-device model can slot in at canonKey(). ── */
+function normTitle(t){
+  return (t || '')
+    .replace(/\s*[-–—|·]\s*(YouTube|Google Docs|Google Chrome|GitHub|arXiv|Overleaf|Notion|Reddit|X)\s*$/i, '')
+    .replace(/^\(\d+\)\s*/, '')            // "(3) title" notification counts
+    .replace(/\.pdf$/i, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function canonKey(h){
+  const arx = (h.url || '').match(/arxiv\.org\/(?:abs|pdf|html)\/(\d{4}\.\d{4,5})/i);
+  if (arx) return 'arxiv:' + arx[1];       // 2606.10305 pdf == abs == html page
+  const t = normTitle(h.detail);
+  return t ? t.toLowerCase() : 'app:' + h.app;
+}
+function bestLabel(cur, cand){
+  if (!cand) return cur;
+  if (!cur) return cand;
+  const numeric = s => /^[\d.\sv]+$/i.test(s);   // prefer "SARM2: …" over "2606.10305"
+  if (numeric(cur) && !numeric(cand)) return cand;
+  return cand.length > cur.length ? cand : cur;
+}
+
+/* best label per canonical key across ALL history, so a paper first seen
+   as "2606.10305" upgrades everywhere once its real title is known */
+function labelMap(){
+  const m = {};
+  for (const h of windowEntries()){
+    const k = canonKey(h);
+    m[k] = bestLabel(m[k], normTitle(h.detail) || h.app);
+  }
+  return m;
+}
+
+/* aggregate history in [w0,w1] into read / built / distracted groups */
+function aggregate(w0, w1, labels){
+  const groups = {};
+  for (const h of windowEntries()){
+    const a = Math.max(h.t0, w0), b = Math.min(h.t1, w1);
+    if (b - a < 20000) continue;           // ignore <20s touches
+    const sec = h.kind === 'distraction' ? 'distracted'
+              : h.kind === 'paper' ? 'read'
+              : DEEP_KINDS.has(h.kind) ? 'built' : null;
+    if (!sec) continue;
+    const ck = canonKey(h);
+    const key = sec + '|' + ck;
+    const g = groups[key] || (groups[key] = { label: '', ms: 0, sec });
+    g.ms += b - a;
+    g.label = (labels && labels[ck]) || bestLabel(g.label, normTitle(h.detail) || h.app);
+  }
+  return Object.values(groups);
+}
 
 function windowEntries(){
   const now = Date.now();
@@ -561,8 +647,56 @@ function famToggleContext(){
     ${built ? `<div class="bb-sec"><div class="sh">BUILT</div>${built}</div>` : ''}
     ${!read && !built ? '<div class="bb-line bb-dim">…still getting to know your rhythm. give me a few minutes.</div>' : ''}
     <div class="bb-line" style="margin-top:7px">${streak > 0 ? `focus streak: <b>${streak}m</b> 🔥` : 'no active streak — feed me.'}</div>
-    <button class="bb-btn" onclick="closeBubble()">ok, back to work</button>`;
+    <button class="bb-btn" onclick="closeBubble()">ok, back to work</button><button class="bb-btn" onclick="famToggleJournal()">full history ↗</button>`;
+  document.getElementById('journal').classList.remove('on');
   b.classList.add('on');
+  bridge({ type: 'bubble', on: true });
+}
+
+/* ── journal render + toggle ── */
+const J_BUCKETS = [
+  { label: 'last 30 min',   from: 30 },
+  { label: '30–60 min ago', from: 60,  to: 30 },
+  { label: '1–2 h ago',     from: 120, to: 60 },
+  { label: 'earlier today', from: 720, to: 120 },
+];
+const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
+                   built:   { icon: '🛠️', title: 'built',      cls: '' },
+                   distracted: { icon: '🕳️', title: 'distracted', cls: 'bad' } };
+
+function renderJournal(){
+  const now = Date.now();
+  const fmtM = ms => Math.max(1, Math.round(ms / 60000)) + 'm';
+  const labels = labelMap();
+  let html = '';
+  for (const b of J_BUCKETS){
+    const groups = aggregate(now - b.from * 60000, now - (b.to || 0) * 60000, labels);
+    if (!groups.length) continue;
+    let sec = '';
+    for (const s of ['read', 'built', 'distracted']){
+      const items = groups.filter(g => g.sec === s).sort((a, c) => c.ms - a.ms).slice(0, 5);
+      if (!items.length) continue;
+      const m = SEC_META[s];
+      sec += `<div class="j-sec"><div class="j-sh ${m.cls}">${m.icon} ${m.title}</div>` +
+        items.map(g => `<div class="j-item"><span class="lbl">${g.label}</span><span class="min">${fmtM(g.ms)}</span></div>`).join('') +
+        `</div>`;
+    }
+    html += `<div class="j-bucket"><div class="j-bh">${b.label}</div>${sec}</div>`;
+  }
+  document.getElementById('journalBody').innerHTML =
+    html || '<div class="j-empty">nothing logged yet — go do something worth remembering.</div>';
+}
+
+function famToggleJournal(){
+  const j = document.getElementById('journal');
+  if (j.classList.contains('on')) {
+    j.classList.remove('on');
+    bridge({ type: 'bubble', on: false });
+    return;
+  }
+  document.getElementById('bubble').classList.remove('on');
+  renderJournal();
+  j.classList.add('on');
   bridge({ type: 'bubble', on: true });
 }
 

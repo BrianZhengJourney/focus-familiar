@@ -96,6 +96,17 @@ func defaultKind(_ key: String) -> String {
     return "neutral"
 }
 
+// YouTube is not one thing: shorts are junk food, lectures are spellbooks
+func youtubeKind(path: String, title: String?) -> String {
+    if path.hasPrefix("/shorts") { return "distraction" }
+    let t = (title ?? "").lowercased()
+    let learn = ["lecture", "tutorial", "course", "talk", "explained", "how to",
+                 "paper", "deep dive", "seminar", "keynote", "lesson", "conference",
+                 "walkthrough", "教程", "课程", "讲座", "公开课"]
+    if learn.contains(where: { t.contains($0) }) { return "paper" }
+    return "distraction"
+}
+
 func classify(bundleId: String, title: String?, url: String?) -> String {
     let host = url.flatMap { URL(string: $0.lowercased())?.host }
     if let o = overrideFor(host: host) { return o }
@@ -105,6 +116,9 @@ func classify(bundleId: String, title: String?, url: String?) -> String {
     if distractionApps.contains(bundleId) { return "distraction" }
     if browserApps.contains(bundleId) {
         if let h = host {
+            if h == "youtube.com" || h.hasSuffix(".youtube.com") {
+                return youtubeKind(path: url.flatMap { URL(string: $0)?.path } ?? "", title: title)
+            }
             for d in distractionDomains where h == d || h.hasSuffix("." + d) { return "distraction" }
             for (d, k) in deepDomains where h == d || h.hasSuffix("." + d) { return k }
             return "neutral"
@@ -263,6 +277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let ctx = NSMenuItem(title: "What was I doing?  (⌥Space)", action: #selector(toggleContextMenu), keyEquivalent: "")
         ctx.target = self; menu.addItem(ctx)
 
+        let journal = NSMenuItem(title: "Today's journal", action: #selector(openJournal), keyEquivalent: "j")
+        journal.target = self; menu.addItem(journal)
+
         let click = NSMenuItem(title: "Always clickable", action: #selector(toggleClickable(_:)), keyEquivalent: "")
         click.target = self; menu.addItem(click)
 
@@ -333,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let key = "\(display)|\(kind)|\(detail)"
         guard key != lastSent else { return }
         lastSent = key
-        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))))")
+        js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))), \(jsonStr(url ?? "")))")
     }
 
     // — hotkey (⌥Space) via Carbon: works without accessibility permission —
@@ -357,6 +374,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         UserDefaults.standard.set(id, forKey: "character")
     }
     @objc func toggleContextMenu() { showContext() }
+    @objc func openJournal() {
+        bubbleOpen = true
+        panel.ignoresMouseEvents = false
+        js("famToggleJournal()")
+    }
     func showContext() {
         bubbleOpen = true
         panel.ignoresMouseEvents = false
@@ -397,19 +419,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         dragTimer?.invalidate(); dragTimer = nil
         dragging = false
         let vf = (panel.screen ?? NSScreen.main!).visibleFrame
-        if NSEvent.mouseLocation.x > vf.maxX - 40 {
-            hide(edge: vf)          // dropped at the right edge → tuck away
+        let mx = NSEvent.mouseLocation.x
+        if mx > vf.maxX - 40 {
+            hide(vf: vf, left: false)     // dropped at the right edge → tuck away
+        } else if mx < vf.minX + 40 {
+            hide(vf: vf, left: true)      // …or the left edge
         } else {
             hidden = false
             UserDefaults.standard.set([panel.frame.origin.x, panel.frame.origin.y], forKey: "panelOrigin")
         }
     }
 
-    // ── edge-hide: leave a ~30px sliver of creature peeking in ──
-    func hide(edge vf: NSRect) {
+    // ── edge-hide: leave a ~30px sliver of creature peeking in.
+    // the creature sits in the panel's right ~[width-160, width-10],
+    // so the offsets differ per side ──
+    func hide(vf: NSRect, left: Bool) {
         if !hidden { savedOrigin = NSPoint(x: vf.maxX - panel.frame.width - 12, y: panel.frame.origin.y) }
         hidden = true
-        panel.setFrameOrigin(NSPoint(x: vf.maxX - 370, y: panel.frame.origin.y))
+        let x = left ? vf.minX + 40 - panel.frame.width : vf.maxX - 370
+        panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.origin.y))
     }
     func unhide() {
         hidden = false

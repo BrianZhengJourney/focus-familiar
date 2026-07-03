@@ -567,6 +567,24 @@ function famSetApp(appName, kind, detail, url, canon){
 function famSetCharacter(id){ Fam.setCharacter(id); toast(CHARACTERS[id].name); }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
 
+/* user went idle / screen locked: close the open entry so away-time
+   never counts as work. Swift re-sends the frontmost app on return. */
+function famIdle(on){
+  if (!on || !Fam.cur) return;
+  const now = Date.now();
+  Fam.cur.t1 = now;
+  if (now - Fam.cur.t0 >= 5000) {
+    Fam.history.push(Fam.cur);
+    if (Fam.history.length > 600) Fam.history.shift();
+    bridge({ type: 'log', entry: Fam.cur });
+  }
+  Fam.cur = null;
+  Fam.deepSec = 0;
+  Fam.streakStart = null;
+  Fam.setState('idle');
+  Fam.renderStreak();
+}
+
 /* called by Swift on launch with today's persisted entries (JSONL replay) */
 function famLoadHistory(entries){
   if (!Array.isArray(entries)) return;

@@ -320,6 +320,12 @@ final class SmartClassifier {
     }
 }
 
+// seconds since the user last touched mouse or keyboard (no permissions needed)
+func idleSeconds() -> Double {
+    let types: [CGEventType] = [.mouseMoved, .keyDown, .leftMouseDown, .rightMouseDown, .scrollWheel]
+    return types.map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? 0
+}
+
 // ── accessibility (optional, for browser tab titles) ────────
 
 func axTrusted(prompt: Bool) -> Bool {
@@ -364,6 +370,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var hidden = false             // tucked away at the right screen edge
     var savedOrigin = NSPoint.zero // where to restore after unhiding
     var activationToken: NSObjectProtocol?  // MUST retain, or the observer dies
+    var lockTokens: [NSObjectProtocol] = []
+    var isIdle = false
 
     static let characters: [(id: String, name: String)] = [
         ("wisp", "Wisp"), ("robocat", "Robo-cat"), ("panda", "Panda"),
@@ -480,16 +488,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             else { return }
             self.send(app: app)
         }
-        // browsers change "what you're doing" without app switches (tabs) —
-        // poll the focused window title every 5s if we have AX permission
+        // 5s heartbeat: idle detection + browser tab re-polling.
+        // idle >150s or a locked screen closes the open entry — otherwise an
+        // unattended machine racks up hours of fake "deep work"
         browserTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            guard let self, !self.paused,
+            guard let self, !self.paused else { return }
+            let idle = idleSeconds()
+            if !self.isIdle, idle > 150 {
+                self.isIdle = true
+                self.js("famIdle(true)")
+            } else if self.isIdle, idle < 10 {
+                self.isIdle = false
+                self.lastSent = ""
+                if let front = NSWorkspace.shared.frontmostApplication { self.send(app: front) }
+            }
+            guard !self.isIdle,
                   let front = NSWorkspace.shared.frontmostApplication,
                   let bid = front.bundleIdentifier,
-                  browserApps.contains(bid)
-            else { return }
+                  browserApps.contains(bid) else { return }
             self.send(app: front)
         }
+        // screen lock = hard idle, immediately
+        let dnc = DistributedNotificationCenter.default()
+        lockTokens.append(dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            self?.isIdle = true
+            self?.js("famIdle(true)")
+        })
+        lockTokens.append(dnc.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+            self?.isIdle = false
+            self?.lastSent = ""
+            if let front = NSWorkspace.shared.frontmostApplication { self?.send(app: front) }
+        })
     }
 
     func send(app: NSRunningApplication) {

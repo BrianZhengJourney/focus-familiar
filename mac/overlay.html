@@ -129,6 +129,24 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
   background:rgba(20,16,40,.82); border:1px solid #ffffff1a; color:var(--ink);
   font-size:11px; backdrop-filter:blur(8px); box-shadow:0 4px 14px #0006; }
 .chip b{ font-weight:600; font-variant-numeric:tabular-nums; }
+.chip.lvl{ color:#ffd76a; }
+.chip.lvl b{ color:#ffd76a; }
+.xpbar{ display:inline-block; width:30px; height:4px; border-radius:2px; background:#ffffff20;
+  overflow:hidden; vertical-align:1px; margin-left:2px; }
+.xpbar span{ display:block; height:100%; background:linear-gradient(90deg,#f0a832,#ffd76a); border-radius:2px; }
+
+/* milestone walk: Swift sweeps the panel across the screen bottom while
+   the creature waddles */
+.familiar.walking{ animation:waddle .45s ease-in-out infinite !important; }
+@keyframes waddle{ 0%,100%{ transform:rotate(-7deg) translateY(0);} 50%{ transform:rotate(7deg) translateY(-6px);} }
+
+/* evolution art hooks — redesigns can target these freely:
+   body[data-fam-level="N"] and .familiar.fam-lvN
+   default: the crown appears permanently from lv.2, brighter aura from lv.3 */
+[data-fam-level="2"] .crown, [data-fam-level="3"] .crown, [data-fam-level="4"] .crown,
+[data-fam-level="5"] .crown, [data-fam-level="6"] .crown{ opacity:.95; transform:translateY(0); }
+[data-fam-level="3"] .aura{ transform:scale(1.15); }
+[data-fam-level="4"] .aura, [data-fam-level="5"] .aura, [data-fam-level="6"] .aura{ transform:scale(1.28); opacity:1; }
 .chip.streak b{ color:#7df0cf; }
 .chip.pop{ animation:chipPop .45s cubic-bezier(.34,1.56,.64,1); }
 @keyframes chipPop{ 50%{ transform:scale(1.2);} }
@@ -247,6 +265,7 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
     <div class="hud-row">
       <span class="chip">🔥 <span class="flamebar"><span class="flamefill" id="flame"></span></span></span>
       <span class="chip streak">◇ <b id="streak">0m</b></span>
+      <span class="chip lvl" id="lvlChip"></span>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -388,7 +407,8 @@ const CHARACTERS = {
 /* ═══ creature + state ═══ */
 const Fam = {
   char: 'wisp', state: 'idle',
-  focus: 55, streakStart: null, level: 1,
+  focus: 55, streakStart: null,
+  xp: 0, level: 1, _deepXPsec: 0,
   resources: { protein:0, iron:0, spellbook:0, fragment:0 },
   history: [],          // {app, kind, t0, t1}
   cur: null,            // {app, kind, t0}
@@ -411,6 +431,7 @@ const Fam = {
     holder.appendChild(svg);
     holder.className = 'familiar char-' + id;
     localStorage.setItem('ff-char', id);
+    this.applyLevel();
   },
 
   STATUS: {
@@ -458,6 +479,7 @@ const Fam = {
     chip && chip.classList.add('pop');
     chip && setTimeout(() => chip.classList.remove('pop'), 500);
     this.sparkle(3);
+    this.addXP(5);
   },
 
   sparkle(n){
@@ -473,8 +495,41 @@ const Fam = {
     }
   },
 
+  /* ── persistent XP: slow, earned, survives relaunches ──
+     sources: +1/deep-minute, +5/resource, +25 streak bonus.
+     level n → n+1 costs 250·n XP (lv.2 ≈ one honest deep-work day). */
+  xpToNext(){ return 250 * this.level; },
+  loadXP(){
+    try {
+      const s = JSON.parse(localStorage.getItem('ff-xp') || '{}');
+      this.xp = s.xp || 0;
+      this.level = s.level || 1;
+    } catch(e) {}
+    this.applyLevel(); this.renderXP();
+  },
+  saveXP(){ localStorage.setItem('ff-xp', JSON.stringify({ xp: this.xp, level: this.level })); },
+  addXP(n){
+    this.xp += n;
+    while (this.xp >= this.xpToNext()) { this.xp -= this.xpToNext(); this.levelUp(); }
+    this.saveXP(); this.renderXP();
+  },
+  renderXP(){
+    const el = document.getElementById('lvlChip');
+    if (el) el.innerHTML =
+      `✦ lv.<b>${this.level}</b> <span class="xpbar"><span style="width:${Math.min(100, 100 * this.xp / this.xpToNext()).toFixed(0)}%"></span></span>`;
+  },
+  /* evolution art hooks: body[data-fam-level] + .familiar.fam-lvN classes.
+     character redesigns can target e.g.  [data-fam-level="3"] .char-panda .crown  */
+  applyLevel(){
+    document.body.dataset.famLevel = this.level;
+    const holder = document.getElementById('familiar');
+    [...holder.classList].filter(c => c.startsWith('fam-lv')).forEach(c => holder.classList.remove(c));
+    holder.classList.add('fam-lv' + this.level);
+  },
+
   levelUp(){
     this.level++;
+    this.applyLevel();
     const ring = document.getElementById('ring') || (() => {
       const r = document.createElement('div'); r.className = 'ring'; r.id = 'ring';
       document.getElementById('stage').appendChild(r); return r;
@@ -483,6 +538,7 @@ const Fam = {
     this.setState('evolved');
     this.sparkle(9);
     toast(`✦ evolved — lv.${this.level} ✦`);
+    bridge({ type: 'levelUp', level: this.level });   // Swift: victory walk + optional chime
     setTimeout(() => { if (this.state === 'evolved') this.setState('focused'); }, 8000);
   },
 
@@ -508,9 +564,9 @@ setInterval(() => {
     if (!Fam.streakStart) Fam.streakStart = Date.now();
     if (Fam.deepSec === 6) Fam.setState(kind === 'paper' ? 'scholar' : 'focused');
     if (Fam.deepSec > 0 && Fam.deepSec % 45 === 0) Fam.gain(RESOURCE_FOR(kind));
+    if (++Fam._deepXPsec >= 60) { Fam._deepXPsec = 0; Fam.addXP(1); }   // +1 XP per deep minute
     const m = Fam.streakMin();
-    if (m === 25 && !Fam._t25) { Fam._t25 = true; toast('🔥 25-minute streak'); }
-    if (m === 50 && Fam.level === 1) Fam.levelUp();
+    if (m === 25 && !Fam._t25) { Fam._t25 = true; toast('🔥 25-minute streak · +25 XP'); Fam.addXP(25); }
   } else if (kind === 'distraction') {
     Fam.distractSec++; Fam.deepSec = 0; Fam.streakStart = null; Fam._t25 = false;
     Fam.setFocus(Fam.focus - 0.5);
@@ -890,6 +946,7 @@ function famToggleJournal(){
 document.addEventListener('DOMContentLoaded', () => {
   Fam.setCharacter(localStorage.getItem('ff-char') || 'wisp');
   Fam.setFocus(55);
+  Fam.loadXP();
 
   // click = context bubble; press-and-move = drag (window moved by Swift);
   // in a plain browser (no bridge) click falls back to the bubble directly

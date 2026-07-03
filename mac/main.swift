@@ -472,6 +472,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let login = NSMenuItem(title: "Start at login", action: #selector(toggleLogin(_:)), keyEquivalent: "")
         login.target = self; menu.addItem(login)
 
+        let sounds = NSMenuItem(title: "Sounds", action: #selector(toggleSounds(_:)), keyEquivalent: "")
+        sounds.target = self; menu.addItem(sounds)
+
+        let previewEvo = NSMenuItem(title: "Preview evolution moment", action: #selector(previewEvolution), keyEquivalent: "")
+        previewEvo.target = self; menu.addItem(previewEvo)
+
         menu.addItem(NSMenuItem.separator())
         let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: ",")
         rules.target = self; menu.addItem(rules)
@@ -681,6 +687,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let svc = SMAppService.mainApp
         if svc.status == .enabled { try? svc.unregister() } else { try? svc.register() }
     }
+    @objc func toggleSounds(_ sender: NSMenuItem) {
+        let d = UserDefaults.standard
+        d.set(!d.bool(forKey: "soundOn"), forKey: "soundOn")
+    }
+    // show the level-up spectacle without granting XP
+    @objc func previewEvolution() {
+        js("""
+        (() => { const ring = document.getElementById('ring') || (() => {
+            const r = document.createElement('div'); r.className='ring'; r.id='ring';
+            document.getElementById('stage').appendChild(r); return r; })();
+          ring.classList.remove('burst'); void ring.offsetWidth; ring.classList.add('burst');
+          Fam.sparkle(9); toast('✦ evolution preview ✦'); })()
+        """)
+        victoryWalk()
+        if UserDefaults.standard.bool(forKey: "soundOn") { NSSound(named: "Glass")?.play() }
+    }
     @objc func enableAX() {
         if axTrusted(prompt: true) {
             let a = NSAlert()
@@ -773,9 +795,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if hidden { unhide() } else { showContext() }
         case "log":
             if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
+        case "levelUp":
+            victoryWalk()
+            if UserDefaults.standard.bool(forKey: "soundOn") { NSSound(named: "Glass")?.play() }
         default:
             break
         }
+    }
+
+    // ── milestone moment: waddle across the screen bottom and back ──
+    var walkTimer: Timer?
+    func victoryWalk() {
+        guard walkTimer == nil, !dragging, !overlayHidden, !hidden else { return }
+        let vf = (panel.screen ?? NSScreen.main!).visibleFrame
+        let home = panel.frame.origin
+        let target = vf.minX - 340          // creature reaches the left screen edge
+        let start = Date()
+        let dur = 10.0
+        js("document.getElementById('familiar').classList.add('walking')")
+        walkTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            let p = Date().timeIntervalSince(start) / dur
+            if p >= 1 {
+                t.invalidate(); self.walkTimer = nil
+                self.panel.setFrameOrigin(home)
+                self.js("document.getElementById('familiar').classList.remove('walking')")
+                return
+            }
+            let tri = p < 0.5 ? p * 2 : (1 - p) * 2       // out and back
+            let eased = tri * tri * (3 - 2 * tri)          // smoothstep
+            self.panel.setFrameOrigin(NSPoint(x: home.x + (target - home.x) * eased, y: home.y))
+        }
+        RunLoop.main.add(walkTimer!, forMode: .common)
     }
 
     // replay today's persisted history once the overlay page is ready,
@@ -825,6 +876,7 @@ extension AppDelegate: NSMenuDelegate {
             if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
             if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }
+            if item.title == "Sounds" { item.state = UserDefaults.standard.bool(forKey: "soundOn") ? .on : .off }
             if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
             if item.identifier?.rawValue == "hideToggle" { item.title = overlayHidden ? "Show familiar" : "Hide familiar" }
         }

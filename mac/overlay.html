@@ -570,7 +570,28 @@ function famToggleContext(){
 document.addEventListener('DOMContentLoaded', () => {
   Fam.setCharacter(localStorage.getItem('ff-char') || 'wisp');
   Fam.setFocus(55);
-  document.getElementById('familiar').addEventListener('click', famToggleContext);
+
+  // click = context bubble; press-and-move = drag (window moved by Swift);
+  // in a plain browser (no bridge) click falls back to the bubble directly
+  const fam = document.getElementById('familiar');
+  const hasBridge = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bridge);
+  let pd = null, dragging = false;
+  fam.addEventListener('pointerdown', e => {
+    pd = { x: e.clientX, y: e.clientY }; dragging = false;
+    fam.setPointerCapture(e.pointerId);
+  });
+  fam.addEventListener('pointermove', e => {
+    if (!pd || dragging) return;
+    if (Math.hypot(e.clientX - pd.x, e.clientY - pd.y) > 8) {
+      dragging = true; bridge({ type: 'dragStart' });
+    }
+  });
+  fam.addEventListener('pointerup', () => {
+    if (dragging) bridge({ type: 'dragEnd' });
+    else if (hasBridge) bridge({ type: 'famClick' });
+    else famToggleContext();
+    pd = null; dragging = false;
+  });
   // preview mode in a normal browser: ?preview&char=panda&state=poisoned
   const q = new URLSearchParams(location.search);
   if (q.has('gallery')) {

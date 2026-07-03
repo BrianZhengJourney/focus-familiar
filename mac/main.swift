@@ -148,9 +148,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var hotKeyRef: EventHotKeyRef?
     var browserTimer: Timer?
     var lastSent = ""
-    var clickable = false          // user preference (menu toggle)
-    var bubbleForcedClickable = false
+    var clickable = false          // user preference: always clickable (menu toggle)
+    var bubbleOpen = false
     var paused = false
+    // drag / hide state
+    var hoverTimer: Timer?
+    var dragTimer: Timer?
+    var dragMouseStart = NSPoint.zero
+    var dragFrameStart = NSPoint.zero
+    var dragging = false
+    var hidden = false             // tucked away at the right screen edge
+    var savedOrigin = NSPoint.zero // where to restore after unhiding
 
     static let characters: [(id: String, name: String)] = [
         ("wisp", "Wisp"), ("robocat", "Robo-cat"), ("panda", "Panda"),
@@ -162,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         buildStatusItem()
         watchApps()
         registerHotKey()
+        startHoverTracking()
         // greet with whatever is frontmost right now
         if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
     }
@@ -171,7 +180,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let size = NSSize(width: 500, height: 320)
         guard let screen = NSScreen.main else { fatalError("no screen") }
         let vf = screen.visibleFrame
-        let origin = NSPoint(x: vf.maxX - size.width - 12, y: vf.minY + 4)
+        var origin = NSPoint(x: vf.maxX - size.width - 12, y: vf.minY + 4)
+        // restore last dragged position if it's still on some screen
+        if let p = UserDefaults.standard.array(forKey: "panelOrigin") as? [Double], p.count == 2 {
+            let saved = NSPoint(x: p[0], y: p[1])
+            let rect = NSRect(origin: saved, size: size)
+            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { origin = saved }
+        }
 
         panel = OverlayPanel(contentRect: NSRect(origin: origin, size: size),
                              styleMask: [.borderless, .nonactivatingPanel],
@@ -219,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let ctx = NSMenuItem(title: "What was I doing?  (⌥Space)", action: #selector(toggleContextMenu), keyEquivalent: "")
         ctx.target = self; menu.addItem(ctx)
 
-        let click = NSMenuItem(title: "Clickable familiar", action: #selector(toggleClickable(_:)), keyEquivalent: "")
+        let click = NSMenuItem(title: "Always clickable", action: #selector(toggleClickable(_:)), keyEquivalent: "")
         click.target = self; menu.addItem(click)
 
         let pause = NSMenuItem(title: "Pause watching", action: #selector(togglePause(_:)), keyEquivalent: "")
@@ -308,13 +323,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc func toggleContextMenu() { showContext() }
     func showContext() {
-        bubbleForcedClickable = true
+        bubbleOpen = true
         panel.ignoresMouseEvents = false
         js("famToggleContext()")
     }
     @objc func toggleClickable(_ sender: NSMenuItem) {
         clickable.toggle()
-        panel.ignoresMouseEvents = !clickable
+    }
+
+    // ── hover hot-zone: click-through everywhere except over the creature ──
+    // the stage sits in the panel's bottom-right (right:10 bottom:6, ~150px)
+    func creatureRect() -> NSRect {
+        let f = panel.frame
+        return NSRect(x: f.maxX - 170, y: f.minY, width: 170, height: 175)
+    }
+    func startHoverTracking() {
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, !self.dragging else { return }
+            let interactive = self.bubbleOpen || self.clickable
+                || self.creatureRect().contains(NSEvent.mouseLocation)
+            self.panel.ignoresMouseEvents = !interactive
+        }
+    }
+
+    // ── drag: window follows the cursor between dragStart/dragEnd from JS ──
+    func beginDrag() {
+        dragging = true
+        dragMouseStart = NSEvent.mouseLocation
+        dragFrameStart = panel.frame.origin
+        dragTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let m = NSEvent.mouseLocation
+            self.panel.setFrameOrigin(NSPoint(x: self.dragFrameStart.x + m.x - self.dragMouseStart.x,
+                                              y: self.dragFrameStart.y + m.y - self.dragMouseStart.y))
+        }
+    }
+    func endDrag() {
+        dragTimer?.invalidate(); dragTimer = nil
+        dragging = false
+        let vf = (panel.screen ?? NSScreen.main!).visibleFrame
+        if NSEvent.mouseLocation.x > vf.maxX - 40 {
+            hide(edge: vf)          // dropped at the right edge → tuck away
+        } else {
+            hidden = false
+            UserDefaults.standard.set([panel.frame.origin.x, panel.frame.origin.y], forKey: "panelOrigin")
+        }
+    }
+
+    // ── edge-hide: leave a ~30px sliver of creature peeking in ──
+    func hide(edge vf: NSRect) {
+        if !hidden { savedOrigin = NSPoint(x: vf.maxX - panel.frame.width - 12, y: panel.frame.origin.y) }
+        hidden = true
+        panel.setFrameOrigin(NSPoint(x: vf.maxX - 370, y: panel.frame.origin.y))
+    }
+    func unhide() {
+        hidden = false
+        panel.setFrameOrigin(savedOrigin)
+        UserDefaults.standard.set([savedOrigin.x, savedOrigin.y], forKey: "panelOrigin")
     }
     @objc func togglePause(_ sender: NSMenuItem) {
         paused.toggle()
@@ -338,9 +403,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard message.name == "bridge",
               let body = message.body as? [String: Any],
               let type = body["type"] as? String else { return }
-        if type == "bubble", let on = body["on"] as? Bool, !on, bubbleForcedClickable {
-            bubbleForcedClickable = false
-            panel.ignoresMouseEvents = !clickable
+        switch type {
+        case "bubble":
+            bubbleOpen = (body["on"] as? Bool) ?? false
+        case "dragStart":
+            beginDrag()
+        case "dragEnd":
+            endDrag()
+        case "famClick":
+            if hidden { unhide() } else { showContext() }
+        default:
+            break
         }
     }
 }
@@ -352,7 +425,7 @@ extension AppDelegate: NSMenuDelegate {
             if let sub = item.submenu, item.title == "Character" {
                 for c in sub.items { c.state = (c.representedObject as? String == current) ? .on : .off }
             }
-            if item.title == "Clickable familiar" { item.state = clickable ? .on : .off }
+            if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
         }
     }

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Familiar — concept demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='55' r='38' fill='%237e68dc'/%3E%3Ccircle cx='38' cy='50' r='6' fill='%23140f2b'/%3E%3Ccircle cx='62' cy='50' r='6' fill='%23140f2b'/%3E%3Cpath d='M42 66 Q50 72 58 66' stroke='%23140f2b' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3Cpath d='M50 17 C46 9 50 4 50 4 C50 4 54 9 50 17Z' fill='%23b9a5ff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══════════════════ FAKE MACOS DESKTOP ══════════════════ -->
+<div class="desktop" id="desktop">
+
+  <!-- menu bar -->
+  <div class="menubar">
+    <span class="mb-apple"></span>
+    <span class="mb-app" id="mbApp">Code</span>
+    <span class="mb-item dim">File</span>
+    <span class="mb-item dim">Edit</span>
+    <span class="mb-item dim">View</span>
+    <span class="mb-spacer"></span>
+    <span class="mb-familiar-glyph" id="mbGlyph" title="Focus Familiar">◐</span>
+    <span class="mb-item dim" id="mbClock">2:47 PM</span>
+  </div>
+
+  <!-- window layer -->
+  <div class="windows" id="windows"></div>
+
+  <!-- dock -->
+  <div class="dock" id="dock"></div>
+
+  <!-- ══════ THE FAMILIAR ══════ -->
+  <div class="familiar-zone" id="familiarZone">
+    <div class="familiar" id="familiar" data-state="idle" data-level="1" title="your familiar">
+      <div class="aura" id="aura"></div>
+      <div class="ring" id="evolveRing"></div>
+      <svg class="creature" viewBox="0 0 120 120" id="creatureSvg">
+        <defs>
+          <radialGradient id="bodyGrad" cx="42%" cy="34%" r="75%">
+            <stop offset="0%"  class="grad-hi"/>
+            <stop offset="100%" class="grad-lo"/>
+          </radialGradient>
+          <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="1.1"/>
+          </filter>
+        </defs>
+        <!-- wisp flame -->
+        <g class="wisp">
+          <path d="M60 14 C55 6 60 1 60 1 C60 1 65 6 60 14 Z" class="wisp-flame"/>
+          <ellipse cx="60" cy="16" rx="3.4" ry="4.4" class="wisp-base"/>
+        </g>
+        <!-- ears -->
+        <path class="ear ear-l" d="M38 34 C30 18 40 12 44 24 C45 28 44 32 43 35 Z"/>
+        <path class="ear ear-r" d="M82 34 C90 18 80 12 76 24 C75 28 76 32 77 35 Z"/>
+        <!-- body -->
+        <path class="body" d="M60 22
+          C 84 22 96 42 95 62
+          C 94.5 78 88 92 78 98
+          C 72 101.5 66 96 60 96
+          C 54 96 48 101.5 42 98
+          C 32 92 25.5 78 25 62
+          C 24 42 36 22 60 22 Z" fill="url(#bodyGrad)"/>
+        <!-- cheeks -->
+        <ellipse class="cheek" cx="41" cy="66" rx="5.5" ry="3.4"/>
+        <ellipse class="cheek" cx="79" cy="66" rx="5.5" ry="3.4"/>
+        <!-- eyes: multiple variants, toggled by state -->
+        <g class="eyes eyes-open">
+          <ellipse cx="46" cy="56" rx="6" ry="7.5" class="eye"/>
+          <ellipse cx="74" cy="56" rx="6" ry="7.5" class="eye"/>
+          <circle cx="47.8" cy="53.6" r="2.1" class="eye-shine"/>
+          <circle cx="75.8" cy="53.6" r="2.1" class="eye-shine"/>
+        </g>
+        <g class="eyes eyes-happy">
+          <path d="M40 57 Q46 50 52 57" class="eye-arc"/>
+          <path d="M68 57 Q74 50 80 57" class="eye-arc"/>
+        </g>
+        <g class="eyes eyes-spiral">
+          <path d="M46 56 m4 0 a4 4 0 1 1 -4 -4 a2.6 2.6 0 1 1 -2.6 2.6 a1.2 1.2 0 1 0 1.2 -1.2" class="eye-swirl"/>
+          <path d="M74 56 m4 0 a4 4 0 1 1 -4 -4 a2.6 2.6 0 1 1 -2.6 2.6 a1.2 1.2 0 1 0 1.2 -1.2" class="eye-swirl"/>
+        </g>
+        <g class="eyes eyes-dead">
+          <path d="M41 51 L51 61 M51 51 L41 61" class="eye-x"/>
+          <path d="M69 51 L79 61 M79 51 L69 61" class="eye-x"/>
+        </g>
+        <g class="eyes eyes-low">
+          <path d="M40 58 L52 58" class="eye-lid"/>
+          <path d="M68 58 L80 58" class="eye-lid"/>
+        </g>
+        <!-- mouth variants -->
+        <path class="mouth mouth-smile" d="M54 74 Q60 79 66 74"/>
+        <path class="mouth mouth-open"  d="M55 73 Q60 81 65 73 Q60 76 55 73 Z"/>
+        <path class="mouth mouth-wavy"  d="M52 76 Q56 72 60 76 Q64 80 68 76"/>
+        <path class="mouth mouth-o"     d="M60 76 m-3.4 0 a3.4 3.4 0 1 0 6.8 0 a3.4 3.4 0 1 0 -6.8 0"/>
+        <!-- level-2 crown, hidden until evolution -->
+        <g class="crown">
+          <path d="M46 16 L50 6 L57 13 L60 2 L63 13 L70 6 L74 16 Q60 11 46 16 Z"/>
+        </g>
+        <!-- drips for poisoned state -->
+        <g class="drips" filter="url(#soft)">
+          <path class="drip d1" d="M44 96 q-1.5 7 0 11 q1.5 -4 0 -11Z"/>
+          <path class="drip d2" d="M62 98 q-1.5 8 0 13 q1.5 -5 0 -13Z"/>
+          <path class="drip d3" d="M77 95 q-1.5 6 0 10 q1.5 -4 0 -10Z"/>
+        </g>
+      </svg>
+      <div class="shadow"></div>
+      <div class="zzz" aria-hidden="true"><span>z</span><span>z</span><span>z</span></div>
+    </div>
+
+    <!-- ambient HUD -->
+    <div class="hud" id="hud">
+      <div class="hud-flame" title="focus flame">
+        <svg viewBox="0 0 20 24" class="flame-svg"><path d="M10 2 C13 7 16 9 16 14 A6 6 0 0 1 4 14 C4 10 7 7 10 2 Z"/></svg>
+        <div class="flame-bar"><div class="flame-fill" id="flameFill"></div></div>
+      </div>
+      <div class="hud-res" id="hudRes"></div>
+      <div class="hud-streak" id="hudStreak">◇ streak <b id="streakMin">0m</b></div>
+    </div>
+
+    <!-- speech bubble -->
+    <div class="bubble" id="bubble">
+      <div class="bubble-inner" id="bubbleInner"></div>
+      <div class="bubble-tail"></div>
+    </div>
+  </div>
+
+  <!-- floating pickups spawn layer -->
+  <div class="pickups" id="pickups"></div>
+
+  <!-- toasts (level up etc.) -->
+  <div class="toast" id="toast"></div>
+
+  <!-- corruption vignette -->
+  <div class="vignette" id="vignette"></div>
+
+  <!-- ══════ QUEST MAP OVERLAY ══════ -->
+  <div class="questmap" id="questmap">
+    <div class="qm-card">
+      <div class="qm-head">
+        <span class="qm-title">Today's Quest Map</span>
+        <span class="qm-date">Thu Jul 3 · told by your familiar</span>
+        <button class="qm-close" id="qmClose">esc</button>
+      </div>
+      <div class="qm-body" id="qmBody"></div>
+      <div class="qm-foot" id="qmFoot"></div>
+    </div>
+  </div>
+
+  <!-- cinematic caption -->
+  <div class="caption" id="caption"><span id="captionText"></span></div>
+
+  <!-- demo chrome -->
+  <div class="demo-chrome" id="demoChrome">
+    <button class="dc-btn" id="btnPlay" title="play concept demo">▶ play demo</button>
+    <div class="dc-dots" id="dcDots"></div>
+    <button class="dc-btn ghost" id="btnFree" title="drive it yourself">✦ sandbox</button>
+  </div>
+
+  <!-- title / end cards -->
+  <div class="card-overlay" id="titleCard">
+    <div class="tc-inner">
+      <div class="tc-creature" id="tcCreatureSlot"></div>
+      <h1 class="tc-logo">Focus <em>Familiar</em></h1>
+      <p class="tc-tag">a small creature that lives on your screen.<br>it feeds on focus. distraction corrupts it. it never forgets what you were doing.</p>
+      <button class="tc-btn" id="tcStart">▶ &nbsp;watch the concept&nbsp; <span class="tc-time">~2 min</span></button>
+      <button class="tc-skip" id="tcSkip">or skip straight to the sandbox</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/windows.js"></script>
+<script src="js/familiar.js"></script>
+<script src="js/questmap.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

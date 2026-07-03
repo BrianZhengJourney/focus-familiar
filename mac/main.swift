@@ -177,8 +177,7 @@ func todayLogURL() -> URL {
 
 func appendLog(_ entry: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: entry),
-          let line = String(data: data, encoding: .utf8) else { NSLog("FF appendLog serialize FAILED"); return }
-    NSLog("FF appendLog writing %d bytes", line.count)
+          let line = String(data: data, encoding: .utf8) else { return }
     let url = todayLogURL()
     if let h = try? FileHandle(forWritingTo: url) {
         h.seekToEndOfFile()
@@ -351,6 +350,12 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+// the panel can never become key, so without this every click inside the
+// webview is swallowed as "first mouse" — buttons/tabs/dropdowns dead
+final class OverlayWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
     var panel: OverlayPanel!
     var webView: WKWebView!
@@ -415,7 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "bridge")
-        webView = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: cfg)
+        webView = OverlayWebView(frame: NSRect(origin: .zero, size: size), configuration: cfg)
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         if #available(macOS 12.0, *) { webView.underPageBackgroundColor = .clear }
@@ -559,7 +564,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let key = "\(display)|\(kind)|\(detail)|\(canon)"
         guard key != lastSent else { return }
         lastSent = key
-        NSLog("FF send: %@ kind=%@", display, kind)
         js("famSetApp(\(jsonStr(display)), \(jsonStr(kind)), \(jsonStr(String(detail))), \(jsonStr(url ?? "")), \(jsonStr(canon)))")
     }
 
@@ -749,8 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         case "famClick":
             if hidden { unhide() } else { showContext() }
         case "log":
-            NSLog("FF bridge log received")
-            if let entry = body["entry"] as? [String: Any] { appendLog(entry) } else { NSLog("FF log cast FAILED") }
+            if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
         default:
             break
         }

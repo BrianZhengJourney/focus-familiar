@@ -395,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var isIdle = false
 
     static let characters: [(id: String, name: String)] = [
+        ("pixel", "Pixel Familiar ✦"),
         ("wisp", "Wisp"), ("robocat", "Robo-cat"), ("panda", "Panda"),
         ("atom", "暗原子 · Dark Atom"), ("beaver", "Beaver"),
     ]

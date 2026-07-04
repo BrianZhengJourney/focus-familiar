@@ -394,11 +394,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
-    static let characters: [(id: String, name: String)] = [
-        ("pixel", "Pixel Familiar ✦"),
-        ("wisp", "Wisp"), ("robocat", "Robo-cat"), ("panda", "Panda"),
-        ("atom", "暗原子 · Dark Atom"), ("beaver", "Beaver"),
-    ]
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildPanel()
@@ -456,18 +451,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         statusItem.button?.title = "◐"
         let menu = NSMenu()
 
-        let charMenu = NSMenu()
-        for (id, name) in Self.characters {
-            let item = NSMenuItem(title: name, action: #selector(pickCharacter(_:)), keyEquivalent: "")
-            item.representedObject = id
-            item.target = self
-            charMenu.addItem(item)
-        }
-        let charRoot = NSMenuItem(title: "Character", action: nil, keyEquivalent: "")
-        menu.addItem(charRoot)
-        menu.setSubmenu(charMenu, for: charRoot)
-
-        menu.addItem(NSMenuItem.separator())
         let hide = NSMenuItem(title: "Hide familiar", action: #selector(toggleOverlay(_:)), keyEquivalent: "h")
         hide.identifier = .init("hideToggle")
         hide.target = self; menu.addItem(hide)
@@ -629,11 +612,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     // — actions —
-    @objc func pickCharacter(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        js("famSetCharacter('\(id)')")
-        UserDefaults.standard.set(id, forKey: "character")
-    }
     @objc func toggleContextMenu() { showContext() }
     @objc func openJournal() {
         bubbleOpen = true
@@ -947,11 +925,7 @@ extension AppDelegate: NSTableViewDataSource, NSTableViewDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        let current = UserDefaults.standard.string(forKey: "character") ?? "wisp"
         for item in menu.items {
-            if let sub = item.submenu, item.title == "Character" {
-                for c in sub.items { c.state = (c.representedObject as? String == current) ? .on : .off }
-            }
             if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
             if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }

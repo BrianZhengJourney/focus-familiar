@@ -791,6 +791,9 @@ function mascotStateFor(s){
   let out = m[s] || 'idle';
   // 25+ min single streak upgrades focus to deepWork (2× the calm)
   if (out === 'focused' && Fam.streakMin() >= 25) out = 'deepWork';
+  // Nat dives for the duration of a hunt — goggles stay on unless wounded
+  if (typeof Pomo !== 'undefined' && Pomo.timer && Mascot.has('snorkel')
+      && ['idle', 'focused', 'deepWork'].includes(out)) out = 'snorkel';
   return out;
 }
 
@@ -1596,6 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (q.has('preview')) {
     document.body.style.background = '#1a1534';
     if (q.get('state')) Fam.setState(q.get('state'));
+    if (q.get('mstate')) Mascot.setState(q.get('mstate'));
     Fam.hud(true);
   }
 });

@@ -18,4 +18,4 @@ echo "built: $PWD/$APP"
 
 # mirror sources for the sandboxed preview server (TCC can't read ~/Desktop)
 mkdir -p /private/tmp/ff-serve
-rsync -a --delete --exclude build "$(dirname "$0")" /private/tmp/ff-serve/ 2>/dev/null || true
+rsync -a --delete --exclude build ./ /private/tmp/ff-serve/mac/

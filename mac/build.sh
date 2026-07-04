@@ -15,3 +15,7 @@ swiftc -O main.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
 
 codesign --force -s - "$APP"
 echo "built: $PWD/$APP"
+
+# mirror sources for the sandboxed preview server (TCC can't read ~/Desktop)
+mkdir -p /private/tmp/ff-serve
+rsync -a --delete --exclude build "$(dirname "$0")" /private/tmp/ff-serve/ 2>/dev/null || true

@@ -56,6 +56,10 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 @keyframes ffp-mote {0%,100%{opacity:.2;transform:translateY(0)}50%{opacity:.9;transform:translateY(-1.6px)}}
 @keyframes ffp-typeA {0%,100%{transform:translateY(0)}50%{transform:translateY(-1.3px)}}
 @keyframes ffp-typeB {0%,100%{transform:translateY(-1.3px)}50%{transform:translateY(0)}}
+@keyframes ffp-walk {0%{transform:translateX(-14px)}100%{transform:translateX(14px)}}
+@keyframes ffp-stepA {0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes ffp-stepB {0%,100%{transform:translateY(-1.5px)}50%{transform:translateY(0)}}
+@keyframes ffp-eyeCycle {0%{opacity:1}33.34%{opacity:0}100%{opacity:0}}
 .ffp-wrap{ width:100%; height:100%; transform-origin:50% 100%; }
 /* the mascot manages its own animation/filter/opacity/shadow — mute the
    generic state styling that would double-apply */
@@ -295,198 +299,443 @@ body[data-char="pixel"] .shadow{ display:none; }
 </div>
 
 <script>
-/* ═══ character registry: the designed mascot is the familiar ═══ */
-const CHARACTERS = {
-  pixel: { name: 'Pixel Familiar \u2726' },
-};
+/* ═══ PixelMascot family — ported from design_handoff_focus_familiar 2 ═══
+   One generic grid renderer + per-mascot data packs (README implementation
+   note). PAL/BASE/EYES/MOUTHS/CFG and all geometry are verbatim from
+   Familiar Pixel / Claude Pixel / Kitty Pixel .dc.html. High-fidelity. */
 
-/* ═══ FamiliarMascot — ported from design_handoff_focus_familiar ═══
-   PAL/BASE/EYES/MOUTHS/CFG are verbatim from Familiar Pixel.dc.html.
-   High-fidelity: colors, pixel coordinates, timings are final. */
-const Mascot = (() => {
-  const PAL = {
-    Y: '#ffd982', y: '#fff0c4', O: '#ffb043', C: '#fff1cf', N: '#c96f3f',
-    F: '#f7c778', T: '#e69b3d', B: '#ff9d6b', K: '#2b1c12', W: '#ffffff',
-    S: '#ffd76b', G: '#eef3ff', M: '#8a5a33',
-    H: '#f2bc61', D: '#2fd6bd', E: '#aef4e6', P: '#8f6fd8', R: '#5a4030', L: '#dff4ff',
-    A: '#aeb6c4', a: '#7f8899', V: '#5560a0', v: '#7d88c9'
-  };
-  const BASE = [
-    '....Y......YB.......',
-    '...yY.....YYYy......',
-    '..YYYY...YYYY..T....',
-    '.YyYYYYYYYYYY.TT....',
-    '.YYYYYYYYYYYYyTTT...',
-    'YYYOOOOOOOOYYYYTT...',
-    'YYOOOOOOOOOOYYYTT...',
-    '.YOOOOOOOOOOYYTT....',
-    '.YBOOCNCOOOBYYT.....',
-    'YYOOOCCCOOOOYYY.....',
-    'YYYOOOOOOOOYYYY.....',
-    'YYYYYYYYYYYYHHH.....',
-    '.YYYYYYYYYYYHH......',
-    '.YFF.YHHY.FF.H......',
-    '..FF......FF........'
-  ];
-  const EYES = {
-    idle:  [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
-    focus: [
-      [4,7,'K'],[5,7,'K'],[9,7,'K'],[10,7,'K'],
-      [4,7,'W'],[9,7,'W'],
-      [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R']
+const MASCOTS = {
+
+  /* ── 噜噜 LuLu — butter-yellow hamster-ish familiar ── */
+  lulu: {
+    name: '噜噜 LuLu',
+    viewBox: '-1 -1 22 18',
+    shadow: { cx: 7, cy: 15.6, rx: 5.5, fill: '#d99c3f', op: 0.25 },
+    poseOrigin: '7px 9.5px',
+    pawColor: '#f7c778',
+    orb: { x: 15, y: 1 },
+    zzz: { fill: '#c9a06a', pts: [[14.5, 5.5], [16, 3.8], [17.6, 2]] },
+    ring: { cx: 8, cy: 8, r: 8.4 },
+    sparks: ['M-0.5,5.5 h0.7 v-0.7 h0.7 v0.7 h0.7 v0.7 h-0.7 v0.7 h-0.7 v-0.7 h-0.7 Z',
+             'M18.5,9.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z',
+             'M2.5,0.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z'],
+    bubbles: [[0.5, 7, 0.8], [-0.8, 8.6, 0.6], [1.4, 5.6, 0.5]],
+    motes: [[-0.6, 6.2, 0.7, '#ffd66b'], [19.4, 6.8, 0.6, '#b9a8ff'], [0.4, 12.4, 0.5, '#b9a8ff']],
+    PAL: {
+      Y: '#ffd982', y: '#fff0c4', O: '#ffb043', C: '#fff1cf', N: '#c96f3f',
+      F: '#f7c778', T: '#e69b3d', B: '#ff9d6b', K: '#2b1c12', W: '#ffffff',
+      S: '#ffd76b', G: '#eef3ff', M: '#8a5a33',
+      H: '#f2bc61', D: '#2fd6bd', E: '#aef4e6', P: '#8f6fd8', R: '#5a4030', L: '#dff4ff',
+      A: '#aeb6c4', a: '#7f8899', V: '#5560a0', v: '#7d88c9'
+    },
+    BASE: [
+      '....Y......YB.......',
+      '...yY.....YYYy......',
+      '..YYYY...YYYY..T....',
+      '.YyYYYYYYYYYY.TT....',
+      '.YYYYYYYYYYYYyTTT...',
+      'YYYOOOOOOOOYYYYTT...',
+      'YYOOOOOOOOOOYYYTT...',
+      '.YOOOOOOOOOOYYTT....',
+      '.YBOOCNCOOOBYYT.....',
+      'YYOOOCCCOOOOYYY.....',
+      'YYYOOOOOOOOYYYY.....',
+      'YYYYYYYYYYYYHHH.....',
+      '.YYYYYYYYYYYHH......',
+      '.YFF.YHHY.FF.H......',
+      '..FF......FF........'
     ],
-    stare: [
-      [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R'],
-      [4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],
-      [9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']
-    ],
-    down:  [
-      [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R'],
-      [4,7,'K'],[5,7,'K'],[9,7,'K'],[10,7,'K'],
-      [4,7,'W'],[9,7,'W']
-    ],
-    deep:  [[4,6,'E'],[5,6,'E'],[4,7,'D'],[5,7,'D'],[4,6,'W'],[9,6,'E'],[10,6,'E'],[9,7,'D'],[10,7,'D'],[9,6,'W']],
-    sleep: [
-      [2,5,'P'],[12,5,'P'],
-      [3,6,'V'],[4,6,'V'],[5,6,'V'],[6,6,'V'],[7,6,'V'],[8,6,'V'],[9,6,'V'],[10,6,'V'],[11,6,'V'],
-      [3,7,'V'],[4,7,'v'],[5,7,'V'],[6,7,'V'],[7,7,'V'],[8,7,'V'],[9,7,'v'],[10,7,'V'],[11,7,'V'],
-      [4,6,'v'],[9,6,'v']
-    ],
-    proud: [[3,7,'K'],[4,6,'K'],[5,7,'K'],[9,7,'K'],[10,6,'K'],[11,7,'K']],
-    dizzy: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[5,7,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[10,7,'W']],
-    sick:  [[3,5,'K'],[5,5,'K'],[4,6,'K'],[3,7,'K'],[5,7,'K'],[9,5,'K'],[11,5,'K'],[10,6,'K'],[9,7,'K'],[11,7,'K']],
-    ghost: [[4,6,'G'],[5,6,'G'],[4,7,'G'],[5,7,'G'],[9,6,'G'],[10,6,'G'],[9,7,'G'],[10,7,'G']],
-    star:  [[4,5,'S'],[3,6,'S'],[4,6,'S'],[5,6,'S'],[4,7,'S'],[10,5,'S'],[9,6,'S'],[10,6,'S'],[11,6,'S'],[10,7,'S']]
-  };
-  const MOUTHS = {
-    w:     [[5,10,'M'],[7,10,'M']],
-    smile: [[5,10,'M'],[6,11,'M'],[7,10,'M']],
-    squ:   [[5,11,'M'],[6,10,'M'],[7,11,'M']],
-    o:     [[6,10,'M']]
-  };
-  const CFG = {
-    idle:     { anim: 'ffp-bob 3.4s ease-in-out infinite', filter: 'none', op: 1, orb: '#ffd66b', eye: 'idle', mouth: 'w', aura: 0, auraColor: '#ffc964', motes: 1, blink: 1 },
-    focused:  { anim: 'ffp-bob 2.2s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(251,143,44,.25))', op: 1, orb: '#ff9330', eye: 'focus', mouth: 'w', aura: 0.16, auraColor: '#ffb454', motes: 1, gear: [
-      [2,12,'F'],[12,12,'F'],
-      [3,12,'W'],[4,12,'W'],[5,12,'W'],[6,12,'W'],[7,12,'M'],[8,12,'W'],[9,12,'W'],[10,12,'W'],[11,12,'W'],
-      [4,12,'a'],[6,12,'a'],[9,12,'a'],
-      [3,13,'P'],[4,13,'P'],[5,13,'P'],[6,13,'P'],[7,13,'P'],[8,13,'P'],[9,13,'P'],[10,13,'P'],[11,13,'P']
-    ] },
-    focusedA: { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(251,143,44,.25))', op: 1, orb: '#ff9330', eye: 'stare', mouth: 'w', aura: 0.16, auraColor: '#ffb454', motes: 0,
-      gear: [
-        [4,1,'M'],[5,1,'M'],[6,1,'M'],[7,1,'M'],[8,1,'M'],[9,1,'M'],[10,1,'M'],
-        [5,2,'R'],[6,2,'R'],[7,2,'R'],[8,2,'R'],[9,2,'R'],
-        [3,2,'M'],[11,2,'M'],[2,3,'M'],[12,3,'M'],
-        [1,4,'M'],[2,4,'M'],[12,4,'M'],[13,4,'M'],
-        [1,5,'M'],[2,5,'M'],[12,5,'M'],[13,5,'M'],
-        [1,6,'M'],[2,6,'M'],[12,6,'M'],[13,6,'M'],
-        [1,7,'R'],[2,7,'R'],[12,7,'R'],[13,7,'R'],
-        [1,5,'B'],[13,5,'B']
+    EYES: {
+      idle:  [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
+      focus: [
+        [4,7,'K'],[5,7,'K'],[9,7,'K'],[10,7,'K'],
+        [4,7,'W'],[9,7,'W'],
+        [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R']
       ],
-      extras: [[15,3,'D'],[16,1,'E'],[14,7,'E'],[0,2,'E']] },
-    focusedB: { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(251,143,44,.25))', op: 1, orb: '#ff9330', eye: 'down', mouth: 'w', aura: 0.16, auraColor: '#ffb454', motes: 0, paws: 1,
-      gear: [
-        [3,12,'W'],[4,12,'W'],[5,12,'W'],[6,12,'W'],[7,12,'W'],[8,12,'W'],[9,12,'W'],[10,12,'W'],[11,12,'W'],
-        [4,12,'a'],[6,12,'a'],[8,12,'a'],[10,12,'a'],
-        [3,13,'A'],[4,13,'A'],[5,13,'A'],[6,13,'A'],[7,13,'A'],[8,13,'A'],[9,13,'A'],[10,13,'A'],[11,13,'A'],
-        [12,11,'S'],[13,10,'S'],[14,9,'B'],[12,12,'K']
-      ] },
-    focusedC: { anim: 'ffp-bob 1.6s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(251,143,44,.45))', op: 1, orb: '#ff6a1a', eye: 'stare', mouth: 'squ', aura: 0.3, auraColor: '#fb8f2c', motes: 0,
-      extras: [[1,3,'S'],[13,2,'S'],[0,8,'S'],[14,7,'S'],[7,0,'S']] },
-    deepWork: { anim: 'ffp-levitate 5.5s ease-in-out infinite', filter: 'drop-shadow(0 0 16px rgba(143,111,216,.45))', op: 1, orb: '#b9a8ff', eye: 'deep', mouth: 'w', aura: 0.32, auraColor: '#8f6fd8', motes: 1, extras: [[7,4,'D'],[0,4,'D'],[16,7,'D'],[-1,9,'E'],[15,3,'E'],[2,1,'E']], gear: [
-      [2,12,'W'],[3,12,'A'],[4,12,'W'],[5,12,'A'],[6,12,'W'],[7,12,'A'],[8,12,'W'],[9,12,'A'],[10,12,'W'],[11,12,'A'],
-      [1,13,'a'],[2,13,'a'],[3,13,'a'],[4,13,'a'],[5,13,'a'],[6,13,'a'],[7,13,'a'],[8,13,'a'],[9,13,'a'],[10,13,'a'],[11,13,'a'],[12,13,'a']
-    ], paws: 1 },
-    dizzy:    { anim: 'ffp-dizzy 1.1s linear infinite', filter: 'none', op: 1, orb: '#cabdff', eye: 'dizzy', mouth: 'squ', aura: 0, auraColor: '#cabdff', motes: 0 },
-    poisoned: { anim: 'ffp-queasy 2.1s ease-in-out infinite', filter: 'saturate(.75) brightness(.96)', op: 1, orb: '#8ee07a', eye: 'sick', mouth: 'squ', aura: 0.28, auraColor: '#7cb85c', motes: 0, bubbles: 1, extras: [[4,3,'D'],[5,4,'D'],[10,3,'D'],[9,4,'D']] },
-    ghost:    { anim: 'ffp-float 3.6s ease-in-out infinite', filter: 'saturate(.3) hue-rotate(175deg) brightness(1.12)', op: 0.72, orb: '#dfe9ff', eye: 'ghost', mouth: 'w', aura: 0.25, auraColor: '#7fa8ff', motes: 1 },
-    levelUp:  { anim: 'ffp-pop 1.3s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(255,176,46,.55))', op: 1, orb: '#ffe07a', eye: 'star', mouth: 'smile', aura: 0.2, auraColor: '#ffb02e', motes: 0, ring: 1, spark: 1 },
-    sleeping: { pose: 'rotate(90deg) translate(0px,1.5px)', anim: 'ffp-sleepbob 4.6s ease-in-out infinite', filter: 'brightness(.9) saturate(.85)', op: 1, orb: '#c9b3ff', eye: 'sleep', mouth: 'o', aura: 0, auraColor: '#c9b3ff', motes: 0, zzz: 1 },
-    proud:    { anim: 'ffp-proudhop 1.7s ease-in-out infinite', filter: 'drop-shadow(0 4px 12px rgba(255,176,46,.35))', op: 1, orb: '#ffe28a', eye: 'proud', mouth: 'smile', aura: 0, auraColor: '#ffe28a', motes: 1, spark: 1 }
-  };
-  CFG.focused = CFG.focusedA;   // 'focused' is the headphones version (design decision)
+      stare: [
+        [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R'],
+        [4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],
+        [9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']
+      ],
+      down:  [
+        [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R'],
+        [4,7,'K'],[5,7,'K'],[9,7,'K'],[10,7,'K'],
+        [4,7,'W'],[9,7,'W']
+      ],
+      deep:  [[4,6,'E'],[5,6,'E'],[4,7,'D'],[5,7,'D'],[4,6,'W'],[9,6,'E'],[10,6,'E'],[9,7,'D'],[10,7,'D'],[9,6,'W']],
+      sleep: [
+        [2,5,'P'],[12,5,'P'],
+        [3,6,'V'],[4,6,'V'],[5,6,'V'],[6,6,'V'],[7,6,'V'],[8,6,'V'],[9,6,'V'],[10,6,'V'],[11,6,'V'],
+        [3,7,'V'],[4,7,'v'],[5,7,'V'],[6,7,'V'],[7,7,'V'],[8,7,'V'],[9,7,'v'],[10,7,'V'],[11,7,'V'],
+        [4,6,'v'],[9,6,'v']
+      ],
+      proud: [[3,7,'K'],[4,6,'K'],[5,7,'K'],[9,7,'K'],[10,6,'K'],[11,7,'K']],
+      dizzy: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[5,7,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[10,7,'W']],
+      sick:  [[3,5,'K'],[5,5,'K'],[4,6,'K'],[3,7,'K'],[5,7,'K'],[9,5,'K'],[11,5,'K'],[10,6,'K'],[9,7,'K'],[11,7,'K']],
+      ghost: [[4,6,'G'],[5,6,'G'],[4,7,'G'],[5,7,'G'],[9,6,'G'],[10,6,'G'],[9,7,'G'],[10,7,'G']],
+      star:  [[4,5,'S'],[3,6,'S'],[4,6,'S'],[5,6,'S'],[4,7,'S'],[10,5,'S'],[9,6,'S'],[10,6,'S'],[11,6,'S'],[10,7,'S']]
+    },
+    MOUTHS: {
+      w:     [[5,10,'M'],[7,10,'M']],
+      smile: [[5,10,'M'],[6,11,'M'],[7,10,'M']],
+      squ:   [[5,11,'M'],[6,10,'M'],[7,11,'M']],
+      o:     [[6,10,'M']]
+    },
+    CFG: {
+      idle:     { anim: 'ffp-bob 3.4s ease-in-out infinite', filter: 'none', op: 1, orb: '#ffd66b', eye: 'idle', mouth: 'w', aura: 0, auraColor: '#ffc964', motes: 1, blink: 1 },
+      focusedA: { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(251,143,44,.25))', op: 1, orb: '#ff9330', eye: 'stare', mouth: 'w', aura: 0.16, auraColor: '#ffb454', motes: 0,
+        gear: [
+          [4,1,'M'],[5,1,'M'],[6,1,'M'],[7,1,'M'],[8,1,'M'],[9,1,'M'],[10,1,'M'],
+          [5,2,'R'],[6,2,'R'],[7,2,'R'],[8,2,'R'],[9,2,'R'],
+          [3,2,'M'],[11,2,'M'],[2,3,'M'],[12,3,'M'],
+          [1,4,'M'],[2,4,'M'],[12,4,'M'],[13,4,'M'],
+          [1,5,'M'],[2,5,'M'],[12,5,'M'],[13,5,'M'],
+          [1,6,'M'],[2,6,'M'],[12,6,'M'],[13,6,'M'],
+          [1,7,'R'],[2,7,'R'],[12,7,'R'],[13,7,'R'],
+          [1,5,'B'],[13,5,'B']
+        ],
+        extras: [[15,3,'D'],[16,1,'E'],[14,7,'E'],[0,2,'E']] },
+      focusedB: { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(251,143,44,.25))', op: 1, orb: '#ff9330', eye: 'down', mouth: 'w', aura: 0.16, auraColor: '#ffb454', motes: 0, paws: 1,
+        gear: [
+          [3,12,'W'],[4,12,'W'],[5,12,'W'],[6,12,'W'],[7,12,'W'],[8,12,'W'],[9,12,'W'],[10,12,'W'],[11,12,'W'],
+          [4,12,'a'],[6,12,'a'],[8,12,'a'],[10,12,'a'],
+          [3,13,'A'],[4,13,'A'],[5,13,'A'],[6,13,'A'],[7,13,'A'],[8,13,'A'],[9,13,'A'],[10,13,'A'],[11,13,'A'],
+          [12,11,'S'],[13,10,'S'],[14,9,'B'],[12,12,'K']
+        ] },
+      focusedC: { anim: 'ffp-bob 1.6s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(251,143,44,.45))', op: 1, orb: '#ff6a1a', eye: 'stare', mouth: 'squ', aura: 0.3, auraColor: '#fb8f2c', motes: 0,
+        extras: [[1,3,'S'],[13,2,'S'],[0,8,'S'],[14,7,'S'],[7,0,'S']] },
+      deepWork: { anim: 'ffp-levitate 5.5s ease-in-out infinite', filter: 'drop-shadow(0 0 16px rgba(143,111,216,.45))', op: 1, orb: '#b9a8ff', eye: 'deep', mouth: 'w', aura: 0.32, auraColor: '#8f6fd8', motes: 1, extras: [[7,4,'D'],[0,4,'D'],[16,7,'D'],[-1,9,'E'],[15,3,'E'],[2,1,'E']], gear: [
+        [2,12,'W'],[3,12,'A'],[4,12,'W'],[5,12,'A'],[6,12,'W'],[7,12,'A'],[8,12,'W'],[9,12,'A'],[10,12,'W'],[11,12,'A'],
+        [1,13,'a'],[2,13,'a'],[3,13,'a'],[4,13,'a'],[5,13,'a'],[6,13,'a'],[7,13,'a'],[8,13,'a'],[9,13,'a'],[10,13,'a'],[11,13,'a'],[12,13,'a']
+      ], paws: 1 },
+      dizzy:    { anim: 'ffp-dizzy 1.1s linear infinite', filter: 'none', op: 1, orb: '#cabdff', eye: 'dizzy', mouth: 'squ', aura: 0, auraColor: '#cabdff', motes: 0 },
+      poisoned: { anim: 'ffp-queasy 2.1s ease-in-out infinite', filter: 'saturate(.75) brightness(.96)', op: 1, orb: '#8ee07a', eye: 'sick', mouth: 'squ', aura: 0.28, auraColor: '#7cb85c', motes: 0, bubbles: 1, extras: [[4,3,'D'],[5,4,'D'],[10,3,'D'],[9,4,'D']] },
+      ghost:    { anim: 'ffp-float 3.6s ease-in-out infinite', filter: 'saturate(.3) hue-rotate(175deg) brightness(1.12)', op: 0.72, orb: '#dfe9ff', eye: 'ghost', mouth: 'w', aura: 0.25, auraColor: '#7fa8ff', motes: 1 },
+      levelUp:  { anim: 'ffp-pop 1.3s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(255,176,46,.55))', op: 1, orb: '#ffe07a', eye: 'star', mouth: 'smile', aura: 0.2, auraColor: '#ffb02e', motes: 0, ring: 1, spark: 1 },
+      sleeping: { pose: 'rotate(90deg) translate(0px,1.5px)', anim: 'ffp-sleepbob 4.6s ease-in-out infinite', filter: 'brightness(.9) saturate(.85)', op: 1, orb: '#c9b3ff', eye: 'sleep', mouth: 'o', aura: 0, auraColor: '#c9b3ff', motes: 0, zzz: 1 },
+      proud:    { anim: 'ffp-proudhop 1.7s ease-in-out infinite', filter: 'drop-shadow(0 4px 12px rgba(255,176,46,.35))', op: 1, orb: '#ffe28a', eye: 'proud', mouth: 'smile', aura: 0, auraColor: '#ffe28a', motes: 1, spark: 1 }
+    },
+  },
 
+  /* ── Clawd — boxy terracotta voxel creature, extra `walking` state ── */
+  clawd: {
+    name: 'Clawd',
+    viewBox: '-1 -2 22 19',
+    shadow: { cx: 7, cy: 12.6, rx: 6, fill: '#a85a3a', op: 0.3 },
+    poseOrigin: '7px 6px',
+    pawColor: '#e0906f',
+    orb: { x: 15, y: 0 },
+    zzz: { fill: '#c9855e', pts: [[14.5, 4.5], [16, 2.8], [17.6, 1]] },
+    ring: { cx: 7, cy: 6, r: 8.4 },
+    sparks: ['M-0.5,4.5 h0.7 v-0.7 h0.7 v0.7 h0.7 v0.7 h-0.7 v0.7 h-0.7 v-0.7 h-0.7 Z',
+             'M18.5,8.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z',
+             'M2.5,-1.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z'],
+    bubbles: [[0.5, 6, 0.8], [-0.8, 7.6, 0.6], [1.4, 4.6, 0.5]],
+    motes: [[-0.6, 5.2, 0.7, '#f0a488'], [19.4, 5.8, 0.6, '#ffd66b'], [0.4, 10.4, 0.5, '#f0a488']],
+    // walking: legs (rows 9-10) are removed from the sprite and replaced by
+    // animated leg groups; eyes cycle square → ^ → squint
+    walk: {
+      rows: 9,
+      block: `
+        <g style="animation:ffp-eyeCycle 2.4s steps(1) 0s infinite">
+          <rect x="4" y="4" width="2.05" height="2.05" fill="#151210"/>
+          <rect x="9" y="4" width="2.05" height="2.05" fill="#151210"/>
+          <rect x="4" y="4" width="1.05" height="1.05" fill="#ffffff" opacity="0.85"/>
+          <rect x="9" y="4" width="1.05" height="1.05" fill="#ffffff" opacity="0.85"/>
+        </g>
+        <g style="animation:ffp-eyeCycle 2.4s steps(1) .8s infinite">
+          <rect x="4" y="4" width="1.05" height="1.05" fill="#151210"/>
+          <rect x="3" y="5" width="1.05" height="1.05" fill="#151210"/>
+          <rect x="5" y="5" width="1.05" height="1.05" fill="#151210"/>
+          <rect x="9" y="4" width="1.05" height="1.05" fill="#151210"/>
+          <rect x="8" y="5" width="1.05" height="1.05" fill="#151210"/>
+          <rect x="10" y="5" width="1.05" height="1.05" fill="#151210"/>
+        </g>
+        <g style="animation:ffp-eyeCycle 2.4s steps(1) 1.6s infinite">
+          <rect x="4" y="5" width="2.05" height="1.05" fill="#151210"/>
+          <rect x="9" y="5" width="2.05" height="1.05" fill="#151210"/>
+        </g>
+        <g style="animation:ffp-stepA .45s linear infinite">
+          <rect x="2" y="9" width="2.05" height="2.05" fill="#d97757"/>
+          <rect x="8" y="9" width="1.05" height="2.05" fill="#d97757"/>
+        </g>
+        <g style="animation:ffp-stepB .45s linear infinite">
+          <rect x="6" y="9" width="1.05" height="2.05" fill="#d97757"/>
+          <rect x="11" y="9" width="2.05" height="2.05" fill="#d97757"/>
+        </g>`,
+    },
+    PAL: {
+      U: '#d97757', u: '#efa07f', K: '#151210', W: '#ffffff',
+      S: '#ffd76b', G: '#eef3ff', M: '#7c3a22', R: '#8c4526',
+      B: '#f0a488', D: '#2fd6bd', E: '#aef4e6', P: '#8f6fd8',
+      A: '#aeb6c4', a: '#7f8899', V: '#5560a0', v: '#7d88c9'
+    },
+    BASE: [
+      '..uuuuuuuuuuu.......',
+      '..UUUUUUUUUUU.......',
+      '..UUUUUUUUUUU.......',
+      'uuUUUUUUUUUUUuu.....',
+      'UUUUUUUUUUUUUUU.....',
+      'UUUUUUUUUUUUUUU.....',
+      '..UUUUUUUUUUU.......',
+      '..UUUUUUUUUUU.......',
+      '..UUUUUUUUUUU.......',
+      '..UU..U.U..UU.......',
+      '..UU..U.U..UU.......'
+    ],
+    EYES: {
+      idle:  [[4,4,'K'],[5,4,'K'],[4,5,'K'],[5,5,'K'],[4,4,'W'],[9,4,'K'],[10,4,'K'],[9,5,'K'],[10,5,'K'],[9,4,'W']],
+      stare: [
+        [4,3,'R'],[5,3,'R'],[9,3,'R'],[10,3,'R'],
+        [4,4,'K'],[5,4,'K'],[4,5,'K'],[5,5,'K'],[4,4,'W'],
+        [9,4,'K'],[10,4,'K'],[9,5,'K'],[10,5,'K'],[9,4,'W']
+      ],
+      none:  [],
+      tri:   [[4,4,'K'],[3,5,'K'],[4,5,'K'],[5,5,'K'],[9,4,'K'],[8,5,'K'],[9,5,'K'],[10,5,'K']],
+      duo:   [[4,5,'K'],[5,4,'K'],[9,5,'K'],[10,4,'K']],
+      deep:  [[4,4,'E'],[5,4,'E'],[4,5,'D'],[5,5,'D'],[4,4,'W'],[9,4,'E'],[10,4,'E'],[9,5,'D'],[10,5,'D'],[9,4,'W']],
+      sleep: [
+        [2,3,'P'],[12,3,'P'],
+        [3,4,'V'],[4,4,'V'],[5,4,'V'],[6,4,'V'],[7,4,'V'],[8,4,'V'],[9,4,'V'],[10,4,'V'],[11,4,'V'],
+        [3,5,'V'],[4,5,'v'],[5,5,'V'],[6,5,'V'],[7,5,'V'],[8,5,'V'],[9,5,'v'],[10,5,'V'],[11,5,'V'],
+        [4,4,'v'],[9,4,'v']
+      ],
+      proud: [[3,5,'K'],[4,4,'K'],[5,5,'K'],[9,5,'K'],[10,4,'K'],[11,5,'K']],
+      dizzy: [[4,4,'K'],[5,4,'K'],[4,5,'K'],[5,5,'K'],[5,5,'W'],[9,4,'K'],[10,4,'K'],[9,5,'K'],[10,5,'K'],[10,5,'W']],
+      sick:  [[3,3,'K'],[5,3,'K'],[4,4,'K'],[3,5,'K'],[5,5,'K'],[9,3,'K'],[11,3,'K'],[10,4,'K'],[9,5,'K'],[11,5,'K']],
+      ghost: [[4,4,'G'],[5,4,'G'],[4,5,'G'],[5,5,'G'],[9,4,'G'],[10,4,'G'],[9,5,'G'],[10,5,'G']],
+      star:  [[4,3,'S'],[3,4,'S'],[4,4,'S'],[5,4,'S'],[4,5,'S'],[10,3,'S'],[9,4,'S'],[10,4,'S'],[11,4,'S'],[10,5,'S']]
+    },
+    MOUTHS: {
+      w:     [[5,7,'R'],[7,7,'R']],
+      smile: [[5,7,'R'],[6,8,'R'],[7,7,'R']],
+      squ:   [[5,8,'R'],[6,7,'R'],[7,8,'R']],
+      o:     [[6,7,'R']]
+    },
+    CFG: {
+      idle:     { anim: 'ffp-bob 3.4s ease-in-out infinite', filter: 'none', op: 1, orb: '#ffd66b', eye: 'idle', mouth: 'w', aura: 0, auraColor: '#d97757', motes: 1, blink: 1 },
+      focused:  { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(217,119,87,.3))', op: 1, orb: '#ff9330', eye: 'stare', mouth: 'w', aura: 0.16, auraColor: '#e0906f', motes: 0,
+        gear: [
+          [4,-1,'M'],[5,-1,'M'],[6,-1,'M'],[7,-1,'M'],[8,-1,'M'],[9,-1,'M'],[10,-1,'M'],
+          [5,0,'R'],[6,0,'R'],[7,0,'R'],[8,0,'R'],[9,0,'R'],
+          [3,0,'M'],[11,0,'M'],[2,1,'M'],[12,1,'M'],
+          [0,1,'M'],[1,1,'M'],[13,1,'M'],[14,1,'M'],
+          [0,2,'M'],[1,2,'M'],[13,2,'M'],[14,2,'M'],
+          [0,3,'M'],[1,3,'M'],[13,3,'M'],[14,3,'M'],
+          [0,4,'R'],[1,4,'R'],[13,4,'R'],[14,4,'R'],
+          [0,2,'B'],[14,2,'B']
+        ],
+        extras: [[16,2,'D'],[17,0,'E'],[15,6,'E'],[-1,0,'E']] },
+      walking:  { anim: 'ffp-walk 2.8s ease-in-out infinite alternate', filter: 'none', op: 1, orb: '#ffd66b', eye: 'none', mouth: 'w', aura: 0, auraColor: '#d97757', motes: 0, walk: 1 },
+      deepWork: { anim: 'ffp-levitate 5.5s ease-in-out infinite', filter: 'drop-shadow(0 0 16px rgba(143,111,216,.45))', op: 1, orb: '#b9a8ff', eye: 'deep', mouth: 'w', aura: 0.32, auraColor: '#8f6fd8', motes: 1, extras: [[7,2,'D'],[0,3,'D'],[16,6,'D'],[-1,8,'E'],[15,2,'E'],[2,0,'E']], gear: [
+        [2,12,'W'],[3,12,'A'],[4,12,'W'],[5,12,'A'],[6,12,'W'],[7,12,'A'],[8,12,'W'],[9,12,'A'],[10,12,'W'],[11,12,'A'],
+        [1,13,'a'],[2,13,'a'],[3,13,'a'],[4,13,'a'],[5,13,'a'],[6,13,'a'],[7,13,'a'],[8,13,'a'],[9,13,'a'],[10,13,'a'],[11,13,'a'],[12,13,'a']
+      ], paws: 1 },
+      dizzy:    { anim: 'ffp-dizzy 1.1s linear infinite', filter: 'none', op: 1, orb: '#cabdff', eye: 'dizzy', mouth: 'squ', aura: 0, auraColor: '#cabdff', motes: 0 },
+      poisoned: { anim: 'ffp-queasy 2.1s ease-in-out infinite', filter: 'saturate(.75) brightness(.96)', op: 1, orb: '#8ee07a', eye: 'sick', mouth: 'squ', aura: 0.28, auraColor: '#7cb85c', motes: 0, bubbles: 1, extras: [[4,1,'D'],[5,2,'D'],[10,1,'D'],[9,2,'D']] },
+      ghost:    { anim: 'ffp-float 3.6s ease-in-out infinite', filter: 'saturate(.3) hue-rotate(175deg) brightness(1.12)', op: 0.72, orb: '#dfe9ff', eye: 'ghost', mouth: 'w', aura: 0.25, auraColor: '#7fa8ff', motes: 1 },
+      levelUp:  { anim: 'ffp-pop 1.3s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(255,176,46,.55))', op: 1, orb: '#ffe07a', eye: 'star', mouth: 'smile', aura: 0.2, auraColor: '#ffb02e', motes: 0, ring: 1, spark: 1 },
+      sleeping: { pose: 'rotate(90deg) translate(0px,-1px)', anim: 'ffp-sleepbob 4.6s ease-in-out infinite', filter: 'brightness(.9) saturate(.85)', op: 1, orb: '#c9b3ff', eye: 'sleep', mouth: 'o', aura: 0, auraColor: '#c9b3ff', motes: 0, zzz: 1 },
+      proud:    { anim: 'ffp-proudhop 1.7s ease-in-out infinite', filter: 'drop-shadow(0 4px 12px rgba(255,176,46,.35))', op: 1, orb: '#ffe28a', eye: 'proud', mouth: 'smile', aura: 0, auraColor: '#ffe28a', motes: 1, spark: 1 }
+    },
+  },
+
+  /* ── Nat — white kitty (original design; not Hello Kitty: has a mouth
+     and a pink nose), extra `snorkel` state ── */
+  nat: {
+    name: 'Nat',
+    viewBox: '-1 -1 22 18',
+    shadow: { cx: 7, cy: 14.6, rx: 6, fill: '#b0a894', op: 0.3 },
+    poseOrigin: '7px 8.5px',
+    pawColor: '#efe7d9',
+    orb: { x: 16, y: 1 },
+    zzz: { fill: '#b3a68e', pts: [[15, 5.5], [16.5, 3.8], [18.1, 2]] },
+    ring: { cx: 7, cy: 7, r: 8.8 },
+    sparks: ['M-0.5,5.5 h0.7 v-0.7 h0.7 v0.7 h0.7 v0.7 h-0.7 v0.7 h-0.7 v-0.7 h-0.7 Z',
+             'M18.5,9.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z',
+             'M2.5,0.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z'],
+    bubbles: [[0.5, 7, 0.8], [-0.8, 8.6, 0.6], [1.4, 5.6, 0.5]],
+    motes: [[-0.6, 6.2, 0.7, '#f4a9bd'], [19.4, 6.8, 0.6, '#ffd66b'], [0.4, 12.4, 0.5, '#f4a9bd']],
+    PAL: {
+      y: '#fdfbf6', p: '#f4a9bd', k: '#3b3733', N: '#e88aa0', B: '#f9c6d2',
+      X: '#f06292', W: '#ffffff', F: '#efe7d9', K: '#2b2624',
+      S: '#ffd76b', G: '#eef3ff', M: '#8a7a68', R: '#6b5d4d',
+      D: '#2fd6bd', E: '#aef4e6', P: '#8f6fd8',
+      A: '#aeb6c4', a: '#7f8899', V: '#5560a0', v: '#7d88c9'
+    },
+    BASE: [
+      '.y...........y......',
+      '.yp.........py......',
+      '.ypy.......ypy......',
+      '.yyyyyyyyyyyyy......',
+      '.yyyyyyyyyyyyy......',
+      'kyyyyyyyyyyyyyk.....',
+      '.yyyyyyyyyyyyy......',
+      'kyyyyyNNyyyyyk......',
+      '.yBByyyyyyBByy......',
+      '.yyyyyyyyyyyyy......',
+      '...XXXXXXXXX........',
+      '..yXXWXXXWXXy.......',
+      '...XXXXXXXXX........',
+      '....yy...yy.........'
+    ],
+    EYES: {
+      idle:  [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
+      stare: [
+        [4,5,'R'],[5,5,'R'],[9,5,'R'],[10,5,'R'],
+        [4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],
+        [9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']
+      ],
+      deep:  [[4,6,'E'],[5,6,'E'],[4,7,'D'],[5,7,'D'],[4,6,'W'],[9,6,'E'],[10,6,'E'],[9,7,'D'],[10,7,'D'],[9,6,'W']],
+      sleep: [
+        [2,5,'P'],[12,5,'P'],
+        [3,6,'V'],[4,6,'V'],[5,6,'V'],[6,6,'V'],[7,6,'V'],[8,6,'V'],[9,6,'V'],[10,6,'V'],[11,6,'V'],
+        [3,7,'V'],[4,7,'v'],[5,7,'V'],[6,7,'V'],[7,7,'V'],[8,7,'V'],[9,7,'v'],[10,7,'V'],[11,7,'V'],
+        [4,6,'v'],[9,6,'v']
+      ],
+      proud: [[3,7,'K'],[4,6,'K'],[5,7,'K'],[9,7,'K'],[10,6,'K'],[11,7,'K']],
+      dizzy: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[5,7,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[10,7,'W']],
+      sick:  [[3,5,'K'],[5,5,'K'],[4,6,'K'],[3,7,'K'],[5,7,'K'],[9,5,'K'],[11,5,'K'],[10,6,'K'],[9,7,'K'],[11,7,'K']],
+      ghost: [[4,6,'G'],[5,6,'G'],[4,7,'G'],[5,7,'G'],[9,6,'G'],[10,6,'G'],[9,7,'G'],[10,7,'G']],
+      star:  [[4,5,'S'],[3,6,'S'],[4,6,'S'],[5,6,'S'],[4,7,'S'],[10,5,'S'],[9,6,'S'],[10,6,'S'],[11,6,'S'],[10,7,'S']]
+    },
+    MOUTHS: {
+      w:     [[5,8,'M'],[7,8,'M']],
+      smile: [[5,8,'M'],[6,9,'M'],[7,8,'M']],
+      squ:   [[5,9,'M'],[6,8,'M'],[7,9,'M']],
+      o:     [[6,8,'M']]
+    },
+    CFG: {
+      idle:     { anim: 'ffp-bob 3.4s ease-in-out infinite', filter: 'none', op: 1, orb: '#f4a9bd', eye: 'idle', mouth: 'smile', aura: 0, auraColor: '#f7b8c8', motes: 1, blink: 1 },
+      focused:  { anim: 'ffp-bob 2.6s ease-in-out infinite', filter: 'drop-shadow(0 4px 10px rgba(244,169,189,.35))', op: 1, orb: '#e88aa0', eye: 'stare', mouth: 'w', aura: 0.2, auraColor: '#f4a9bd', motes: 0,
+        gear: [
+          [4,2,'M'],[5,2,'M'],[6,2,'M'],[7,2,'M'],[8,2,'M'],[9,2,'M'],[10,2,'M'],
+          [5,3,'R'],[6,3,'R'],[7,3,'R'],[8,3,'R'],[9,3,'R'],
+          [3,3,'M'],[11,3,'M'],
+          [0,4,'M'],[1,4,'M'],[13,4,'M'],[14,4,'M'],
+          [0,5,'M'],[1,5,'M'],[13,5,'M'],[14,5,'M'],
+          [0,6,'M'],[1,6,'M'],[13,6,'M'],[14,6,'M'],
+          [0,7,'R'],[1,7,'R'],[13,7,'R'],[14,7,'R'],
+          [0,5,'p'],[14,5,'p']
+        ],
+        extras: [[16,4,'D'],[17,2,'E'],[15,8,'E'],[-1,1,'E']] },
+      snorkel:  { anim: 'ffp-float 4.5s ease-in-out infinite', filter: 'none', op: 1, orb: '#7fc3e8', eye: 'idle', mouth: 'smile', aura: 0.3, auraColor: '#7fc3e8', motes: 0, blink: 1,
+        gear: [
+          [2,5,'N'],[3,5,'N'],[4,5,'N'],[5,5,'N'],[6,5,'N'],[7,5,'N'],[8,5,'N'],[9,5,'N'],[10,5,'N'],[11,5,'N'],[12,5,'N'],
+          [1,6,'N'],[1,7,'N'],[13,6,'N'],[13,7,'N'],
+          [2,8,'N'],[3,8,'N'],[11,8,'N'],[12,8,'N'],
+          [6,6,'G'],[7,7,'G'],
+          [14,2,'N'],[15,2,'N'],[15,3,'N'],[15,4,'N'],[15,5,'N'],[15,6,'N'],[14,7,'N']
+        ],
+        extras: [[16,0,'G'],[17,2,'G'],[16,4,'G'],[18,1,'G'],[15,-1,'G']] },
+      deepWork: { anim: 'ffp-levitate 5.5s ease-in-out infinite', filter: 'drop-shadow(0 0 16px rgba(143,111,216,.45))', op: 1, orb: '#b9a8ff', eye: 'deep', mouth: 'w', aura: 0.32, auraColor: '#8f6fd8', motes: 1, extras: [[7,3,'D'],[0,3,'D'],[16,7,'D'],[-1,9,'E'],[15,3,'E'],[2,0,'E']], gear: [
+        [2,12,'W'],[3,12,'A'],[4,12,'W'],[5,12,'A'],[6,12,'W'],[7,12,'A'],[8,12,'W'],[9,12,'A'],[10,12,'W'],[11,12,'A'],
+        [1,13,'a'],[2,13,'a'],[3,13,'a'],[4,13,'a'],[5,13,'a'],[6,13,'a'],[7,13,'a'],[8,13,'a'],[9,13,'a'],[10,13,'a'],[11,13,'a'],[12,13,'a']
+      ], paws: 1 },
+      dizzy:    { anim: 'ffp-dizzy 1.1s linear infinite', filter: 'none', op: 1, orb: '#cabdff', eye: 'dizzy', mouth: 'squ', aura: 0, auraColor: '#cabdff', motes: 0 },
+      poisoned: { anim: 'ffp-queasy 2.1s ease-in-out infinite', filter: 'saturate(.75) brightness(.96)', op: 1, orb: '#8ee07a', eye: 'sick', mouth: 'squ', aura: 0.28, auraColor: '#7cb85c', motes: 0, bubbles: 1, extras: [[4,2,'D'],[5,3,'D'],[10,2,'D'],[9,3,'D']] },
+      ghost:    { anim: 'ffp-float 3.6s ease-in-out infinite', filter: 'saturate(.5) hue-rotate(175deg) brightness(1.05)', op: 0.72, orb: '#dfe9ff', eye: 'ghost', mouth: 'w', aura: 0.25, auraColor: '#7fa8ff', motes: 1 },
+      levelUp:  { anim: 'ffp-pop 1.3s ease-in-out infinite', filter: 'drop-shadow(0 0 12px rgba(255,176,46,.55))', op: 1, orb: '#ffe07a', eye: 'star', mouth: 'smile', aura: 0.2, auraColor: '#ffb02e', motes: 0, ring: 1, spark: 1 },
+      sleeping: { pose: 'rotate(90deg) translate(0px,1px)', anim: 'ffp-sleepbob 4.6s ease-in-out infinite', filter: 'brightness(.94) saturate(.9)', op: 1, orb: '#c9b3ff', eye: 'sleep', mouth: 'o', aura: 0, auraColor: '#c9b3ff', motes: 0, zzz: 1 },
+      proud:    { anim: 'ffp-proudhop 1.7s ease-in-out infinite', filter: 'drop-shadow(0 4px 12px rgba(255,176,46,.35))', op: 1, orb: '#ffe28a', eye: 'proud', mouth: 'smile', aura: 0, auraColor: '#ffe28a', motes: 1, spark: 1 }
+    },
+  },
+};
+MASCOTS.lulu.CFG.focused = MASCOTS.lulu.CFG.focusedA;  // headphones version (design decision)
+
+/* generic renderer: one persistent DOM, fed by the active mascot's pack */
+const Mascot = (() => {
   const shade = (hex) => {
     const n = parseInt(hex.slice(1), 16);
     const f = (v) => Math.round(v * 0.55);
     return '#' + ((f(n >> 16 & 255) << 16) | (f(n >> 8 & 255) << 8) | f(n & 255)).toString(16).padStart(6, '0');
   };
-  const rects = (list) => list.map(([x, y, ch]) =>
-    `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${PAL[ch]}"/>`).join('');
-
-  let refs = null, current = null;
-
-  function mount(holder){
+  const rectsFor = (pack, list) => list.map(([x, y, ch]) =>
+    `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${pack.PAL[ch]}"/>`).join('');
+  const bodyFor = (pack, rows) => {
     let body = '', depth = '';
-    BASE.forEach((row, y) => {
+    rows.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
         const ch = row[x];
-        if (ch !== '.' && PAL[ch]) {
-          body  += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${PAL[ch]}"/>`;
-          depth += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${shade(PAL[ch])}"/>`;
+        if (ch !== '.' && pack.PAL[ch]) {
+          body  += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${pack.PAL[ch]}"/>`;
+          depth += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${shade(pack.PAL[ch])}"/>`;
         }
       }
     });
+    return { body, depth };
+  };
+
+  let pack = null, refs = null, current = null, walking = false;
+
+  function mount(holder, id){
+    pack = MASCOTS[id] || MASCOTS.lulu;
+    const full = bodyFor(pack, pack.BASE);
+    const walkRows = pack.walk ? bodyFor(pack, pack.BASE.slice(0, pack.walk.rows)) : null;
     holder.innerHTML = `
     <div class="ffp-wrap" id="ffpWrap">
-      <svg viewBox="-1 -1 22 18" width="100%" height="100%" style="display:block;overflow:visible">
+      <svg viewBox="${pack.viewBox}" width="100%" height="100%" style="display:block;overflow:visible">
         <defs><filter id="psoft-ffp" x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="1.4"/></filter></defs>
         <ellipse id="ffpAura" cx="8" cy="8" rx="9" ry="8" fill="#ffc964" opacity="0" filter="url(#psoft-ffp)"/>
-        <ellipse cx="7" cy="15.6" rx="5.5" ry="0.8" fill="#d99c3f" opacity="0.25" filter="url(#psoft-ffp)"/>
-        <g id="ffpPose" style="transform:none;transform-origin:7px 9.5px;transition:transform .5s ease">
-          <g transform="translate(0.55,0.55)" opacity="0.55">${depth}</g>
-          <g>${body}</g>
+        <ellipse cx="${pack.shadow.cx}" cy="${pack.shadow.cy}" rx="${pack.shadow.rx}" ry="0.8" fill="${pack.shadow.fill}" opacity="${pack.shadow.op}" filter="url(#psoft-ffp)"/>
+        <g id="ffpPose" style="transform:none;transform-origin:${pack.poseOrigin};transition:transform .5s ease">
+          <g id="ffpDepth" transform="translate(0.55,0.55)" opacity="0.55">${full.depth}</g>
+          <g id="ffpBody">${full.body}</g>
           <g id="ffpEyes" style="transform-box:fill-box;transform-origin:center"></g>
           <g id="ffpMouth"></g>
           <g id="ffpGear"></g>
           <g id="ffpPawL" opacity="0" style="animation:ffp-typeA .22s linear infinite">
-            <rect x="3" y="11" width="2.05" height="1.05" fill="#f7c778"/></g>
+            <rect x="3" y="11" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
           <g id="ffpPawR" opacity="0" style="animation:ffp-typeB .22s linear infinite">
-            <rect x="9" y="11" width="2.05" height="1.05" fill="#f7c778"/></g>
+            <rect x="9" y="11" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
+          ${pack.walk ? `<g id="ffpWalk" opacity="0">${pack.walk.block}</g>` : ''}
         </g>
         <g id="ffpExtras" style="animation:ffp-twinkle 1.6s ease-in-out infinite"></g>
-        <rect id="ffpOrb" x="15" y="1" width="1.05" height="1.05" fill="#ffd66b" style="animation:ffp-orb 2.2s ease-in-out infinite"/>
-        <rect x="15.25" y="1.25" width="0.55" height="0.55" fill="#ffffff" opacity="0.85" style="animation:ffp-orb 2.2s ease-in-out infinite"/>
-        <g id="ffpZzz" opacity="0" fill="#c9a06a" font-family="monospace" font-weight="700">
-          <text x="14.5" y="5.5" font-size="1.8" style="animation:ffp-zzz 2.6s ease-out infinite">z</text>
-          <text x="16" y="3.8" font-size="2.2" style="animation:ffp-zzz 2.6s ease-out .85s infinite">z</text>
-          <text x="17.6" y="2" font-size="2.6" style="animation:ffp-zzz 2.6s ease-out 1.7s infinite">Z</text>
+        <rect id="ffpOrb" x="${pack.orb.x}" y="${pack.orb.y}" width="1.05" height="1.05" fill="#ffd66b" style="animation:ffp-orb 2.2s ease-in-out infinite"/>
+        <rect x="${pack.orb.x + 0.25}" y="${pack.orb.y + 0.25}" width="0.55" height="0.55" fill="#ffffff" opacity="0.85" style="animation:ffp-orb 2.2s ease-in-out infinite"/>
+        <g id="ffpZzz" opacity="0" fill="${pack.zzz.fill}" font-family="monospace" font-weight="700">
+          <text x="${pack.zzz.pts[0][0]}" y="${pack.zzz.pts[0][1]}" font-size="1.8" style="animation:ffp-zzz 2.6s ease-out infinite">z</text>
+          <text x="${pack.zzz.pts[1][0]}" y="${pack.zzz.pts[1][1]}" font-size="2.2" style="animation:ffp-zzz 2.6s ease-out .85s infinite">z</text>
+          <text x="${pack.zzz.pts[2][0]}" y="${pack.zzz.pts[2][1]}" font-size="2.6" style="animation:ffp-zzz 2.6s ease-out 1.7s infinite">Z</text>
         </g>
         <g id="ffpRings" opacity="0">
-          <circle cx="8" cy="8" r="8.4" stroke="#ffb02e" stroke-width="0.5" fill="none" style="animation:ffp-ring 1.4s ease-out infinite;transform-box:fill-box;transform-origin:center" stroke-dasharray="1 0.6"/>
-          <circle cx="8" cy="8" r="8.4" stroke="#ffe28a" stroke-width="0.3" fill="none" style="animation:ffp-ring 1.4s ease-out .35s infinite;transform-box:fill-box;transform-origin:center" stroke-dasharray="1 0.6"/>
+          <circle cx="${pack.ring.cx}" cy="${pack.ring.cy}" r="${pack.ring.r}" stroke="#ffb02e" stroke-width="0.5" fill="none" style="animation:ffp-ring 1.4s ease-out infinite;transform-box:fill-box;transform-origin:center" stroke-dasharray="1 0.6"/>
+          <circle cx="${pack.ring.cx}" cy="${pack.ring.cy}" r="${pack.ring.r}" stroke="#ffe28a" stroke-width="0.3" fill="none" style="animation:ffp-ring 1.4s ease-out .35s infinite;transform-box:fill-box;transform-origin:center" stroke-dasharray="1 0.6"/>
         </g>
         <g id="ffpSparks" opacity="0" fill="#ffb02e">
-          <path d="M-0.5,5.5 h0.7 v-0.7 h0.7 v0.7 h0.7 v0.7 h-0.7 v0.7 h-0.7 v-0.7 h-0.7 Z" style="animation:ffp-twinkle 1.5s ease-in-out infinite"/>
-          <path d="M18.5,9.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z" style="animation:ffp-twinkle 1.5s ease-in-out .5s infinite"/>
-          <path d="M2.5,0.5 h0.6 v-0.6 h0.6 v0.6 h0.6 v0.6 h-0.6 v0.6 h-0.6 v-0.6 h-0.6 Z" style="animation:ffp-twinkle 1.5s ease-in-out 1s infinite"/>
+          <path d="${pack.sparks[0]}" style="animation:ffp-twinkle 1.5s ease-in-out infinite"/>
+          <path d="${pack.sparks[1]}" style="animation:ffp-twinkle 1.5s ease-in-out .5s infinite"/>
+          <path d="${pack.sparks[2]}" style="animation:ffp-twinkle 1.5s ease-in-out 1s infinite"/>
         </g>
         <g id="ffpBubbles" opacity="0" fill="#8ee07a">
-          <rect x="0.5" y="7" width="0.8" height="0.8" style="animation:ffp-bubbleUp 2.2s ease-out infinite"/>
-          <rect x="-0.8" y="8.6" width="0.6" height="0.6" style="animation:ffp-bubbleUp 2.2s ease-out .7s infinite"/>
-          <rect x="1.4" y="5.6" width="0.5" height="0.5" style="animation:ffp-bubbleUp 2.2s ease-out 1.4s infinite"/>
+          <rect x="${pack.bubbles[0][0]}" y="${pack.bubbles[0][1]}" width="${pack.bubbles[0][2]}" height="${pack.bubbles[0][2]}" style="animation:ffp-bubbleUp 2.2s ease-out infinite"/>
+          <rect x="${pack.bubbles[1][0]}" y="${pack.bubbles[1][1]}" width="${pack.bubbles[1][2]}" height="${pack.bubbles[1][2]}" style="animation:ffp-bubbleUp 2.2s ease-out .7s infinite"/>
+          <rect x="${pack.bubbles[2][0]}" y="${pack.bubbles[2][1]}" width="${pack.bubbles[2][2]}" height="${pack.bubbles[2][2]}" style="animation:ffp-bubbleUp 2.2s ease-out 1.4s infinite"/>
         </g>
         <g id="ffpMotes" opacity="0">
-          <rect x="-0.6" y="6.2" width="0.7" height="0.7" fill="#ffd66b" style="animation:ffp-mote 3.2s ease-in-out infinite"/>
-          <rect x="19.4" y="6.8" width="0.6" height="0.6" fill="#b9a8ff" style="animation:ffp-mote 3.2s ease-in-out 1.1s infinite"/>
-          <rect x="0.4" y="12.4" width="0.5" height="0.5" fill="#b9a8ff" style="animation:ffp-mote 3.2s ease-in-out 2.1s infinite"/>
+          <rect x="${pack.motes[0][0]}" y="${pack.motes[0][1]}" width="${pack.motes[0][2]}" height="${pack.motes[0][2]}" fill="${pack.motes[0][3]}" style="animation:ffp-mote 3.2s ease-in-out infinite"/>
+          <rect x="${pack.motes[1][0]}" y="${pack.motes[1][1]}" width="${pack.motes[1][2]}" height="${pack.motes[1][2]}" fill="${pack.motes[1][3]}" style="animation:ffp-mote 3.2s ease-in-out 1.1s infinite"/>
+          <rect x="${pack.motes[2][0]}" y="${pack.motes[2][1]}" width="${pack.motes[2][2]}" height="${pack.motes[2][2]}" fill="${pack.motes[2][3]}" style="animation:ffp-mote 3.2s ease-in-out 2.1s infinite"/>
         </g>
       </svg>
     </div>`;
     refs = {};
-    for (const id of ['ffpWrap','ffpAura','ffpPose','ffpEyes','ffpMouth','ffpGear',
-                      'ffpPawL','ffpPawR','ffpExtras','ffpOrb','ffpZzz','ffpRings',
-                      'ffpSparks','ffpBubbles','ffpMotes'])
-      refs[id] = document.getElementById(id);
+    for (const id2 of ['ffpWrap','ffpAura','ffpPose','ffpDepth','ffpBody','ffpEyes','ffpMouth','ffpGear',
+                       'ffpPawL','ffpPawR','ffpWalk','ffpExtras','ffpOrb','ffpZzz','ffpRings',
+                       'ffpSparks','ffpBubbles','ffpMotes'])
+      refs[id2] = document.getElementById(id2);
+    refs._full = full;
+    refs._walkRows = walkRows;
     current = null;
     setState('idle');
   }
 
   function setState(s){
-    if (!refs || s === current) return;
+    if (!refs || !pack) return;
+    if (s === current) return;
     current = s;
-    const c = CFG[s] || CFG.idle;
+    const c = pack.CFG[s] || pack.CFG.idle;
     const w = refs.ffpWrap;
     w.style.animation = c.anim;
     w.style.filter = c.filter;
@@ -494,11 +743,11 @@ const Mascot = (() => {
     refs.ffpAura.setAttribute('fill', c.auraColor);
     refs.ffpAura.setAttribute('opacity', c.aura);
     refs.ffpPose.style.transform = c.pose || 'none';
-    refs.ffpEyes.innerHTML = rects(EYES[c.eye]);
+    refs.ffpEyes.innerHTML = rectsFor(pack, pack.EYES[c.eye] || []);
     refs.ffpEyes.style.animation = c.blink ? 'ffp-blink 4.6s linear infinite' : 'none';
-    refs.ffpMouth.innerHTML = rects(MOUTHS[c.mouth]);
-    refs.ffpGear.innerHTML = rects(c.gear || []);
-    refs.ffpExtras.innerHTML = rects(c.extras || []);
+    refs.ffpMouth.innerHTML = rectsFor(pack, pack.MOUTHS[c.mouth] || []);
+    refs.ffpGear.innerHTML = rectsFor(pack, c.gear || []);
+    refs.ffpExtras.innerHTML = rectsFor(pack, c.extras || []);
     refs.ffpOrb.setAttribute('fill', c.orb);
     refs.ffpPawL.setAttribute('opacity', c.paws ? 1 : 0);
     refs.ffpPawR.setAttribute('opacity', c.paws ? 1 : 0);
@@ -507,13 +756,36 @@ const Mascot = (() => {
     refs.ffpSparks.setAttribute('opacity', c.spark ? 1 : 0);
     refs.ffpBubbles.setAttribute('opacity', c.bubbles ? 1 : 0);
     refs.ffpMotes.setAttribute('opacity', c.motes ? 0.9 : 0);
+    // walking (Clawd): swap static legs for the animated ones
+    if (refs.ffpWalk) {
+      refs.ffpWalk.setAttribute('opacity', c.walk ? 1 : 0);
+      const src = c.walk ? refs._walkRows : refs._full;
+      refs.ffpBody.innerHTML = src.body;
+      refs.ffpDepth.innerHTML = src.depth;
+    }
   }
 
-  return { mount, setState, states: Object.keys(CFG) };
+  return {
+    mount, setState,
+    has: (s) => !!(pack && pack.CFG[s]),
+    id: () => pack ? Object.keys(MASCOTS).find(k => MASCOTS[k] === pack) : null,
+  };
 })();
+
+/* victory walk (Swift moves the panel): Clawd paces with animated legs,
+   the others do the generic waddle */
+let victoryWalking = false;
+function famWalking(on){
+  victoryWalking = on;
+  const holder = document.getElementById('familiar');
+  if (on && !Mascot.has('walking')) holder.classList.add('walking');
+  if (!on) holder.classList.remove('walking');
+  Mascot.setState(mascotStateFor(Fam.state));
+}
 
 /* Fam state → mascot state (design's interaction mapping) */
 function mascotStateFor(s){
+  if (victoryWalking && Mascot.has('walking')) return 'walking';
   const m = { idle: 'idle', focused: 'focused', scholar: 'focused', dizzy: 'dizzy',
               poisoned: 'poisoned', ghost: 'ghost', evolved: 'levelUp', sleep: 'sleeping' };
   let out = m[s] || 'idle';
@@ -533,14 +805,16 @@ const Fam = {
   distractSec: 0, deepSec: 0, switches: [],
   paused: false,
 
-  setCharacter(){
-    this.char = 'pixel';
+  setCharacter(id){
+    if (!MASCOTS[id]) id = 'lulu';
+    this.char = id;
     document.body.dataset.char = 'pixel';
     const holder = document.getElementById('familiar');
     holder.innerHTML = '';
     holder.className = 'familiar char-pixel';
-    Mascot.mount(holder);
+    Mascot.mount(holder, id);
     Mascot.setState(mascotStateFor(this.state));
+    localStorage.setItem('ff-char', id);
     this.applyLevel();
   },
 
@@ -732,7 +1006,7 @@ function famSetApp(appName, kind, detail, url, canon){
   Fam._hudT = setTimeout(() => Fam.hud(false), 6000);
 }
 
-function famSetCharacter(){ Fam.setCharacter(); }
+function famSetCharacter(id){ Fam.setCharacter(id); toast(MASCOTS[Fam.char].name); }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
 
 /* user went idle / screen locked: close the open entry so away-time
@@ -1292,7 +1566,7 @@ function famToggleJournal(){
 
 /* click creature → context bubble */
 document.addEventListener('DOMContentLoaded', () => {
-  Fam.setCharacter();
+  Fam.setCharacter(localStorage.getItem('ff-char') || 'lulu');
   Fam.setFocus(55);
   Fam.loadXP();
 

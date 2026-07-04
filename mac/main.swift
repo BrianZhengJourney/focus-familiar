@@ -450,6 +450,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "◐"
         let menu = NSMenu()
+        let charMenu = NSMenu()
+        for (id, name) in [("lulu", "噜噜 LuLu"), ("clawd", "Clawd"), ("nat", "Nat")] {
+            let item = NSMenuItem(title: name, action: #selector(pickCharacter(_:)), keyEquivalent: "")
+            item.representedObject = id
+            item.target = self
+            charMenu.addItem(item)
+        }
+        let charRoot = NSMenuItem(title: "Familiar", action: nil, keyEquivalent: "")
+        menu.addItem(charRoot)
+        menu.setSubmenu(charMenu, for: charRoot)
+        menu.addItem(NSMenuItem.separator())
 
         let hide = NSMenuItem(title: "Hide familiar", action: #selector(toggleOverlay(_:)), keyEquivalent: "h")
         hide.identifier = .init("hideToggle")
@@ -612,6 +623,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     // — actions —
+    @objc func pickCharacter(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        js("famSetCharacter('\(id)')")
+        UserDefaults.standard.set(id, forKey: "character")
+    }
     @objc func toggleContextMenu() { showContext() }
     @objc func openJournal() {
         bubbleOpen = true
@@ -868,14 +884,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let target = vf.minX + 160 - panel.frame.width   // creature reaches the left screen edge
         let start = Date()
         let dur = 10.0
-        js("document.getElementById('familiar').classList.add('walking')")
+        js("famWalking(true)")
         walkTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60, repeats: true) { [weak self] t in
             guard let self else { t.invalidate(); return }
             let p = Date().timeIntervalSince(start) / dur
             if p >= 1 {
                 t.invalidate(); self.walkTimer = nil
                 self.panel.setFrameOrigin(home)
-                self.js("document.getElementById('familiar').classList.remove('walking')")
+                self.js("famWalking(false)")
                 return
             }
             let tri = p < 0.5 ? p * 2 : (1 - p) * 2       // out and back
@@ -925,7 +941,11 @@ extension AppDelegate: NSTableViewDataSource, NSTableViewDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
+        let current = UserDefaults.standard.string(forKey: "character") ?? "lulu"
         for item in menu.items {
+            if let sub = item.submenu, item.title == "Familiar" {
+                for c in sub.items { c.state = (c.representedObject as? String == current) ? .on : .off }
+            }
             if item.title == "Always clickable" { item.state = clickable ? .on : .off }
             if item.title == "Pause watching" { item.state = paused ? .on : .off }
             if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }

@@ -786,6 +786,7 @@ function famWalking(on){
 /* Fam state → mascot state (design's interaction mapping) */
 function mascotStateFor(s){
   if (victoryWalking && Mascot.has('walking')) return 'walking';
+  if (proudUntil > Date.now()) return 'proud';
   const m = { idle: 'idle', focused: 'focused', scholar: 'focused', dizzy: 'dizzy',
               poisoned: 'poisoned', ghost: 'ghost', evolved: 'levelUp', sleep: 'sleeping' };
   let out = m[s] || 'idle';
@@ -1028,6 +1029,27 @@ function famIdle(on){
   Fam.streakStart = null;
   Fam.setState('idle');
   Fam.renderStreak();
+}
+
+/* transient celebration: git commit detected (design: ~5s, then back) */
+let proudUntil = 0;
+function famProud(label){
+  proudUntil = Date.now() + 5000;
+  Mascot.setState('proud');
+  toast(label || '🎉 shipped! +10 XP');
+  Fam.addXP(10);
+  sound('streak');
+  setTimeout(() => { proudUntil = 0; Mascot.setState(mascotStateFor(Fam.state)); }, 5200);
+}
+
+/* privacy eraser: drop everything tracked since `ts` from working memory
+   (Swift rewrites the JSONL on disk) */
+function famEraseSince(ts){
+  Fam.history = Fam.history.filter(h => h.t1 <= ts);
+  if (Fam.cur && Fam.cur.t0 > ts) Fam.cur = null;
+  else if (Fam.cur) Fam.cur.t0 = Math.max(Fam.cur.t0, 0);
+  Fam.week = (Fam.week || []).filter(h => h.t1 <= ts);
+  toast('🫥 forgotten.');
 }
 
 /* called by Swift on launch with today's persisted entries (JSONL replay) */

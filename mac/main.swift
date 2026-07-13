@@ -391,6 +391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var overlayHidden = false      // fully hidden via the menu bar toggle
     var savedOrigin = NSPoint.zero // where to restore after unhiding
     var activationToken: NSObjectProtocol?  // MUST retain, or the observer dies
+    var onboardingWin: NSWindow?
+    var prefsWin: NSWindow?
+    let gitWatcher = GitWatcher()
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
@@ -401,6 +404,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         watchApps()
         registerHotKey()
         startHoverTracking()
+        pruneOldLogs()
+        gitWatcher.onCommit = { [weak self] repo in
+            self?.js("famProud('🎉 \(repo): commit shipped! +10 XP')")
+        }
+        gitWatcher.start()
+        if !UserDefaults.standard.bool(forKey: "onboarded1") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.showOnboarding() }
+        }
         // NOTE: initial send happens in webView(_:didFinish:) — calling
         // famSetApp before the page loads silently drops the event
     }
@@ -504,7 +515,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         previewEvo.target = self; menu.addItem(previewEvo)
 
         menu.addItem(NSMenuItem.separator())
-        let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: ",")
+        let prefs = NSMenuItem(title: "Preferences…", action: #selector(showPreferences), keyEquivalent: ",")
+        prefs.target = self; menu.addItem(prefs)
+
+        let welcome = NSMenuItem(title: "Welcome & Permissions…", action: #selector(showOnboarding), keyEquivalent: "")
+        welcome.target = self; menu.addItem(welcome)
+
+        let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: "")
         rules.target = self; menu.addItem(rules)
 
         let ax = NSMenuItem(title: "Enable browser awareness…", action: #selector(enableAX), keyEquivalent: "")
@@ -540,7 +557,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         browserTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             guard let self, !self.paused else { return }
             let idle = idleSeconds()
-            if !self.isIdle, idle > 150 {
+            let idleLimit = UserDefaults.standard.object(forKey: "idleThreshold") as? Double ?? 150
+            if !self.isIdle, idle > idleLimit {
                 self.isIdle = true
                 self.js("famIdle(true)")
             } else if self.isIdle, idle < 10 {

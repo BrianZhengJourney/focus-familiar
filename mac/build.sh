@@ -9,8 +9,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp Info.plist "$APP/Contents/"
 cp overlay.html "$APP/Contents/Resources/"
+cp AppIcon.icns "$APP/Contents/Resources/" 2>/dev/null || true
 
-swiftc -O main.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
+swiftc -O main.swift product.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
   -framework Cocoa -framework WebKit -framework Carbon
 
 codesign --force -s - "$APP"

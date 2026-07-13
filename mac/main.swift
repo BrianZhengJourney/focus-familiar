@@ -391,8 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var overlayHidden = false      // fully hidden via the menu bar toggle
     var savedOrigin = NSPoint.zero // where to restore after unhiding
     var activationToken: NSObjectProtocol?  // MUST retain, or the observer dies
-    var onboardingWin: NSWindow?
-    var prefsWin: NSWindow?
+    var settingsWin: NSWindow?
+    var settingsWeb: WKWebView?
     let gitWatcher = GitWatcher()
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
@@ -410,7 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         gitWatcher.start()
         if !UserDefaults.standard.bool(forKey: "onboarded1") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.showOnboarding() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.showSettings() }
         }
         // NOTE: initial send happens in webView(_:didFinish:) — calling
         // famSetApp before the page loads silently drops the event
@@ -456,85 +456,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if !overlayHidden { panel.orderFrontRegardless() }
     }
 
-    // — status bar —
+    // — status bar: LuLu icon + a short, visual menu —
     func buildStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "◐"
-        let menu = NSMenu()
-        let charMenu = NSMenu()
-        for (id, name) in [("lulu", "噜噜 LuLu"), ("clawd", "Clawd"), ("nat", "Nat")] {
-            let item = NSMenuItem(title: name, action: #selector(pickCharacter(_:)), keyEquivalent: "")
-            item.representedObject = id
-            item.target = self
-            charMenu.addItem(item)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let icon = luluStatusIcon() as NSImage? {
+            statusItem.button?.image = icon
+            statusItem.button?.imagePosition = .imageOnly
+        } else {
+            statusItem.button?.title = "◐"
         }
-        let charRoot = NSMenuItem(title: "Familiar", action: nil, keyEquivalent: "")
-        menu.addItem(charRoot)
-        menu.setSubmenu(charMenu, for: charRoot)
-        menu.addItem(NSMenuItem.separator())
 
-        let hide = NSMenuItem(title: "Hide familiar", action: #selector(toggleOverlay(_:)), keyEquivalent: "h")
-        hide.identifier = .init("hideToggle")
-        hide.target = self; menu.addItem(hide)
+        func item(_ title: String, _ action: Selector?, _ key: String, _ symbol: String) -> NSMenuItem {
+            let it = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            it.target = self
+            it.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            return it
+        }
 
-        let ctx = NSMenuItem(title: "What was I doing?  (⌥Space)", action: #selector(toggleContextMenu), keyEquivalent: "")
-        ctx.target = self; menu.addItem(ctx)
-
-        let journal = NSMenuItem(title: "Today's journal", action: #selector(openJournal), keyEquivalent: "j")
-        journal.target = self; menu.addItem(journal)
+        let menu = NSMenu()
+        menu.addItem(item("What was I doing?  (⌥Space)", #selector(openJournal), "j", "book"))
 
         let huntMenu = NSMenu()
         for min in [25, 50] {
-            let item = NSMenuItem(title: "\(min) minutes", action: #selector(startHunt(_:)), keyEquivalent: "")
-            item.representedObject = min; item.target = self
-            huntMenu.addItem(item)
+            let it = NSMenuItem(title: "\(min) minutes", action: #selector(startHunt(_:)), keyEquivalent: "")
+            it.representedObject = min; it.target = self
+            huntMenu.addItem(it)
         }
-        let huntRoot = NSMenuItem(title: "Begin a hunt 🏹", action: nil, keyEquivalent: "")
+        let huntRoot = item("Begin a hunt", nil, "", "scope")
         menu.addItem(huntRoot)
         menu.setSubmenu(huntMenu, for: huntRoot)
 
-        let export = NSMenuItem(title: "Export today's journal", action: #selector(exportJournal), keyEquivalent: "e")
-        export.target = self; menu.addItem(export)
+        menu.addItem(item("Journal as a page", #selector(openJournalPage), "o", "doc.richtext"))
+        menu.addItem(NSMenuItem.separator())
 
-        let page = NSMenuItem(title: "Open journal as page ↗", action: #selector(openJournalPage), keyEquivalent: "o")
-        page.target = self; menu.addItem(page)
-
-        let click = NSMenuItem(title: "Always clickable", action: #selector(toggleClickable(_:)), keyEquivalent: "")
-        click.target = self; menu.addItem(click)
-
-        let pause = NSMenuItem(title: "Pause watching", action: #selector(togglePause(_:)), keyEquivalent: "")
-        pause.target = self; menu.addItem(pause)
-
-        let login = NSMenuItem(title: "Start at login", action: #selector(toggleLogin(_:)), keyEquivalent: "")
-        login.target = self; menu.addItem(login)
-
-        let sounds = NSMenuItem(title: "Sounds", action: #selector(toggleSounds(_:)), keyEquivalent: "")
-        sounds.target = self; menu.addItem(sounds)
-
-        let previewEvo = NSMenuItem(title: "Preview evolution moment", action: #selector(previewEvolution), keyEquivalent: "")
-        previewEvo.target = self; menu.addItem(previewEvo)
+        menu.addItem(item("Settings…", #selector(showSettings), ",", "gearshape"))
+        let hide = item("Hide familiar", #selector(toggleOverlay(_:)), "h", "eye.slash")
+        hide.identifier = .init("hideToggle")
+        menu.addItem(hide)
 
         menu.addItem(NSMenuItem.separator())
-        let prefs = NSMenuItem(title: "Preferences…", action: #selector(showPreferences), keyEquivalent: ",")
-        prefs.target = self; menu.addItem(prefs)
-
-        let welcome = NSMenuItem(title: "Welcome & Permissions…", action: #selector(showOnboarding), keyEquivalent: "")
-        welcome.target = self; menu.addItem(welcome)
-
-        let rules = NSMenuItem(title: "Rules…", action: #selector(openRules), keyEquivalent: "")
-        rules.target = self; menu.addItem(rules)
-
-        let ax = NSMenuItem(title: "Enable browser awareness…", action: #selector(enableAX), keyEquivalent: "")
-        ax.target = self; menu.addItem(ax)
-
         let ai = NSMenuItem(title: "AI: checking…", action: nil, keyEquivalent: "")
         ai.isEnabled = false
         ai.identifier = .init("aiStatus")
         menu.addItem(ai)
 
         menu.addItem(NSMenuItem.separator())
-        let quit = NSMenuItem(title: "Quit Focus Familiar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quit)
+        menu.addItem(item("Quit Focus Familiar", #selector(NSApplication.terminate(_:)), "q", "power"))
 
         menu.delegate = self
         statusItem.menu = menu
@@ -683,6 +650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         dragFrameStart = panel.frame.origin
         dragTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60, repeats: true) { [weak self] _ in
             guard let self else { return }
+            guard NSEvent.pressedMouseButtons & 1 == 1 else { self.endDrag(); return }
             let m = NSEvent.mouseLocation
             self.panel.setFrameOrigin(NSPoint(x: self.dragFrameStart.x + m.x - self.dragMouseStart.x,
                                               y: self.dragFrameStart.y + m.y - self.dragMouseStart.y))
@@ -862,8 +830,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         webView.evaluateJavaScript(script, completionHandler: nil)
     }
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any] else { return }
+        if message.name == "settings" { handleSettings(body); return }
         guard message.name == "bridge",
-              let body = message.body as? [String: Any],
               let type = body["type"] as? String else { return }
         switch type {
         case "bubble":
@@ -874,6 +843,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             endDrag()
         case "famClick":
             if hidden { unhide() } else { showContext() }
+        case "ctxMenu":
+            let m = NSMenu()
+            let hideIt = NSMenuItem(title: overlayHidden ? "Show familiar" : "Hide familiar",
+                                    action: #selector(toggleOverlay(_:)), keyEquivalent: "")
+            hideIt.target = self
+            hideIt.image = NSImage(systemSymbolName: "eye.slash", accessibilityDescription: nil)
+            m.addItem(hideIt)
+            let settingsIt = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: "")
+            settingsIt.target = self
+            settingsIt.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+            m.addItem(settingsIt)
+            m.addItem(NSMenuItem.separator())
+            m.addItem(NSMenuItem(title: "Quit Focus Familiar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+            m.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case "log":
             if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
         case "levelUp":
@@ -922,6 +905,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // replay today's persisted history once the overlay page is ready,
     // then greet with whatever is frontmost right now
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === settingsWeb { pushSettingsState(); return }
         js("famLoadHistory(\(readTodayLog()))")
         js("famLoadWeek(\(readWeekLog()))")
         if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
@@ -964,10 +948,7 @@ extension AppDelegate: NSMenuDelegate {
             if let sub = item.submenu, item.title == "Familiar" {
                 for c in sub.items { c.state = (c.representedObject as? String == current) ? .on : .off }
             }
-            if item.title == "Always clickable" { item.state = clickable ? .on : .off }
-            if item.title == "Pause watching" { item.state = paused ? .on : .off }
-            if item.title == "Start at login" { item.state = SMAppService.mainApp.status == .enabled ? .on : .off }
-            if item.title == "Sounds" { item.state = UserDefaults.standard.bool(forKey: "soundOn") ? .on : .off }
+
             if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
             if item.identifier?.rawValue == "hideToggle" { item.title = overlayHidden ? "Show familiar" : "Hide familiar" }
         }

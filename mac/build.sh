@@ -8,7 +8,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp Info.plist "$APP/Contents/"
-cp overlay.html "$APP/Contents/Resources/"
+cp overlay.html settings.html "$APP/Contents/Resources/"
 cp AppIcon.icns "$APP/Contents/Resources/" 2>/dev/null || true
 
 swiftc -O main.swift product.swift -o "$APP/Contents/MacOS/FocusFamiliar" \

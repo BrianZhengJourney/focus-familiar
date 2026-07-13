@@ -1,7 +1,8 @@
 // Focus Familiar — productization layer
-// onboarding, preferences, data retention/eraser, git-commit celebration
+// settings window (HTML), data retention/eraser, git-commit celebration
 
 import Cocoa
+import WebKit
 import ServiceManagement
 
 // ── data retention & privacy eraser ─────────────────────────
@@ -100,281 +101,209 @@ final class GitWatcher {
     }
 }
 
-// ── shared UI helpers ───────────────────────────────────────
-
-private func label(_ text: String, size: CGFloat = 13, bold: Bool = false, dim: Bool = false) -> NSTextField {
-    let l = NSTextField(labelWithString: text)
-    l.font = bold ? .boldSystemFont(ofSize: size) : .systemFont(ofSize: size)
-    if dim { l.textColor = .secondaryLabelColor }
-    l.lineBreakMode = .byWordWrapping
-    l.preferredMaxLayoutWidth = 420
-    return l
-}
-
-// ── onboarding & preferences windows ────────────────────────
+// ── the one settings window (hosts settings.html) ───────────
 
 extension AppDelegate {
 
-    // — Welcome / permissions (shown once on first run) —
-    @objc func showOnboarding() {
-        if let w = onboardingWin { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 24, left: 28, bottom: 24, right: 28)
-
-        stack.addArrangedSubview(label("Welcome to Focus Familiar", size: 22, bold: true))
-        stack.addArrangedSubview(label("A tiny creature that lives on your screen. It feeds on your focus, gets poisoned by doomscrolling, and remembers what you were doing.", dim: true))
-
-        stack.addArrangedSubview(label("Choose your familiar", size: 15, bold: true))
-        let picker = NSPopUpButton()
-        for (id, name) in [("lulu", "噜噜 LuLu — butter hamster"), ("clawd", "Clawd — terracotta voxel"), ("nat", "Nat — snorkeling kitty")] {
-            picker.addItem(withTitle: name)
-            picker.lastItem?.representedObject = id
+    @objc func showSettings() {
+        if let w = settingsWin {
+            pushSettingsState()
+            NSApp.activate(ignoringOtherApps: true)
+            w.makeKeyAndOrderFront(nil)
+            return
         }
-        picker.target = self
-        picker.action = #selector(onboardPickCharacter(_:))
-        stack.addArrangedSubview(picker)
-
-        stack.addArrangedSubview(label("Permissions", size: 15, bold: true))
-        stack.addArrangedSubview(label("App tracking needs no permission — it just works. ✓"))
-        let permRow = NSStackView()
-        permRow.orientation = .horizontal
-        permRow.spacing = 10
-        let permStatus = label(automationStatusLine(), dim: true)
-        permStatus.identifier = .init("permStatus")
-        let grantBtn = NSButton(title: "Enable browser awareness…", target: self, action: #selector(grantAutomation))
-        permRow.addArrangedSubview(grantBtn)
-        permRow.addArrangedSubview(permStatus)
-        stack.addArrangedSubview(permRow)
-        stack.addArrangedSubview(label("Browser awareness reads only the active tab's address, locally, to tell arXiv from YouTube. Nothing ever leaves your Mac.", size: 11, dim: true))
-
-        stack.addArrangedSubview(label("The essentials", size: 15, bold: true))
-        stack.addArrangedSubview(label("⌥Space — \"what was I doing?\"\n◐ menu → Today's journal — your day as an RPG quest log\n◐ menu → Begin a hunt — a pomodoro your familiar joins\nDrag the creature to a screen edge to tuck it away", dim: true))
-
-        let login = NSButton(checkboxWithTitle: "Start Focus Familiar at login", target: self, action: #selector(onboardToggleLogin(_:)))
-        login.state = SMAppServiceStatusEnabled() ? .on : .off
-        stack.addArrangedSubview(login)
-
-        let done = NSButton(title: "Let's go", target: self, action: #selector(finishOnboarding))
-        done.keyEquivalent = "\r"
-        stack.addArrangedSubview(done)
-
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 480),
+        let cfg = WKWebViewConfiguration()
+        cfg.userContentController.add(self, name: "settings")
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 560, height: 780), configuration: cfg)
+        web.navigationDelegate = self
+        if let dir = Bundle.main.resourceURL {
+            web.loadFileURL(dir.appendingPathComponent("settings.html"), allowingReadAccessTo: dir)
+        }
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 780),
                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
         win.title = "Focus Familiar"
-        win.contentView = stack
+        win.contentView = web
         win.isReleasedWhenClosed = false
         win.center()
-        onboardingWin = win
+        settingsWeb = web
+        settingsWin = win
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
     }
 
-    func automationStatusLine() -> String {
-        guard let bid = defaultBrowserBundleId() else { return "no default browser found" }
-        switch automationStatus(bid) {
-        case 0: return "granted ✓"
-        case -1744: return "not yet asked"
-        case -1743: return "denied — enable in System Settings → Privacy → Automation"
-        case -600: return "open your browser first, then click Enable"
-        default: return "unknown"
+    func permLine(_ code: OSStatus) -> String {
+        switch code {
+        case 0: return "granted — the familiar can read tab addresses"
+        case -1744: return "not yet enabled"
+        case -1743: return "denied — System Settings → Privacy → Automation"
+        case -600: return "open your browser, then click Enable"
+        default: return "no default browser found"
         }
     }
 
-    @objc func onboardPickCharacter(_ sender: NSPopUpButton) {
-        guard let id = sender.selectedItem?.representedObject as? String else { return }
-        js("famSetCharacter('\(id)')")
-        UserDefaults.standard.set(id, forKey: "character")
+    func pushSettingsState() {
+        let d = UserDefaults.standard
+        let bid = defaultBrowserBundleId()
+        let code = bid.map { automationStatus($0) } ?? OSStatus(-1)
+        var rules: [[String: Any]] = []
+        for (key, label) in seenItems {
+            rules.append(["key": key, "label": label, "kind": ruleOverrides[key] ?? defaultKind(key)])
+        }
+        rules.sort { ($0["label"] as? String ?? "").lowercased() < ($1["label"] as? String ?? "").lowercased() }
+        let state: [String: Any] = [
+            "character": d.string(forKey: "character") ?? "lulu",
+            "permCode": Int(code),
+            "permText": permLine(code),
+            "rules": rules,
+            "idle": d.object(forKey: "idleThreshold") as? Double ?? 150,
+            "retention": d.object(forKey: "retentionDays") as? Int ?? 90,
+            "sounds": d.bool(forKey: "soundOn"),
+            "login": SMAppService.mainApp.status == .enabled,
+            "stats": historyStats(),
+            "projects": GitWatcher.projectsDir().lastPathComponent,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: state),
+              let json = String(data: data, encoding: .utf8) else { return }
+        settingsWeb?.evaluateJavaScript("initSettings(\(json))", completionHandler: nil)
+    }
+
+    func handleSettings(_ body: [String: Any]) {
+        let d = UserDefaults.standard
+        switch body["type"] as? String ?? "" {
+        case "pick":
+            if let id = body["id"] as? String {
+                js("famSetCharacter('\(id)')")
+                d.set(id, forKey: "character")
+            }
+        case "grant":
+            grantAutomation()
+        case "recheck":
+            pushSettingsState()
+        case "rule":
+            if let key = body["key"] as? String, let kind = body["kind"] as? String {
+                if kind == defaultKind(key) { ruleOverrides.removeValue(forKey: key) }
+                else { ruleOverrides[key] = kind }
+                saveOverrides()
+                lastSent = ""
+                if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
+            }
+        case "idle":
+            if let secs = body["secs"] as? Double { d.set(secs, forKey: "idleThreshold") }
+        case "sounds":
+            d.set(body["on"] as? Bool ?? false, forKey: "soundOn")
+        case "login":
+            let svc = SMAppService.mainApp
+            if body["on"] as? Bool == true { try? svc.register() } else { try? svc.unregister() }
+        case "projects":
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.directoryURL = GitWatcher.projectsDir()
+            if panel.runModal() == .OK, let url = panel.url {
+                d.set(url.path, forKey: "projectsDir")
+                gitWatcher.mtimes = [:]
+                gitWatcher.scan(initial: true)
+            }
+            pushSettingsState()
+        case "retention":
+            if let days = body["days"] as? Int {
+                d.set(days, forKey: "retentionDays")
+                pruneOldLogs()
+                pushSettingsState()
+            }
+        case "forget":
+            switch body["span"] as? String ?? "" {
+            case "hour":
+                let ts = Date().timeIntervalSince1970 * 1000 - 3_600_000
+                eraseSince(ts); js("famEraseSince(\(ts))")
+            case "today":
+                let start = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000
+                eraseSince(start); js("famEraseSince(\(start))")
+            case "all":
+                let a = NSAlert()
+                a.messageText = "Delete all history?"
+                a.informativeText = "Every day of activity, gone. XP and level stay. No undo."
+                a.addButton(withTitle: "Delete Everything")
+                a.addButton(withTitle: "Cancel")
+                a.alertStyle = .warning
+                if a.runModal() == .alertFirstButtonReturn {
+                    eraseAllHistory(); js("famEraseSince(0)")
+                }
+            default: break
+            }
+            pushSettingsState()
+        case "reveal":
+            NSWorkspace.shared.activateFileViewerSelecting([logDir])
+        case "done":
+            d.set(true, forKey: "onboarded1")
+            settingsWin?.close()
+        default:
+            break
+        }
     }
 
     @objc func grantAutomation() {
-        // fire a real (harmless) event at the default browser to trigger the prompt
-        if let bid = defaultBrowserBundleId() {
-            if NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bid }) == nil,
-               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
-                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-                _ = activeTab(bundleId: bid)
-                self?.refreshPermStatus()
-            }
+        guard let bid = defaultBrowserBundleId() else { return }
+        if NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == bid }) == nil,
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            _ = activeTab(bundleId: bid)
+            self?.pushSettingsState()
         }
     }
+}
 
-    func refreshPermStatus() {
-        guard let stack = onboardingWin?.contentView as? NSStackView else { return }
-        func walk(_ v: NSView) {
-            if let l = v as? NSTextField, l.identifier?.rawValue == "permStatus" { l.stringValue = automationStatusLine() }
-            v.subviews.forEach(walk)
-        }
-        walk(stack)
+// ── LuLu, drawn tiny for the menu bar ───────────────────────
+
+func luluStatusIcon() -> NSImage {
+    let base = [
+        "....Y......YB....",
+        "...yY.....YYYy...",
+        "..YYYY...YYYY..T.",
+        ".YyYYYYYYYYYY.TT.",
+        ".YYYYYYYYYYYYyTTT",
+        "YYYOOOOOOOOYYYYTT",
+        "YYOOOOOOOOOOYYYTT",
+        ".YOOOOOOOOOOYYTT.",
+        ".YBOOCNCOOOBYYT..",
+        "YYOOOCCCOOOOYYY..",
+        "YYYOOOOOOOOYYYY..",
+        "YYYYYYYYYYYYHHH..",
+        ".YYYYYYYYYYYHH...",
+        ".YFF.YHHY.FF.H...",
+        "..FF......FF.....",
+    ]
+    let eyes: [(Int, Int, Character)] = [(4,6,"K"),(5,6,"K"),(4,7,"K"),(5,7,"K"),(4,6,"W"),
+                                         (9,6,"K"),(10,6,"K"),(9,7,"K"),(10,7,"K"),(9,6,"W")]
+    let mouth: [(Int, Int, Character)] = [(5,10,"M"),(7,10,"M")]
+    func color(_ ch: Character) -> NSColor? {
+        let hex: [Character: Int] = ["Y": 0xffd982, "y": 0xfff0c4, "O": 0xffb043, "C": 0xfff1cf,
+                                     "N": 0xc96f3f, "F": 0xf7c778, "T": 0xe69b3d, "B": 0xff9d6b,
+                                     "K": 0x2b1c12, "W": 0xffffff, "H": 0xf2bc61, "M": 0x8a5a33]
+        guard let v = hex[ch] else { return nil }
+        return NSColor(red: CGFloat((v >> 16) & 255) / 255,
+                       green: CGFloat((v >> 8) & 255) / 255,
+                       blue: CGFloat(v & 255) / 255, alpha: 1)
     }
-
-    @objc func onboardToggleLogin(_ sender: NSButton) { toggleLogin(NSMenuItem()) }
-
-    @objc func finishOnboarding() {
-        UserDefaults.standard.set(true, forKey: "onboarded1")
-        onboardingWin?.close()
-    }
-
-    // — Preferences (General + Data) —
-    @objc func showPreferences() {
-        if let w = prefsWin { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-
-        let tabs = NSTabView(frame: NSRect(x: 0, y: 0, width: 480, height: 340))
-
-        // General
-        let g = NSStackView()
-        g.orientation = .vertical; g.alignment = .leading; g.spacing = 12
-        g.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-
-        let idleRow = NSStackView(); idleRow.spacing = 8
-        idleRow.addArrangedSubview(label("Consider me away after"))
-        let idlePop = NSPopUpButton()
-        for (secs, name) in [(60.0, "1 minute"), (150.0, "2.5 minutes"), (300.0, "5 minutes"), (600.0, "10 minutes")] {
-            idlePop.addItem(withTitle: name)
-            idlePop.lastItem?.representedObject = secs
-        }
-        let curIdle = UserDefaults.standard.object(forKey: "idleThreshold") as? Double ?? 150
-        idlePop.selectItem(at: [60.0, 150.0, 300.0, 600.0].firstIndex(of: curIdle) ?? 1)
-        idlePop.target = self; idlePop.action = #selector(prefIdleChanged(_:))
-        idleRow.addArrangedSubview(idlePop)
-        g.addArrangedSubview(idleRow)
-        g.addArrangedSubview(label("Away time never counts as work.", size: 11, dim: true))
-
-        let sounds = NSButton(checkboxWithTitle: "Sounds (level-ups, streaks, poisonings)", target: self, action: #selector(prefToggleSounds(_:)))
-        sounds.state = UserDefaults.standard.bool(forKey: "soundOn") ? .on : .off
-        g.addArrangedSubview(sounds)
-
-        let login = NSButton(checkboxWithTitle: "Start at login", target: self, action: #selector(onboardToggleLogin(_:)))
-        login.state = SMAppServiceStatusEnabled() ? .on : .off
-        g.addArrangedSubview(login)
-
-        let projRow = NSStackView(); projRow.spacing = 8
-        projRow.addArrangedSubview(label("Projects folder (for commit celebrations)"))
-        let projBtn = NSButton(title: GitWatcher.projectsDir().lastPathComponent + "…", target: self, action: #selector(prefPickProjects(_:)))
-        projRow.addArrangedSubview(projBtn)
-        g.addArrangedSubview(projRow)
-        g.addArrangedSubview(label("Your familiar celebrates every git commit it sees there.", size: 11, dim: true))
-
-        let gTab = NSTabViewItem(identifier: "general"); gTab.label = "General"; gTab.view = g
-        tabs.addTabViewItem(gTab)
-
-        // Data
-        let d = NSStackView()
-        d.orientation = .vertical; d.alignment = .leading; d.spacing = 12
-        d.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-
-        d.addArrangedSubview(label("Everything is recorded locally. Nothing leaves this Mac.", bold: true))
-        let statsL = label(historyStats(), dim: true)
-        statsL.identifier = .init("dataStats")
-        d.addArrangedSubview(statsL)
-
-        let retRow = NSStackView(); retRow.spacing = 8
-        retRow.addArrangedSubview(label("Keep history for"))
-        let retPop = NSPopUpButton()
-        for (days, name) in [(30, "30 days"), (90, "90 days"), (365, "1 year"), (0, "forever")] {
-            retPop.addItem(withTitle: name)
-            retPop.lastItem?.representedObject = days
-        }
-        let curRet = UserDefaults.standard.object(forKey: "retentionDays") as? Int ?? 90
-        retPop.selectItem(at: [30, 90, 365, 0].firstIndex(of: curRet) ?? 1)
-        retPop.target = self; retPop.action = #selector(prefRetentionChanged(_:))
-        retRow.addArrangedSubview(retPop)
-        d.addArrangedSubview(retRow)
-
-        d.addArrangedSubview(label("Forget", size: 15, bold: true))
-        let btnRow = NSStackView(); btnRow.spacing = 8
-        btnRow.addArrangedSubview(NSButton(title: "Last hour", target: self, action: #selector(forgetHour)))
-        btnRow.addArrangedSubview(NSButton(title: "Today", target: self, action: #selector(forgetToday)))
-        btnRow.addArrangedSubview(NSButton(title: "Everything…", target: self, action: #selector(forgetEverything)))
-        d.addArrangedSubview(btnRow)
-        d.addArrangedSubview(label("Removes entries from disk and from the familiar's memory. No undo.", size: 11, dim: true))
-
-        d.addArrangedSubview(NSButton(title: "Reveal data folder in Finder", target: self, action: #selector(revealData)))
-
-        let dTab = NSTabViewItem(identifier: "data"); dTab.label = "Data & Privacy"; dTab.view = d
-        tabs.addTabViewItem(dTab)
-
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 340),
-                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        win.title = "Focus Familiar Preferences"
-        win.contentView = tabs
-        win.isReleasedWhenClosed = false
-        win.center()
-        prefsWin = win
-        NSApp.activate(ignoringOtherApps: true)
-        win.makeKeyAndOrderFront(nil)
-    }
-
-    func SMAppServiceStatusEnabled() -> Bool {
-        SMAppService.mainApp.status == .enabled
-    }
-
-    @objc func prefIdleChanged(_ sender: NSPopUpButton) {
-        if let secs = sender.selectedItem?.representedObject as? Double {
-            UserDefaults.standard.set(secs, forKey: "idleThreshold")
+    var grid = base.map { Array($0) }
+    for (x, y, ch) in eyes + mouth { grid[y][x] = ch }
+    let size = NSSize(width: 18, height: 16)
+    let img = NSImage(size: size)
+    img.lockFocus()
+    let cell: CGFloat = 18.0 / 17.0
+    let rows = grid.count
+    for (y, row) in grid.enumerated() {
+        for (x, ch) in row.enumerated() {
+            guard let c = color(ch) else { continue }
+            c.setFill()
+            // AppKit origin is bottom-left; flip the row index
+            NSRect(x: CGFloat(x) * cell,
+                   y: CGFloat(rows - 1 - y) * cell + 0.2,
+                   width: cell + 0.05, height: cell + 0.05).fill()
         }
     }
-    @objc func prefToggleSounds(_ sender: NSButton) {
-        UserDefaults.standard.set(sender.state == .on, forKey: "soundOn")
-    }
-    @objc func prefRetentionChanged(_ sender: NSPopUpButton) {
-        if let days = sender.selectedItem?.representedObject as? Int {
-            UserDefaults.standard.set(days, forKey: "retentionDays")
-            pruneOldLogs()
-            refreshDataStats()
-        }
-    }
-    @objc func prefPickProjects(_ sender: NSButton) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = GitWatcher.projectsDir()
-        if panel.runModal() == .OK, let url = panel.url {
-            UserDefaults.standard.set(url.path, forKey: "projectsDir")
-            sender.title = url.lastPathComponent + "…"
-            gitWatcher.mtimes = [:]
-            gitWatcher.scan(initial: true)
-        }
-    }
-
-    @objc func forgetHour() {
-        let ts = Date().timeIntervalSince1970 * 1000 - 3_600_000
-        eraseSince(ts)
-        js("famEraseSince(\(ts))")
-        refreshDataStats()
-    }
-    @objc func forgetToday() {
-        let start = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000
-        eraseSince(start)
-        js("famEraseSince(\(start))")
-        refreshDataStats()
-    }
-    @objc func forgetEverything() {
-        let a = NSAlert()
-        a.messageText = "Delete all history?"
-        a.informativeText = "Every day of activity, gone. XP and level stay. No undo."
-        a.addButton(withTitle: "Delete Everything")
-        a.addButton(withTitle: "Cancel")
-        a.alertStyle = .warning
-        if a.runModal() == .alertFirstButtonReturn {
-            eraseAllHistory()
-            js("famEraseSince(0)")
-            refreshDataStats()
-        }
-    }
-    @objc func revealData() { NSWorkspace.shared.activateFileViewerSelecting([logDir]) }
-
-    func refreshDataStats() {
-        guard let tabs = prefsWin?.contentView as? NSTabView else { return }
-        func walk(_ v: NSView) {
-            if let l = v as? NSTextField, l.identifier?.rawValue == "dataStats" { l.stringValue = historyStats() }
-            v.subviews.forEach(walk)
-        }
-        for item in tabs.tabViewItems { if let v = item.view { walk(v) } }
-    }
+    img.unlockFocus()
+    return img
 }

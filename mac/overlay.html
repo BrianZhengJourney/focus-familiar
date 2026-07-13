@@ -171,6 +171,12 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-close{ font-family:inherit; font-size:11px; color:var(--ink-dim); background:none;
   border:none; cursor:pointer; padding:2px 4px; }
 .j-close:hover{ color:var(--ink); }
+.j-now{ padding:9px 14px 0; flex:none; font-size:12.5px; color:var(--ink); }
+.j-now b{ color:#fff; }
+.j-now .jn-sub{ font-size:11px; color:var(--ink-dim); margin-top:2px; }
+.j-now .pct-good{ color:#7df0cf; font-weight:600; }
+.j-now .pct-mid{ color:#ffd479; font-weight:600; }
+.j-now .pct-bad{ color:#e88fae; font-weight:600; }
 .j-tabs{ display:flex; gap:5px; padding:8px 14px 2px; flex:none; }
 .j-tab{ font-family:inherit; font-size:10.5px; color:var(--ink-dim); background:#ffffff0a;
   border:1px solid #ffffff14; border-radius:14px; padding:3px 10px; cursor:pointer; }
@@ -291,6 +297,7 @@ body[data-char="pixel"] .shadow{ display:none; }
       <span>✦ today's journal</span>
       <button class="j-close" onclick="famToggleJournal()">✕</button>
     </div>
+    <div class="j-now" id="journalNow"></div>
     <div class="j-tabs" id="journalTabs"></div>
     <div class="j-body" id="journalBody"></div>
   </div>
@@ -1144,7 +1151,10 @@ function windowStats(minutes){
 
 function pctCls(p){ return p >= 65 ? 'good' : p >= 35 ? 'mid' : 'bad'; }
 
-function famToggleContext(){
+/* click / opt-space now both open the combined journal+thread panel */
+function famToggleContext(){ famToggleJournal(); }
+
+function famToggleContextLegacy(){
   const b = document.getElementById('bubble');
   if (b.classList.contains('on')) { closeBubble(); return; }
   const fmt = ms => { const m = Math.round(ms/60000); return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`; };
@@ -1277,7 +1287,23 @@ const J_NOTES = [
   { min: 0,  note: 'we do not speak of this window. 🕳️' },
 ];
 
+/* the old thread bubble, folded into the journal as a live header */
+function renderNow(){
+  const el = document.getElementById('journalNow');
+  if (!el) return;
+  const now = Date.now();
+  const s25 = windowStats(25), s60 = windowStats(60);
+  const pc = p => `<span class="${p >= 65 ? 'pct-good' : p >= 35 ? 'pct-mid' : 'pct-bad'}">${p}%</span>`;
+  const cur = Fam.cur
+    ? `You're in <b>${Fam.cur.app}</b> — ${fmtDur(now - Fam.cur.t0)}`
+    : 'away';
+  const streak = Fam.streakMin();
+  el.innerHTML = `<div>${cur}${streak > 0 ? ` · streak <b>${streak}m</b> 🔥` : ''} · ✦ lv.${Fam.level}</div>` +
+    `<div class="jn-sub">last 25 min ${pc(s25.pct)} deep · last hour ${pc(s60.pct)} deep</div>`;
+}
+
 function renderJournal(){
+  renderNow();
   renderTabs();
   if (J.view === 'quest') return renderQuest();
   if (J.view === 'week')  return renderWeek();
@@ -1615,6 +1641,19 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (hasBridge) bridge({ type: 'famClick' });
     else famToggleContext();
     pd = null; dragging = false;
+  });
+  // if the pointer is lost mid-drag, end the drag - otherwise the window
+  // follows the mouse forever (the 'pet chases my cursor' bug)
+  for (const ev of ['pointercancel', 'lostpointercapture']) {
+    fam.addEventListener(ev, () => {
+      if (dragging) bridge({ type: 'dragEnd' });
+      pd = null; dragging = false;
+    });
+  }
+  // right-click on the pet -> native context menu (hide, settings, quit)
+  fam.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    bridge({ type: 'ctxMenu' });
   });
   // preview mode in a normal browser: ?preview&char=panda&state=poisoned
   const q = new URLSearchParams(location.search);

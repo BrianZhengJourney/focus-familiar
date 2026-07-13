@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Focus Familiar — Settings</title>
+<style>
+:root{
+  --ink:#e9e6f7; --dim:#9d97b8; --card:#241f42; --line:#ffffff14;
+  --accent:#cabcf5; --good:#7df0cf; --warn:#ffd479; --bad:#e88fae;
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  font-family:-apple-system,'Inter',sans-serif; color:var(--ink);
+  background:linear-gradient(165deg,#1d1838 0%,#191534 55%,#141d33 100%);
+  overflow-y:auto; padding:26px 30px 40px; -webkit-user-select:none;
+}
+h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
+.tagline{ color:var(--dim); font-size:13px; margin:4px 0 20px; }
+
+.sec{ background:var(--card); border:1px solid var(--line); border-radius:16px;
+  padding:16px 18px; margin-bottom:14px; }
+.sec h2{ font-size:14px; font-weight:600; color:var(--accent); margin-bottom:11px;
+  display:flex; align-items:center; gap:8px; }
+.sec h2 .ico{ font-size:16px; }
+.note{ font-size:11px; color:var(--dim); margin-top:8px; line-height:1.5; }
+
+/* mascot cards */
+.cards{ display:flex; gap:12px; }
+.card{ flex:1; background:#1c173a; border:2px solid var(--line); border-radius:14px;
+  padding:12px 8px 10px; text-align:center; cursor:pointer; transition:border-color .2s, transform .15s; }
+.card:hover{ transform:translateY(-2px); }
+.card.sel{ border-color:var(--accent); box-shadow:0 0 18px #cabcf533; }
+.card svg{ width:86px; height:86px; overflow:visible; }
+.card .nm{ font-size:13px; font-weight:600; margin-top:6px; }
+.card .ds{ font-size:10.5px; color:var(--dim); margin-top:2px; }
+
+/* permission pill */
+.permrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pill{ font-size:11px; padding:3px 10px; border-radius:12px; font-weight:600; }
+.pill.ok{ background:#173a30; color:var(--good); }
+.pill.ask{ background:#3a3317; color:var(--warn); }
+.pill.no{ background:#3a1722; color:var(--bad); }
+button{ font-family:inherit; font-size:12.5px; color:var(--ink); background:#37306290;
+  border:1px solid #cabcf540; border-radius:9px; padding:6px 14px; cursor:pointer; }
+button:hover{ background:#453b7a; }
+button.danger{ border-color:#e88fae55; }
+button.danger:hover{ background:#5a2438; }
+button.primary{ background:linear-gradient(120deg,#cabcf5,#9ef0d9); color:#14102b;
+  font-weight:600; border:none; padding:9px 22px; font-size:14px; }
+
+/* rules */
+.rules{ max-height:230px; overflow-y:auto; }
+.rule{ display:flex; align-items:center; gap:9px; padding:5px 2px; border-bottom:1px dashed var(--line); }
+.rule:last-child{ border-bottom:none; }
+.rule .rico{ width:20px; text-align:center; }
+.rule .rname{ flex:1; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c173a;
+  border:1px solid var(--line); border-radius:7px; padding:3px 6px; }
+
+/* toggles + rows */
+.row{ display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px; }
+.row .grow{ flex:1; }
+.toggle{ position:relative; width:36px; height:21px; }
+.toggle input{ opacity:0; width:0; height:0; }
+.toggle i{ position:absolute; inset:0; background:#37306290; border-radius:11px;
+  transition:background .2s; cursor:pointer; }
+.toggle i::after{ content:""; position:absolute; left:2.5px; top:2.5px; width:16px; height:16px;
+  border-radius:50%; background:#e9e6f7; transition:transform .2s; }
+.toggle input:checked + i{ background:#5db894; }
+.toggle input:checked + i::after{ transform:translateX(15px); }
+
+.forget{ display:flex; gap:8px; margin-top:8px; }
+.stats{ font-size:12px; color:var(--dim); margin-bottom:8px; }
+.footer{ text-align:center; margin-top:20px; }
+.kbd{ font-family:ui-monospace,monospace; background:#ffffff12; border-radius:5px;
+  padding:1px 6px; font-size:11px; }
+.cheats{ display:grid; grid-template-columns:auto 1fr; gap:5px 12px; font-size:12px; color:var(--dim); }
+</style>
+</head>
+<body>
+
+<h1>🐾 Focus Familiar</h1>
+<div class="tagline">it feeds on your focus, gets poisoned by doomscrolling, and remembers what you were doing. everything stays on this Mac.</div>
+
+<div class="sec">
+  <h2><span class="ico">🐾</span>Your familiar</h2>
+  <div class="cards" id="cards"></div>
+</div>
+
+<div class="sec">
+  <h2><span class="ico">🕵️</span>Browser awareness</h2>
+  <div class="permrow">
+    <span class="pill ask" id="permPill">checking…</span>
+    <button onclick="send({type:'grant'})">Enable…</button>
+    <button onclick="send({type:'recheck'})">Re-check</button>
+  </div>
+  <div class="note">Reads only the active tab's <b>address</b>, locally, so the familiar can tell arXiv from YouTube Shorts. Without it, browsers count as neutral. Nothing ever leaves your Mac.</div>
+</div>
+
+<div class="sec">
+  <h2><span class="ico">📜</span>Rules — what counts as what</h2>
+  <div class="rules" id="rules"><div class="note">use your Mac for a bit — apps and sites appear here as the familiar meets them.</div></div>
+  <div class="note">💪 protein · ⛓️ iron · 📐 blueprints · 📖 spellbooks · 📝 fragments — deep work in disguise. 🕳️ is the pit.</div>
+</div>
+
+<div class="sec">
+  <h2><span class="ico">⚙️</span>General</h2>
+  <div class="row"><span class="grow">Consider me away after</span>
+    <select id="idleSel" onchange="send({type:'idle', secs:+this.value})">
+      <option value="60">1 minute</option><option value="150">2.5 minutes</option>
+      <option value="300">5 minutes</option><option value="600">10 minutes</option>
+    </select></div>
+  <div class="row"><span class="grow">Sounds (level-ups, streaks, poisonings)</span>
+    <label class="toggle"><input type="checkbox" id="sndTog" onchange="send({type:'sounds', on:this.checked})"><i></i></label></div>
+  <div class="row"><span class="grow">Start at login</span>
+    <label class="toggle"><input type="checkbox" id="loginTog" onchange="send({type:'login', on:this.checked})"><i></i></label></div>
+  <div class="row"><span class="grow">Celebrate commits in</span>
+    <button id="projBtn" onclick="send({type:'projects'})">choose…</button></div>
+</div>
+
+<div class="sec">
+  <h2><span class="ico">🗄️</span>Data &amp; privacy</h2>
+  <div class="stats" id="stats">—</div>
+  <div class="row"><span class="grow">Keep history for</span>
+    <select id="retSel" onchange="send({type:'retention', days:+this.value})">
+      <option value="30">30 days</option><option value="90">90 days</option>
+      <option value="365">1 year</option><option value="0">forever</option>
+    </select></div>
+  <div class="forget">
+    <button onclick="send({type:'forget', span:'hour'})">Forget last hour</button>
+    <button onclick="send({type:'forget', span:'today'})">Forget today</button>
+    <button class="danger" onclick="send({type:'forget', span:'all'})">Everything…</button>
+    <button onclick="send({type:'reveal'})">📂 Data folder</button>
+  </div>
+</div>
+
+<div class="sec">
+  <h2><span class="ico">✨</span>The essentials</h2>
+  <div class="cheats">
+    <span class="kbd">⌥ space</span><span>"what was I doing?" — journal &amp; thread</span>
+    <span class="kbd">click pet</span><span>same thing</span>
+    <span class="kbd">right-click pet</span><span>hide it</span>
+    <span class="kbd">drag to edge</span><span>tuck it away · click the peek to bring back</span>
+    <span class="kbd">🏹 menu</span><span>begin a hunt — a pomodoro your familiar joins</span>
+  </div>
+</div>
+
+<div class="footer"><button class="primary" onclick="send({type:'done'})">Let's go ✦</button></div>
+
+<script>
+/* mini pixel renders — idle pose of each mascot, data from the design handoff */
+const MINI = {
+  lulu: { name: '噜噜 LuLu', desc: 'butter hamster',
+    PAL: { Y:'#ffd982', y:'#fff0c4', O:'#ffb043', C:'#fff1cf', N:'#c96f3f', F:'#f7c778',
+           T:'#e69b3d', B:'#ff9d6b', K:'#2b1c12', W:'#ffffff', H:'#f2bc61', M:'#8a5a33' },
+    BASE: ['....Y......YB.......','...yY.....YYYy......','..YYYY...YYYY..T....','.YyYYYYYYYYYY.TT....',
+           '.YYYYYYYYYYYYyTTT...','YYYOOOOOOOOYYYYTT...','YYOOOOOOOOOOYYYTT...','.YOOOOOOOOOOYYTT....',
+           '.YBOOCNCOOOBYYT.....','YYOOOCCCOOOOYYY.....','YYYOOOOOOOOYYYY.....','YYYYYYYYYYYYHHH.....',
+           '.YYYYYYYYYYYHH......','.YFF.YHHY.FF.H......','..FF......FF........'],
+    EYES: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
+    MOUTH: [[5,10,'M'],[7,10,'M']], vb: '-1 -1 22 18' },
+  clawd: { name: 'Clawd', desc: 'terracotta voxel',
+    PAL: { U:'#d97757', u:'#efa07f', K:'#151210', W:'#ffffff', R:'#8c4526' },
+    BASE: ['..uuuuuuuuuuu.......','..UUUUUUUUUUU.......','..UUUUUUUUUUU.......','uuUUUUUUUUUUUuu.....',
+           'UUUUUUUUUUUUUUU.....','UUUUUUUUUUUUUUU.....','..UUUUUUUUUUU.......','..UUUUUUUUUUU.......',
+           '..UUUUUUUUUUU.......','..UU..U.U..UU.......','..UU..U.U..UU.......'],
+    EYES: [[4,4,'K'],[5,4,'K'],[4,5,'K'],[5,5,'K'],[4,4,'W'],[9,4,'K'],[10,4,'K'],[9,5,'K'],[10,5,'K'],[9,4,'W']],
+    MOUTH: [[5,7,'R'],[7,7,'R']], vb: '-1 -2 22 19' },
+  nat: { name: 'Nat', desc: 'snorkeling kitty',
+    PAL: { y:'#fdfbf6', p:'#f4a9bd', k:'#3b3733', N:'#e88aa0', B:'#f9c6d2', X:'#f06292',
+           W:'#ffffff', K:'#2b2624', M:'#8a7a68' },
+    BASE: ['.y...........y......','.yp.........py......','.ypy.......ypy......','.yyyyyyyyyyyyy......',
+           '.yyyyyyyyyyyyy......','kyyyyyyyyyyyyyk.....','.yyyyyyyyyyyyy......','kyyyyyNNyyyyyk......',
+           '.yBByyyyyyBByy......','.yyyyyyyyyyyyy......','...XXXXXXXXX........','..yXXWXXXWXXy.......',
+           '...XXXXXXXXX........','....yy...yy.........'],
+    EYES: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
+    MOUTH: [[5,8,'M'],[6,9,'M'],[7,8,'M']], vb: '-1 -1 22 18' },
+};
+
+function shade(hex){
+  const n = parseInt(hex.slice(1), 16), f = v => Math.round(v * 0.55);
+  return '#' + ((f(n>>16&255)<<16)|(f(n>>8&255)<<8)|f(n&255)).toString(16).padStart(6,'0');
+}
+function miniSVG(m){
+  let body = '', depth = '';
+  m.BASE.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++){
+      const ch = row[x];
+      if (ch === '.' || !m.PAL[ch]) continue;
+      body  += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${m.PAL[ch]}"/>`;
+      depth += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${shade(m.PAL[ch])}"/>`;
+    }
+  });
+  const px = list => list.map(([x,y,ch]) => `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${m.PAL[ch]}"/>`).join('');
+  return `<svg viewBox="${m.vb}"><g transform="translate(0.55,0.55)" opacity="0.55">${depth}</g><g>${body}</g>${px(m.EYES)}${px(m.MOUTH)}</svg>`;
+}
+
+const KINDS = [['code','💪 code'],['term','⛓️ terminal'],['cad','📐 CAD/design'],['paper','📖 reading'],
+               ['notes','📝 notes'],['neutral','😐 neutral'],['distraction','🕳️ distraction']];
+const KIND_ICO = { code:'💪', term:'⛓️', cad:'📐', paper:'📖', notes:'📝', neutral:'😐', distraction:'🕳️' };
+
+function send(msg){
+  try { window.webkit.messageHandlers.settings.postMessage(msg); } catch(e) { console.log('send', msg); }
+}
+
+let S = { character: 'lulu' };
+
+function renderCards(){
+  document.getElementById('cards').innerHTML = Object.entries(MINI).map(([id, m]) => `
+    <div class="card ${S.character === id ? 'sel' : ''}" onclick="pick('${id}')">
+      ${miniSVG(m)}<div class="nm">${m.name}</div><div class="ds">${m.desc}</div>
+    </div>`).join('');
+}
+function pick(id){ S.character = id; renderCards(); send({ type: 'pick', id }); }
+
+function renderRules(){
+  const box = document.getElementById('rules');
+  if (!S.rules || !S.rules.length) return;
+  box.innerHTML = S.rules.map(r => `
+    <div class="rule"><span class="rico">${KIND_ICO[r.kind] || '😐'}</span>
+      <span class="rname" title="${r.key}">${r.label}</span>
+      <select onchange="send({type:'rule', key:'${r.key.replace(/'/g,"\\'")}', kind:this.value})">
+        ${KINDS.map(([k, n]) => `<option value="${k}" ${k === r.kind ? 'selected' : ''}>${n}</option>`).join('')}
+      </select></div>`).join('');
+}
+
+/* Swift pushes the whole state here */
+function initSettings(state){
+  S = state;
+  renderCards();
+  renderRules();
+  const pill = document.getElementById('permPill');
+  pill.textContent = state.permText;
+  pill.className = 'pill ' + (state.permCode === 0 ? 'ok' : state.permCode === -1743 ? 'no' : 'ask');
+  document.getElementById('idleSel').value = String(state.idle || 150);
+  document.getElementById('retSel').value = String(state.retention ?? 90);
+  document.getElementById('sndTog').checked = !!state.sounds;
+  document.getElementById('loginTog').checked = !!state.login;
+  document.getElementById('stats').textContent = state.stats || '';
+  document.getElementById('projBtn').textContent = (state.projects || 'choose') + '…';
+}
+renderCards();
+</script>
+</body>
+</html>

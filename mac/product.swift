@@ -53,6 +53,26 @@ func automationStatus(_ bundleId: String) -> OSStatus {
     return AEDeterminePermissionToAutomateTarget(aeDesc, typeWildCard, typeWildCard, false)
 }
 
+var appIconCache: [String: String] = [:]
+
+func appIconDataURI(_ bundleId: String) -> String? {
+    if let hit = appIconCache[bundleId] { return hit.isEmpty ? nil : hit }
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+        appIconCache[bundleId] = ""
+        return nil
+    }
+    let icon = NSWorkspace.shared.icon(forFile: url.path)
+    let small = NSImage(size: NSSize(width: 32, height: 32))
+    small.lockFocus()
+    icon.draw(in: NSRect(x: 0, y: 0, width: 32, height: 32))
+    small.unlockFocus()
+    guard let tiff = small.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+          let png = rep.representation(using: .png, properties: [:]) else { return nil }
+    let uri = "data:image/png;base64," + png.base64EncodedString()
+    appIconCache[bundleId] = uri
+    return uri
+}
+
 func defaultBrowserBundleId() -> String? {
     guard let url = URL(string: "https://example.com"),
           let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
@@ -147,7 +167,14 @@ extension AppDelegate {
         let code = bid.map { automationStatus($0) } ?? OSStatus(-1)
         var rules: [[String: Any]] = []
         for (key, label) in seenItems {
-            rules.append(["key": key, "label": label, "kind": ruleOverrides[key] ?? defaultKind(key)])
+            var row: [String: Any] = ["key": key, "label": label,
+                                      "kind": ruleOverrides[key] ?? defaultKind(key)]
+            if let uri = appIconDataURI(key) { row["icon"] = uri }          // a real app
+            else if key.contains("."), !key.hasPrefix("com."), !key.hasPrefix("org."),
+                    !key.hasPrefix("net."), !key.hasPrefix("dev."), !key.hasPrefix("md.") {
+                row["icon"] = "https://www.google.com/s2/favicons?domain=\(key)&sz=64"  // a site
+            }
+            rules.append(row)
         }
         rules.sort { ($0["label"] as? String ?? "").lowercased() < ($1["label"] as? String ?? "").lowercased() }
         let state: [String: Any] = [

@@ -486,7 +486,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(huntRoot)
         menu.setSubmenu(huntMenu, for: huntRoot)
 
-        menu.addItem(item("Journal as a page", #selector(openJournalPage), "o", "doc.richtext"))
         menu.addItem(NSMenuItem.separator())
 
         menu.addItem(item("Settings…", #selector(showSettings), ",", "gearshape"))
@@ -843,6 +842,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             endDrag()
         case "famClick":
             if hidden { unhide() } else { showContext() }
+        case "openPage":
+            openJournalPage()
         case "ctxMenu":
             let m = NSMenu()
             let hideIt = NSMenuItem(title: overlayHidden ? "Show familiar" : "Hide familiar",

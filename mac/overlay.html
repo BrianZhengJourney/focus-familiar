@@ -165,7 +165,7 @@ body[data-char="pixel"] .shadow{ display:none; }
   box-shadow:0 16px 44px rgba(0,0,0,.5), 0 0 26px var(--fam-glow);
   color:var(--ink); font-size:12px; }
 .journal.on{ display:flex; }
-.j-head{ display:flex; align-items:center; justify-content:space-between;
+.j-head{ display:flex; align-items:center; gap:8px;
   padding:10px 14px 8px; font-family:var(--font-magic); font-size:13.5px; color:#cabcf5;
   border-bottom:1px solid #ffffff12; flex:none; }
 .j-close{ font-family:inherit; font-size:11px; color:var(--ink-dim); background:none;
@@ -218,6 +218,37 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-strip .deep{ background:#2fae8f; } .j-strip .neut{ background:#3d3a52; } .j-strip .dist{ background:#c14a6a; }
 .j-strip i:hover{ filter:brightness(1.25); }
 .j-strip-cap{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-dim); margin:-7px 0 8px; }
+/* time view v3: hero + blocks (fewer words, more shape) */
+.j-hero{ display:flex; gap:8px; align-items:stretch; margin:2px 0 10px; }
+.j-ring{ width:74px; height:74px; flex:none; position:relative; }
+.j-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+.j-ring .pct{ position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; transform:none; }
+.j-ring .pct b{ font-family:var(--font-magic); font-size:19px; color:#f4f1ff; line-height:1; }
+.j-ring .pct span{ font-size:8.5px; color:var(--ink-dim); letter-spacing:.06em; margin-top:2px; }
+.j-tiles{ flex:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.j-tile{ background:#ffffff08; border:1px solid #ffffff10; border-radius:12px;
+  padding:8px 12px; display:flex; flex-direction:column; justify-content:center; }
+.j-tile .v{ font-family:var(--font-magic); font-size:17px; color:#f4f1ff; }
+.j-tile .k{ font-size:9.5px; color:var(--ink-dim); letter-spacing:.04em; margin-top:2px; }
+.j-tile.deep .v{ color:#7df0cf; }
+.j-tile.pit .v{ color:#e88fae; }
+.j-strip i{ margin-right:1.5px; border-radius:1.5px; }
+.j-strip i:last-child{ margin-right:0; }
+.j-blocks{ margin-top:4px; }
+.j-block{ display:flex; align-items:center; gap:8px; padding:4.5px 6px; border-radius:9px; }
+.j-block:hover{ background:#ffffff0a; }
+.j-block .tm{ font-family:var(--font-mono); font-size:9.5px; color:var(--ink-dim);
+  width:74px; flex:none; font-variant-numeric:tabular-nums; }
+.j-block .bar{ width:3px; align-self:stretch; border-radius:2px; flex:none; }
+.j-block .bar.deep{ background:#2fae8f; } .j-block .bar.neut{ background:#3d3a52; }
+.j-block .bar.dist{ background:#c14a6a; }
+.j-block .fvi{ width:15px; height:15px; border-radius:3px; flex:none; }
+.j-block .emo{ width:15px; text-align:center; font-size:11px; flex:none; }
+.j-block .nm{ flex:1; font-size:12px; color:var(--ink); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.j-block .du{ font-size:10.5px; color:var(--ink-dim); flex:none; font-variant-numeric:tabular-nums; }
+
 /* quest view */
 .q-wrap{ padding:2px 0; }
 .q-node{ display:flex; gap:10px; padding:5px 0 5px 2px; position:relative; }
@@ -295,6 +326,8 @@ body[data-char="pixel"] .shadow{ display:none; }
   <div class="journal" id="journal">
     <div class="j-head">
       <span>✦ today's journal</span>
+      <span style="flex:1"></span>
+      <button class="j-close" title="open as a page" onclick="bridge({type:'openPage'})">&#8599;</button>
       <button class="j-close" onclick="famToggleJournal()">✕</button>
     </div>
     <div class="j-now" id="journalNow"></div>
@@ -1239,20 +1272,36 @@ const fmtDur = ms => {
 };
 const fmtClock = t => new Date(t).toTimeString().slice(0, 5);
 
-function buildStrip(w0, now, labels, { minLabelPct = 12 } = {}){
+const KIND_EMOJI = { code:'\u{1F4AA}', term:'\u26D3\uFE0F', cad:'\u{1F4D0}', paper:'\u{1F4D6}',
+                     notes:'\u{1F4DD}', neutral:'\u{1F610}', distraction:'\u{1F573}\uFE0F' };
+
+function iconFor(seg){
+  let host = '';
+  try { host = seg.url ? new URL(seg.url).host.replace('www.', '') : ''; } catch(e) {}
+  if (host) return `<img class="fvi" src="https://www.google.com/s2/favicons?domain=${host}&sz=32"` +
+    ` onerror="this.outerHTML='<span class=emo>${KIND_EMOJI[seg.kind] || '\u{1F610}'}</span>'">`;
+  return `<span class="emo">${KIND_EMOJI[seg.kind] || '\u{1F610}'}</span>`;
+}
+
+function mergeSegments(w0, now, labels){
   const segs = windowEntries()
     .map(x => ({ ...x, a: Math.max(x.t0, w0), b: Math.min(x.t1, now) }))
     .filter(x => x.b - x.a > 1000)
     .sort((x, y) => x.a - y.a);
-  if (!segs.length) return '';
   const merged = [];
   for (const s of segs){
     const key = canonKey(s) + '|' + (DEEP_KINDS.has(s.kind) ? 'deep' : s.kind);
     const last = merged[merged.length - 1];
     if (last && last.key === key && s.a - last.b < 120000) last.b = Math.max(last.b, s.b);
-    else merged.push({ a: s.a, b: s.b, key, kind: s.kind,
+    else merged.push({ a: s.a, b: s.b, key, kind: s.kind, url: s.url || '',
                        label: (labels && labels[canonKey(s)]) || normTitle(s.detail) || s.app });
   }
+  return merged;
+}
+
+function buildStrip(w0, now, labels, { minLabelPct = 12 } = {}){
+  const merged = mergeSegments(w0, now, labels);
+  if (!merged.length) return '';
   const total = merged.reduce((acc, s) => acc + (s.b - s.a), 0);
   const inner = merged.map(s => {
     const pct = 100 * (s.b - s.a) / total;
@@ -1310,56 +1359,50 @@ function renderJournal(){
 
   const now = Date.now();
   const w0 = now - J.tf * 60000;
-  const fmtM = fmtDur;
   const labels = labelMap();
+  const merged = mergeSegments(w0, now, labels);
 
-  // clip entries to the window for the stacked deep/neutral/distraction bar
-  const segs = windowEntries()
-    .map(h => ({ ...h, a: Math.max(h.t0, w0), b: Math.min(h.t1, now) }))
-    .filter(h => h.b - h.a > 1000);
   let deep = 0, dist = 0, neut = 0;
-  for (const s of segs){
-    const d = s.b - s.a;
-    if (DEEP_KINDS.has(s.kind)) deep += d;
-    else if (s.kind === 'distraction') dist += d;
+  for (const m of merged){
+    const d = m.b - m.a;
+    if (DEEP_KINDS.has(m.kind)) deep += d;
+    else if (m.kind === 'distraction') dist += d;
     else neut += d;
   }
   const total = deep + dist + neut;
-  let head = '';
+  let html = '';
   if (total > 30000){
-    const pct = x => Math.round(100 * x / total);
-    const note = J_NOTES.find(n => pct(deep) >= n.min).note;
-    head = `
-      <div class="j-bar">
-        <i class="deep" style="width:${pct(deep)}%"></i>
-        <i class="neut" style="width:${pct(neut)}%"></i>
-        <i class="dist" style="width:${pct(dist)}%"></i>
-      </div>
-      <div class="j-legend">
-        <span class="ld"><b>${pct(deep)}%</b> deep · ${fmtM(deep)}</span>
-        <span class="ln"><b>${pct(neut)}%</b> neutral</span>
-        <span class="lx"><b>${pct(dist)}%</b> distracted · ${fmtM(dist)}</span>
+    const pct = Math.round(100 * deep / total);
+    const R = 30, C = 2 * Math.PI * R;
+    const note = J_NOTES.find(n => pct >= n.min).note;
+    html += `
+      <div class="j-hero">
+        <div class="j-ring">
+          <svg viewBox="0 0 74 74">
+            <circle cx="37" cy="37" r="${R}" fill="none" stroke="#ffffff12" stroke-width="7"/>
+            <circle cx="37" cy="37" r="${R}" fill="none" stroke="#2fae8f" stroke-width="7"
+              stroke-linecap="round" stroke-dasharray="${(C * pct / 100).toFixed(1)} ${C.toFixed(1)}"/>
+          </svg>
+          <div class="pct"><b>${pct}%</b><span>DEEP</span></div>
+        </div>
+        <div class="j-tiles">
+          <div class="j-tile deep"><span class="v">${fmtDur(deep)}</span><span class="k">deep work</span></div>
+          <div class="j-tile pit"><span class="v">${dist > 30000 ? '\u2212' + fmtDur(dist) : '0m'}</span><span class="k">the pit</span></div>
+        </div>
       </div>` +
       buildStrip(w0, now, labels) +
-      `<div class="j-note">${note}</div>`;
-  }
-
-  const groups = aggregate(w0, now, labels);
-  let html = head;
-  for (const s of ['read', 'built', 'distracted']){
-    const items = groups.filter(g => g.sec === s).sort((a, c) => c.ms - a.ms);
-    if (!items.length) continue;
-    const m = SEC_META[s];
-    const total = fmtM(items.reduce((acc, g) => acc + g.ms, 0));
-    const open = J.open[s];
-    const shown = open ? items : items.slice(0, 3);
-    html += `<div class="j-sec">
-      <div class="j-sh ${m.cls} ${open ? 'open' : ''}" onclick="jToggleSec('${s}')">
-        <span class="arr">▶</span>${m.icon} ${m.title}<span class="j-total">${total} · ${items.length}</span>
-      </div>` +
-      shown.map(g => `<div class="j-item"><span class="lbl">${g.label}</span><span class="min">${fmtM(g.ms)}</span></div>`).join('') +
-      (!open && items.length > 3 ? `<div class="j-more" onclick="jToggleSec('${s}')">+ ${items.length - 3} more</div>` : '') +
-      `</div>`;
+      `<div class="j-blocks">` +
+      merged.slice().reverse().map(m => {
+        const cls = DEEP_KINDS.has(m.kind) ? 'deep' : m.kind === 'distraction' ? 'dist' : 'neut';
+        return `<div class="j-block" data-tip="${(m.label + ' \u2014 ' + fmtDur(m.b - m.a)).replace(/"/g, '&quot;')}">
+          <span class="tm">${fmtClock(m.a)}\u2013${fmtClock(m.b)}</span>
+          <span class="bar ${cls}"></span>${iconFor(m)}
+          <span class="nm">${m.label}</span>
+          <span class="du">${fmtDur(m.b - m.a)}</span>
+        </div>`;
+      }).join('') +
+      `</div>
+      <div class="j-note" style="margin-top:8px">${note}</div>`;
   }
   document.getElementById('journalBody').innerHTML =
     html || `<div class="j-empty">the pages for this window are blank.<br>
@@ -1583,6 +1626,13 @@ function famExportHTML(){
   .page .j-strip i span{ line-height:24px; font-size:10px; }
   .page .q-title{ font-size:15px; }
   .page .wk-grid{ max-width:560px; }
+  /* lift every dim/dark ink for the standalone page — some tones that work
+     at overlay size are unreadable in a bright browser window */
+  .page{ --ink-dim:#b9b3d6; }
+  .page, .page .j-item, .page .q-title{ color:#eae7f8; }
+  .page .meta, .page .q-sub, .page .j-strip-cap, .page .j-item .min,
+  .page .j-legend, .page .wk-day, .page .wk-dayline .n, .page .wk-dayline .v,
+  .page .j-block .tm, .page .j-block .du{ color:#b9b3d6; }
 </style></head>
 <body><div class="page">
   <h1>✦ Focus Journal</h1>

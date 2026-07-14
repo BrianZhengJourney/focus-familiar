@@ -416,18 +416,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         // famSetApp before the page loads silently drops the event
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        revealOverlay(forceHome: true)
+        return false
+    }
+
+    func applicationDidChangeScreenParameters(_ notification: Notification) {
+        guard panel != nil, !overlayHidden, !hidden else { return }
+        revealOverlay()
+    }
+
     // — panel + webview —
+    func homeOrigin(on screen: NSScreen, size: NSSize) -> NSPoint {
+        let vf = screen.visibleFrame
+        let preferred = NSPoint(x: vf.maxX - size.width - 12, y: vf.minY + 4)
+        return clampedPanelOrigin(preferred, size: size, inside: vf)
+    }
+
+    func preferredScreen() -> NSScreen {
+        NSScreen.screens.first(where: { $0.visibleFrame.contains(NSEvent.mouseLocation) })
+            ?? panel?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
     func buildPanel() {
         let size = NSSize(width: 560, height: 320)
         guard let screen = NSScreen.main else { fatalError("no screen") }
-        let vf = screen.visibleFrame
-        var origin = NSPoint(x: vf.maxX - size.width - 12, y: vf.minY + 4)
-        // restore last dragged position if it's still on some screen
+        let fallback = homeOrigin(on: screen, size: size)
+        var saved: NSPoint? = nil
         if let p = UserDefaults.standard.array(forKey: "panelOrigin") as? [Double], p.count == 2 {
-            let saved = NSPoint(x: p[0], y: p[1])
-            let rect = NSRect(origin: saved, size: size)
-            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { origin = saved }
+            saved = NSPoint(x: p[0], y: p[1])
         }
+        // A mostly transparent 560px panel can intersect a display while its
+        // rightmost 150px mascot is entirely off-screen. Clamp the whole panel.
+        let origin = recoveredPanelOrigin(saved: saved, fallback: fallback, size: size,
+                                          visibleFrames: NSScreen.screens.map(\.visibleFrame))
+        UserDefaults.standard.set([origin.x, origin.y], forKey: "panelOrigin")
 
         panel = OverlayPanel(contentRect: NSRect(origin: origin, size: size),
                              styleMask: [.borderless, .nonactivatingPanel],
@@ -454,6 +477,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         panel.contentView = webView
         overlayHidden = UserDefaults.standard.bool(forKey: "overlayHidden")
         if !overlayHidden { panel.orderFrontRegardless() }
+    }
+
+    func revealOverlay(forceHome: Bool = false) {
+        guard panel != nil else { return }
+        let screen = preferredScreen()
+        let fallback = homeOrigin(on: screen, size: panel.frame.size)
+        let requested: NSPoint
+        if forceHome {
+            requested = fallback
+        } else if hidden, savedOrigin != .zero {
+            requested = savedOrigin
+        } else {
+            requested = panel.frame.origin
+        }
+        let origin = recoveredPanelOrigin(saved: requested, fallback: fallback,
+                                          size: panel.frame.size,
+                                          visibleFrames: NSScreen.screens.map(\.visibleFrame))
+        hidden = false
+        overlayHidden = false
+        savedOrigin = origin
+        panel.setFrameOrigin(origin)
+        UserDefaults.standard.set(false, forKey: "overlayHidden")
+        UserDefaults.standard.set([origin.x, origin.y], forKey: "panelOrigin")
+        panel.orderFrontRegardless()
     }
 
     // — status bar: LuLu icon + a short, visual menu —
@@ -614,11 +661,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     @objc func toggleContextMenu() { showContext() }
     @objc func openJournal() {
+        revealOverlay()
         bubbleOpen = true
         panel.ignoresMouseEvents = false
         js("famToggleJournal()")
     }
     func showContext() {
+        revealOverlay()
         bubbleOpen = true
         panel.ignoresMouseEvents = false
         js("famToggleContext()")
@@ -666,7 +715,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             hide(vf: vf, left: true)      // …or the left edge
         } else {
             hidden = false
-            UserDefaults.standard.set([panel.frame.origin.x, panel.frame.origin.y], forKey: "panelOrigin")
+            let screen = preferredScreen()
+            let origin = recoveredPanelOrigin(saved: panel.frame.origin,
+                                              fallback: homeOrigin(on: screen, size: panel.frame.size),
+                                              size: panel.frame.size,
+                                              visibleFrames: NSScreen.screens.map(\.visibleFrame))
+            panel.setFrameOrigin(origin)
+            UserDefaults.standard.set([origin.x, origin.y], forKey: "panelOrigin")
         }
     }
 
@@ -680,9 +735,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         panel.setFrameOrigin(NSPoint(x: x, y: panel.frame.origin.y))
     }
     func unhide() {
-        hidden = false
-        panel.setFrameOrigin(savedOrigin)
-        UserDefaults.standard.set([savedOrigin.x, savedOrigin.y], forKey: "panelOrigin")
+        revealOverlay()
     }
     @objc func togglePause(_ sender: NSMenuItem) {
         paused.toggle()
@@ -691,7 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func toggleOverlay(_ sender: NSMenuItem) {
         overlayHidden.toggle()
         UserDefaults.standard.set(overlayHidden, forKey: "overlayHidden")
-        if overlayHidden { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+        if overlayHidden { panel.orderOut(nil) } else { revealOverlay() }
     }
     @objc func toggleLogin(_ sender: NSMenuItem) {
         let svc = SMAppService.mainApp

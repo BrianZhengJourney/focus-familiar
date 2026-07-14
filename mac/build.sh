@@ -11,7 +11,7 @@ cp Info.plist "$APP/Contents/"
 cp overlay.html settings.html "$APP/Contents/Resources/"
 cp AppIcon.icns "$APP/Contents/Resources/" 2>/dev/null || true
 
-swiftc -O main.swift product.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
+swiftc -O panel_geometry.swift main.swift product.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
   -framework Cocoa -framework WebKit -framework Carbon
 
 codesign --force -s - "$APP"

@@ -231,23 +231,39 @@ body[data-char="pixel"] .shadow{ display:none; }
   padding:8px 12px; display:flex; flex-direction:column; justify-content:center; }
 .j-tile .v{ font-family:var(--font-magic); font-size:17px; color:#f4f1ff; }
 .j-tile .k{ font-size:9.5px; color:var(--ink-dim); letter-spacing:.04em; margin-top:2px; }
-.j-tile.deep .v{ color:#7df0cf; }
-.j-tile.pit .v{ color:#e88fae; }
+.j-tile .k::before{ content:""; display:inline-block; width:7px; height:7px;
+  border-radius:50%; margin-right:5px; vertical-align:0; }
+.j-tile.deep .k::before{ background:#2fae8f; }
+.j-tile.pit .k::before{ background:#c14a6a; }
 .j-strip i{ margin-right:1.5px; border-radius:1.5px; }
 .j-strip i:last-child{ margin-right:0; }
-.j-blocks{ margin-top:4px; }
-.j-block{ display:flex; align-items:center; gap:8px; padding:4.5px 6px; border-radius:9px; }
-.j-block:hover{ background:#ffffff0a; }
-.j-block .tm{ font-family:var(--font-mono); font-size:9.5px; color:var(--ink-dim);
-  width:74px; flex:none; font-variant-numeric:tabular-nums; }
-.j-block .bar{ width:3px; align-self:stretch; border-radius:2px; flex:none; }
-.j-block .bar.deep{ background:#2fae8f; } .j-block .bar.neut{ background:#3d3a52; }
-.j-block .bar.dist{ background:#c14a6a; }
-.j-block .fvi{ width:15px; height:15px; border-radius:3px; flex:none; }
-.j-block .emo{ width:15px; text-align:center; font-size:11px; flex:none; }
-.j-block .nm{ flex:1; font-size:12px; color:var(--ink); overflow:hidden;
+.j-sessions{ margin-top:6px; display:flex; flex-direction:column; gap:8px; }
+.j-sess{ background:#ffffff06; border:1px solid #ffffff0e; border-radius:13px;
+  padding:9px 12px 8px; border-left:3px solid #3d3a52; }
+.j-sess.deep{ border-left-color:#2fae8f; }
+.j-sess.dist{ border-left-color:#c14a6a; }
+.j-sess-head{ display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+.j-sess-head .tm{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-dim);
+  font-variant-numeric:tabular-nums; flex:none; }
+.j-sess-head .mini{ flex:1; display:flex; height:8px; border-radius:4px; overflow:hidden;
+  background:#ffffff0c; }
+.j-sess-head .mini i{ display:block; height:100%; margin-right:1.5px; border-radius:1.5px; }
+.j-sess-head .mini i:last-child{ margin-right:0; }
+.j-sess-head .mini .deep{ background:#2fae8f; } .j-sess-head .mini .neut{ background:#3d3a52; }
+.j-sess-head .mini .dist{ background:#c14a6a; }
+.j-sess-head .du{ font-family:var(--font-magic); font-size:13px; color:#f4f1ff; flex:none; }
+.j-li{ display:flex; align-items:center; gap:8px; padding:3.5px 5px; border-radius:7px; }
+.j-li:hover{ background:#ffffff0d; }
+.j-sess-head:hover{ background:#ffffff08; border-radius:7px; }
+.j-li .dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+.j-li .dot.deep{ background:#2fae8f; } .j-li .dot.neut{ background:#5a5470; }
+.j-li .dot.dist{ background:#c14a6a; }
+.j-li .fvi{ width:16px; height:16px; border-radius:4px; flex:none; }
+.j-li .emo{ width:16px; text-align:center; font-size:12px; flex:none; }
+.j-li .nm{ flex:1; font-size:12.5px; color:var(--ink); overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
-.j-block .du{ font-size:10.5px; color:var(--ink-dim); flex:none; font-variant-numeric:tabular-nums; }
+.j-li .du{ font-size:10.5px; color:var(--ink-dim); flex:none; font-variant-numeric:tabular-nums; }
+.j-li.more{ font-size:10.5px; color:var(--ink-dim); padding-left:15px; }
 
 /* quest view */
 .q-wrap{ padding:2px 0; }
@@ -1252,6 +1268,7 @@ const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
 const J = { tf: 30, view: 'time', open: { read: false, built: false, distracted: false } };
 
 function jSetTf(min){ J.view = 'time'; J.tf = min; renderJournal(); }
+function jExpandSess(id){ J.openSess = id; renderJournal(); }
 function jSetView(v){ J.view = v; renderJournal(); }
 function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
 
@@ -1271,6 +1288,11 @@ const fmtDur = ms => {
   return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : m + 'm';
 };
 const fmtClock = t => new Date(t).toTimeString().slice(0, 5);
+
+function esc(t){
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
 
 const KIND_EMOJI = { code:'\u{1F4AA}', term:'\u26D3\uFE0F', cad:'\u{1F4D0}', paper:'\u{1F4D6}',
                      notes:'\u{1F4DD}', neutral:'\u{1F610}', distraction:'\u{1F573}\uFE0F' };
@@ -1321,7 +1343,11 @@ function stripTip(e){
     tip.id = 'stripTip'; tip.className = 'j-tip';
     document.body.appendChild(tip);
   }
-  const t = e && e.target && e.target.dataset ? e.target.dataset.tip : null;
+  let t = null;
+  if (e && e.target && e.target.closest){
+    const el = e.target.closest('[data-tip]');
+    t = el ? el.dataset.tip : null;
+  }
   if (!t){ tip.style.opacity = 0; return; }
   tip.textContent = t;
   tip.style.opacity = 1;
@@ -1351,6 +1377,73 @@ function renderNow(){
     `<div class="jn-sub">last 25 min ${pc(s25.pct)} deep · last hour ${pc(s60.pct)} deep</div>`;
 }
 
+/* cluster merged segments into sessions (gaps > 10 min split), then
+   bullet what happened inside each — shape over words */
+function buildSessions(merged){
+  const sessions = [];
+  for (const m of merged){
+    const last = sessions[sessions.length - 1];
+    if (last && m.a - last.b <= 10 * 60000){
+      last.b = Math.max(last.b, m.b);
+      last.items.push(m);
+    } else {
+      sessions.push({ a: m.a, b: m.b, items: [m] });
+    }
+  }
+  return sessions;
+}
+
+function kindCls(kind){
+  return DEEP_KINDS.has(kind) ? 'deep' : kind === 'distraction' ? 'dist' : 'neut';
+}
+
+function renderSessions(merged){
+  const sessions = buildSessions(merged).reverse();   // latest on top
+  if (!sessions.length) return '';
+  return `<div class="j-sessions" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">` +
+    sessions.map(sess => {
+      // aggregate the session's activities by identity
+      const agg = {};
+      let deep = 0, dist = 0, neut = 0;
+      for (const m of sess.items){
+        const d = m.b - m.a;
+        const cls = kindCls(m.kind);
+        if (cls === 'deep') deep += d; else if (cls === 'dist') dist += d; else neut += d;
+        const g = agg[m.key] || (agg[m.key] = { ms: 0, kind: m.kind, url: m.url, label: m.label });
+        g.ms += d;
+      }
+      const total = deep + dist + neut || 1;
+      const rows = Object.values(agg).sort((a, b) => b.ms - a.ms);
+      const sessId = 's' + sess.a;
+      const expanded = J.openSess === sessId;
+      const shown = expanded ? rows : rows.slice(0, 4);
+      const domCls = deep >= total * 0.5 ? 'deep' : dist >= total * 0.4 ? 'dist' : '';
+      const mini = ['deep', 'neut', 'dist'].map((k, i) => {
+        const v = [deep, neut, dist][i];
+        return v > 0 ? `<i class="${k}" style="width:${(100 * v / total).toFixed(1)}%"></i>` : '';
+      }).join('');
+      const headTip = `${fmtClock(sess.a)}–${fmtClock(sess.b)} · ` +
+        `${Math.round(100 * deep / total)}% deep` + (dist > 60000 ? ` · ${fmtDur(dist)} in the pit` : '');
+      return `<div class="j-sess ${domCls}">
+        <div class="j-sess-head" data-tip="${esc(headTip)}">
+          <span class="tm">${fmtClock(sess.a)}–${fmtClock(sess.b)}</span>
+          <span class="mini">${mini}</span>
+          <span class="du">${fmtDur(sess.b - sess.a)}</span>
+        </div>` +
+        shown.map(g => `<div class="j-li" data-tip="${esc(g.label + ' — ' + fmtDur(g.ms))}">
+          <span class="dot ${kindCls(g.kind)}"></span>${iconFor(g)}
+          <span class="nm">${esc(g.label)}</span>
+          <span class="du">${fmtDur(g.ms)}</span>
+        </div>`).join('') +
+        (rows.length > 4 && !expanded
+          ? `<div class="j-li more" style="cursor:pointer" onclick="jExpandSess('${sessId}')">+ ${rows.length - 4} more</div>`
+          : expanded && rows.length > 4
+          ? `<div class="j-li more" style="cursor:pointer" onclick="jExpandSess(null)">show less</div>`
+          : '') +
+      `</div>`;
+    }).join('') + `</div>`;
+}
+
 function renderJournal(){
   renderNow();
   renderTabs();
@@ -1358,7 +1451,9 @@ function renderJournal(){
   if (J.view === 'week')  return renderWeek();
 
   const now = Date.now();
-  const w0 = now - J.tf * 60000;
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  // "today" is the calendar day, not a rolling 24 hours
+  const w0 = J.tf >= 1440 ? dayStart.getTime() : now - J.tf * 60000;
   const labels = labelMap();
   const merged = mergeSegments(w0, now, labels);
 
@@ -1391,18 +1486,8 @@ function renderJournal(){
         </div>
       </div>` +
       buildStrip(w0, now, labels) +
-      `<div class="j-blocks">` +
-      merged.slice().reverse().map(m => {
-        const cls = DEEP_KINDS.has(m.kind) ? 'deep' : m.kind === 'distraction' ? 'dist' : 'neut';
-        return `<div class="j-block" data-tip="${(m.label + ' \u2014 ' + fmtDur(m.b - m.a)).replace(/"/g, '&quot;')}">
-          <span class="tm">${fmtClock(m.a)}\u2013${fmtClock(m.b)}</span>
-          <span class="bar ${cls}"></span>${iconFor(m)}
-          <span class="nm">${m.label}</span>
-          <span class="du">${fmtDur(m.b - m.a)}</span>
-        </div>`;
-      }).join('') +
-      `</div>
-      <div class="j-note" style="margin-top:8px">${note}</div>`;
+      renderSessions(merged) +
+      `<div class="j-note" style="margin-top:8px">${note}</div>`;
   }
   document.getElementById('journalBody').innerHTML =
     html || `<div class="j-empty">the pages for this window are blank.<br>

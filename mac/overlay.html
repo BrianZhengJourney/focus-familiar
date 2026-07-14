@@ -296,6 +296,63 @@ body[data-char="pixel"] .shadow{ display:none; }
 .wk-bar i{ height:100%; }
 .wk-dayline .v{ width:74px; font-size:10px; color:var(--ink-dim); font-variant-numeric:tabular-nums; }
 
+/* ── Cozy Parchment: reflection becomes a warm physical object while the
+   ambient familiar/status chrome stays midnight. The panel tucks 22px under
+   the mascot; opening it quiets the transient HUD so the two do not compete. */
+.stage.journal-open .hud{ opacity:0; pointer-events:none; }
+.journal{
+  right:128px; width:344px; border-radius:13px 18px 16px 12px;
+  --ink:#3a2417; --ink-dim:#8a6a45;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255,255,255,.78) 0, transparent 38%),
+    linear-gradient(150deg,#fffaf0 0%,#fff5df 55%,#f7e6bf 100%);
+  border-color:#e4c98f;
+  box-shadow:0 18px 48px rgba(9,6,24,.5),0 4px 18px rgba(123,81,46,.18),
+    inset 0 1px rgba(255,255,255,.8);
+  backdrop-filter:blur(12px);
+}
+.journal .j-head{ color:#76502f; border-color:#dcc18d; }
+.journal .j-head span:first-child{ text-shadow:0 1px rgba(255,255,255,.7); }
+.journal .j-close,.journal .j-now .jn-sub,.journal .j-empty,.journal .j-strip-cap,
+.journal .j-legend,.journal .j-total,.journal .j-item .min,.journal .j-li .du,
+.journal .j-sess-head .tm,.journal .q-sub,.journal .wk-day,.journal .wk-dayline .n,
+.journal .wk-dayline .v{ color:var(--ink-dim); }
+.journal .j-now,.journal .j-now b,.journal .j-li .nm,.journal .j-item,
+.journal .wk-row-total{ color:var(--ink); }
+.journal .j-now .pct-good{ color:#167c67; }
+.journal .j-now .pct-mid{ color:#9a641e; }
+.journal .j-now .pct-bad{ color:#aa3e5c; }
+.journal .j-tab{ color:#805f3c; background:#f2e3c5; border-color:#dfc69a; }
+.journal .j-tab:hover,.journal .j-close:hover{ color:#3a2417; }
+.journal .j-tab.cur{ color:#fff9ec; background:#6e4a2c; border-color:#6e4a2c; }
+.journal .j-body::-webkit-scrollbar{ width:6px; }
+.journal .j-body::-webkit-scrollbar-thumb{ border-radius:6px; background:#b78e5b70; }
+.journal .j-ring circle:first-child{ stroke:#b9976540; }
+.journal .j-ring .pct b,.journal .j-tile .v,.journal .j-sess-head .du,
+.journal .q-title{ color:#3a2417; }
+.journal .j-tile,.journal .j-sess{ background:#fffaf0b8; border-color:#dfc89a; }
+.journal .j-sess{ box-shadow:0 2px 7px rgba(93,61,31,.06); }
+.journal .j-sess-head:hover,.journal .j-li:hover{ background:#ead8b651; }
+.journal .j-sess-head .mini,.journal .j-strip,.journal .j-bar,.journal .wk-bar{
+  background:#c9ae7c33;
+}
+.journal .j-bar .neut,.journal .j-strip .neut,.journal .j-sess-head .mini .neut{
+  background:#9f907a;
+}
+.journal .j-li .dot.neut{ background:#9f907a; }
+.journal .j-note,.journal .j-sh,.journal .q-node.main .q-title{ color:#8a5a33; }
+.journal .j-sh.bad,.journal .q-node.bad .q-title{ color:#a23d5b; }
+.journal .q-node.gold .q-title{ color:#98661c; }
+.journal .q-node::before{
+  background:repeating-linear-gradient(#b689574f 0 4px,transparent 4px 9px);
+}
+.journal .q-ico{ color:#fff9ec; background:#6e4a2c; border-color:#9f754d; }
+.journal .q-node.main .q-ico{ background:#8a5a33; border-color:#c5975f; }
+.journal .q-node.bad .q-ico{ background:#7b394b; border-color:#c46b82; }
+.journal .q-node.gold .q-ico{ background:#8a6527; border-color:#d6a94a; }
+.journal .wk-cell{ background:#c9ae7c26; }
+.journal .j-bh{ border-color:#a77b4238; }
+
 /* pomodoro hunt chip */
 .pomo-wrap{ position:absolute; right:0; bottom:226px; display:none; }
 .pomo-wrap.on{ display:block; }
@@ -1739,14 +1796,17 @@ function famExportHTML(){
 
 function famToggleJournal(){
   const j = document.getElementById('journal');
+  const stage = document.getElementById('stage');
   if (j.classList.contains('on')) {
     j.classList.remove('on');
+    stage.classList.remove('journal-open');
     bridge({ type: 'bubble', on: false });
     return;
   }
   document.getElementById('bubble').classList.remove('on');
   renderJournal();
   j.classList.add('on');
+  stage.classList.add('journal-open');
   bridge({ type: 'bubble', on: true });
 }
 
@@ -1790,13 +1850,35 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     bridge({ type: 'ctxMenu' });
   });
-  // preview mode in a normal browser: ?preview&char=panda&state=poisoned
+  // preview mode in a normal browser. `?preview=journal` seeds a realistic
+  // day so the production panel can be reviewed without running the app.
   const q = new URLSearchParams(location.search);
   if (q.has('preview')) {
     document.body.style.background = '#1a1534';
+    if (q.get('char')) Fam.setCharacter(q.get('char'));
     if (q.get('state')) Fam.setState(q.get('state'));
     if (q.get('mstate')) Mascot.setState(q.get('mstate'));
     Fam.hud(true);
+    if (q.get('preview') === 'journal') {
+      const now = Date.now(), m = 60000;
+      Fam.history = [
+        {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:now-164*m,t1:now-122*m},
+        {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:now-118*m,t1:now-94*m},
+        {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:now-91*m,t1:now-72*m},
+        {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:now-69*m,t1:now-61*m},
+        {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:now-58*m,t1:now-37*m}
+      ];
+      Fam.cur = {app:'VS Code',kind:'code',detail:'Cozy Parchment journal',canon:'Cozy Parchment journal',t0:now-32*m};
+      Fam.streakStart = now-32*m;
+      Fam.level = 4; Fam.xp = 180; Fam.focus = 76;
+      Fam.resources = {protein:7,iron:4,spellbook:3,fragment:6};
+      Fam.renderRes(); Fam.renderXP(); Fam.setFocus(76); Fam.renderStreak();
+      J.tf = 1440; J.view = 'time';
+      document.getElementById('journal').classList.add('on');
+      document.getElementById('stage').classList.add('journal-open');
+      Mascot.setState(mascotStateFor(Fam.state));
+      renderJournal();
+    }
   }
 });
 </script>

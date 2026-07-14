@@ -35,6 +35,37 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .card .nm{ font-size:13px; font-weight:600; margin-top:6px; }
 .card .ds{ font-size:10.5px; color:var(--dim); margin-top:2px; }
 
+/* PROTOTYPE — Pet Atelier; session-only while we test whether image-derived
+   colour + a constrained house rig feels personal enough. */
+.proto-tag{ margin-left:auto; color:#15112b; background:#ffd479; border-radius:9px;
+  padding:2px 7px; font-size:8px; font-weight:800; letter-spacing:.08em; }
+.petlab-intro{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.pet-source{ width:58px; height:58px; border-radius:13px; border:1px dashed #cabcf555;
+  display:grid; place-items:center; color:var(--dim); font-size:22px; overflow:hidden; flex:none;
+  background:#17132f; }
+.pet-source img{ width:100%; height:100%; object-fit:cover; display:none; }
+.petlab-copy{ min-width:0; flex:1; }
+.petlab-copy b{ display:block; font-family:Georgia,serif; font-size:14px; margin-bottom:3px; }
+.petlab-copy span{ display:block; color:var(--dim); font-size:10.5px; line-height:1.4; }
+.petlab-actions{ display:flex; align-items:center; gap:8px; margin-top:7px; }
+.pet-name{ width:132px; color:var(--ink); background:#17132f; border:1px solid var(--line);
+  border-radius:8px; padding:6px 8px; font:11px inherit; }
+.pet-swatches{ display:flex; gap:4px; margin-left:auto; }
+.pet-swatches i{ width:12px; height:12px; border-radius:4px; border:1px solid #ffffff24; }
+.pet-candidates{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+.pet-option{ position:relative; min-width:0; padding:9px 7px 8px; text-align:center;
+  border:1px solid var(--line); border-radius:13px; background:#1a1635;
+  transition:transform .16s,border-color .16s,box-shadow .16s; }
+.pet-option:hover{ transform:translateY(-2px); border-color:#cabcf54d; }
+.pet-option.sel{ border-color:var(--good); box-shadow:0 0 18px #7df0cf24; }
+.pet-option svg{ display:block; width:86px; height:78px; margin:auto; overflow:visible; }
+.pet-option .nm{ font-size:11px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pet-option .ds{ min-height:24px; margin:2px 0 7px; color:var(--dim); font-size:9px; line-height:1.3; }
+.pet-option button{ width:100%; padding:4px 5px; font-size:10px; }
+.petlab-state{ display:flex; align-items:center; gap:7px; min-height:18px; margin-top:9px;
+  color:var(--dim); font-size:10px; }
+.petlab-state .dot{ width:6px; height:6px; border-radius:50%; background:#7df0cf; box-shadow:0 0 7px #7df0cf88; }
+
 /* permission pill */
 .permrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .pill{ font-size:11px; padding:3px 10px; border-radius:12px; font-weight:600; }
@@ -91,6 +122,26 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 <div class="sec">
   <h2><span class="ico">🐾</span>Your familiar</h2>
   <div class="cards" id="cards"></div>
+</div>
+
+<div class="sec" id="petLab">
+  <h2><span class="ico">✦</span>DIY Pet Atelier <span class="proto-tag">PROTOTYPE</span></h2>
+  <div class="petlab-intro">
+    <div class="pet-source"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"></div>
+    <div class="petlab-copy"><b>turn one image into a tiny familiar</b>
+      <span>colour is sampled locally; the house rig supplies the cuteness, shadow, moods, and evolution moments.</span>
+      <div class="petlab-actions">
+        <button type="button" onclick="send({type:'petUpload'})">upload image…</button>
+        <input class="pet-name" id="petName" value="My little familiar" maxlength="28"
+          oninput="petLab.name=this.value || 'My little familiar'; renderPetLab()">
+        <span class="pet-swatches" id="petSwatches"></span>
+      </div>
+    </div>
+  </div>
+  <div class="pet-candidates" id="petCandidates"></div>
+  <div class="petlab-state" id="petLabState"><span class="dot"></span>
+    sample palette ready · upload an image to make it yours · session only
+  </div>
 </div>
 
 
@@ -203,6 +254,108 @@ function miniSVG(m){
   return `<svg viewBox="${m.vb}"><g transform="translate(0.55,0.55)" opacity="0.55">${depth}</g><g>${body}</g>${px(m.EYES)}${px(m.MOUTH)}</svg>`;
 }
 
+const PET_TEMPLATES = [
+  { key:'round', label:'round & cozy', desc:'soft silhouette · sleepy little feet',
+    BASE:['...P........P...','..LPP......PPL..','.PPPPPPPPPPPPPP.','PPPPPPPPPPPPPPPP',
+      'PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP',
+      'PPPPLLLLLLLLPPPP','.PPPPAALLAAPPPP.','.PPPPPPPPPPPPPP.','..PPPPPPPPPPPP..',
+      '...PPPPPPPPPP...','...PP..PP..PP...','....PP....PP....'],
+    face:{lx:4,rx:10,y:5,mx:7,my:8} },
+  { key:'adventure', label:'tiny adventurer', desc:'bright ears · built-in little scarf',
+    BASE:['..P..........P..','.LPP........PPL.','.PPPP......PPPP.','PPPPPPPPPPPPPPPP',
+      'PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP',
+      'PPPLLLLLLLLLLPPP','PPPAAAAAAAAAAPPP','...PPPPPPPPPP...', '....PPPPPPPP....',
+      '....PP....PP....','...PPP....PPP...','...PP......PP...'],
+    face:{lx:4,rx:10,y:5,mx:7,my:8} },
+  { key:'strange', label:'strange little thing', desc:'one antenna · curious blob energy',
+    BASE:['......A.........','.....AAA........','......P.........','...PPPPPPPP.....',
+      '..PPLLLLLLPP....','.PPLLLLLLLLLPP..','PPLLLLLLLLLLLPP.','PPLLLLLLLLLLLPPP',
+      'PPLLLLLLLLLLLPP.','.PPLLLLLLLLLPP..','..PPPAALLAPPP...','...PPPPPPPP.....',
+      '....PP..PP......','...PPP..PPP.....','....PP..PP......'],
+    face:{lx:4,rx:10,y:6,mx:7,my:9} }
+];
+
+const petLab = { name:'My little familiar', palette:['#d68b68','#f1c7a7','#76c8b0'], picked:-1 };
+
+function mixHex(a, b, t){
+  const av = parseInt(a.slice(1),16), bv = parseInt(b.slice(1),16);
+  const c = shift => Math.round(((av >> shift) & 255) * (1-t) + ((bv >> shift) & 255) * t);
+  return '#' + ((c(16)<<16)|(c(8)<<8)|c(0)).toString(16).padStart(6,'0');
+}
+
+function petSpec(template){
+  const [primary, secondary, accent] = petLab.palette;
+  const pal = { P:primary, L:mixHex(secondary,'#ffffff',.26), A:accent,
+    D:mixHex(primary,'#171326',.62), K:'#241a20', W:'#ffffff', M:mixHex(primary,'#171326',.72) };
+  const f = template.face;
+  const eyes = [[f.lx,f.y,'K'],[f.lx+1,f.y,'K'],[f.lx,f.y+1,'K'],[f.lx+1,f.y+1,'K'],[f.lx,f.y,'W'],
+    [f.rx,f.y,'K'],[f.rx+1,f.y,'K'],[f.rx,f.y+1,'K'],[f.rx+1,f.y+1,'K'],[f.rx,f.y,'W']];
+  return { name:petLab.name, variant:template.key, PAL:pal, BASE:template.BASE, face:f,
+    EYES:eyes, MOUTH:[[f.mx-1,f.my,'M'],[f.mx+1,f.my,'M']], vb:'-1 -2 20 20' };
+}
+
+function renderPetLab(){
+  const specs = PET_TEMPLATES.map(petSpec);
+  document.getElementById('petCandidates').innerHTML = specs.map((spec, i) => `
+    <div class="pet-option ${petLab.picked === i ? 'sel' : ''}">
+      ${miniSVG(spec)}<div class="nm">${PET_TEMPLATES[i].label}</div>
+      <div class="ds">${PET_TEMPLATES[i].desc}</div>
+      <button type="button" onclick="usePetCandidate(${i})">${petLab.picked === i ? 'on your desktop ✦' : 'try this one'}</button>
+    </div>`).join('');
+  document.getElementById('petSwatches').innerHTML = petLab.palette.map(c => `<i style="background:${c}"></i>`).join('');
+}
+
+function usePetCandidate(i){
+  petLab.picked = i;
+  const spec = petSpec(PET_TEMPLATES[i]);
+  send({type:'petPrototype',spec});
+  renderPetLab();
+  document.getElementById('petLabState').innerHTML = `<span class="dot"></span>
+    ${PET_TEMPLATES[i].label} is live · inherits focus, sleep, poison, proud, and level-up states`;
+}
+
+function rgbHex(r,g,b){ return '#' + ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0'); }
+function colourDistance(a,b){
+  const x=parseInt(a.slice(1),16),y=parseInt(b.slice(1),16);
+  return Math.hypot((x>>16&255)-(y>>16&255),(x>>8&255)-(y>>8&255),(x&255)-(y&255));
+}
+
+function samplePetPalette(img){
+  const canvas=document.createElement('canvas'), size=36; canvas.width=size; canvas.height=size;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const crop=Math.min(img.naturalWidth,img.naturalHeight);
+  ctx.drawImage(img,(img.naturalWidth-crop)/2,(img.naturalHeight-crop)/2,crop,crop,0,0,size,size);
+  const px=ctx.getImageData(0,0,size,size).data, bins=new Map();
+  for(let y=3;y<size-3;y++) for(let x=3;x<size-3;x++){
+    const i=(y*size+x)*4, alpha=px[i+3]; if(alpha<170) continue;
+    const r=px[i],g=px[i+1],b=px[i+2], hi=Math.max(r,g,b),lo=Math.min(r,g,b);
+    if(hi>245&&lo>238) continue;
+    const q=v=>Math.min(255,Math.round(v/32)*32), key=rgbHex(q(r),q(g),q(b));
+    const centre=1+Math.max(0,1-Math.hypot(x-size/2,y-size/2)/(size*.55));
+    bins.set(key,(bins.get(key)||0)+centre);
+  }
+  const sorted=[...bins.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]), out=[];
+  for(const c of sorted){ if(out.every(x=>colourDistance(x,c)>62)) out.push(c); if(out.length===3) break; }
+  while(out.length<3) out.push(['#d68b68','#f1c7a7','#76c8b0'][out.length]);
+  const saturation=c=>{const n=parseInt(c.slice(1),16),v=[n>>16&255,n>>8&255,n&255];return Math.max(...v)-Math.min(...v)};
+  const accent=[...out].filter(c=>c!==out[0]).sort((a,b)=>saturation(b)-saturation(a))[0] || out[1];
+  return [out[0],out.find(c=>c!==out[0]&&c!==accent)||out[1],accent];
+}
+
+function loadPetImageData(url, sourceName){
+  const img=new Image();
+  img.onload=()=>{
+    petLab.palette=samplePetPalette(img); petLab.picked=-1;
+    const thumb=document.getElementById('petSourceImg'); thumb.src=url; thumb.style.display='block';
+    document.getElementById('petSourceGlyph').style.display='none';
+    const guessed=(sourceName||'').replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();
+    if(guessed){ petLab.name=guessed.slice(0,28); document.getElementById('petName').value=petLab.name; }
+    renderPetLab();
+    document.getElementById('petLabState').innerHTML='<span class="dot"></span>palette sampled locally · choose one interpretation';
+  };
+  img.src=url;
+}
+
 const KINDS = [['code','💪 code'],['term','⛓️ terminal'],['cad','📐 CAD/design'],['paper','📖 reading'],
                ['notes','📝 notes'],['neutral','😐 neutral'],['distraction','🕳️ distraction']];
 const KIND_ICO = { code:'💪', term:'⛓️', cad:'📐', paper:'📖', notes:'📝', neutral:'😐', distraction:'🕳️' };
@@ -270,6 +423,7 @@ function initSettings(state){
   document.getElementById('projBtn').textContent = (state.projects || 'choose') + '…';
 }
 renderCards();
+renderPetLab();
 </script>
 </body>
 </html>

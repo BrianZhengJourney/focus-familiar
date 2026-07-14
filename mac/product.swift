@@ -4,6 +4,7 @@
 import Cocoa
 import WebKit
 import ServiceManagement
+import UniformTypeIdentifiers
 
 // ── data retention & privacy eraser ─────────────────────────
 
@@ -71,6 +72,23 @@ func appIconDataURI(_ bundleId: String) -> String? {
     let uri = "data:image/png;base64," + png.base64EncodedString()
     appIconCache[bundleId] = uri
     return uri
+}
+
+func petReferenceDataURI(_ url: URL) -> String? {
+    guard let source = NSImage(contentsOf: url), source.size.width > 0, source.size.height > 0 else { return nil }
+    let side = min(source.size.width, source.size.height)
+    let crop = NSRect(x: (source.size.width - side) / 2,
+                      y: (source.size.height - side) / 2,
+                      width: side, height: side)
+    let image = NSImage(size: NSSize(width: 256, height: 256))
+    image.lockFocus()
+    NSGraphicsContext.current?.imageInterpolation = .high
+    source.draw(in: NSRect(x: 0, y: 0, width: 256, height: 256),
+                from: crop, operation: .copy, fraction: 1)
+    image.unlockFocus()
+    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+          let png = rep.representation(using: .png, properties: [:]) else { return nil }
+    return "data:image/png;base64," + png.base64EncodedString()
 }
 
 func defaultBrowserBundleId() -> String? {
@@ -201,6 +219,30 @@ extension AppDelegate {
             if let id = body["id"] as? String {
                 js("famSetCharacter('\(id)')")
                 d.set(id, forKey: "character")
+            }
+        case "petPrototype":
+            // PROTOTYPE — inject the generated pack into the running overlay
+            // only. Nothing (including the source image) is persisted.
+            if let spec = body["spec"] as? [String: Any],
+               JSONSerialization.isValidJSONObject(spec),
+               let data = try? JSONSerialization.data(withJSONObject: spec),
+               let json = String(data: data, encoding: .utf8) {
+                js("famSetPrototypePet(\(json))")
+                revealOverlay()
+            }
+        case "petUpload":
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.image]
+            panel.message = "Choose a reference for your tiny familiar"
+            if panel.runModal() == .OK, let url = panel.url,
+               let uri = petReferenceDataURI(url) {
+                let name = url.deletingPathExtension().lastPathComponent
+                settingsWeb?.evaluateJavaScript(
+                    "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)))",
+                    completionHandler: nil)
             }
         case "grant":
             grantAutomation()

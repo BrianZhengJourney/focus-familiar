@@ -251,8 +251,9 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-period-axis{ display:flex; justify-content:space-between; align-items:center;
   min-height:12px; margin:2px 0 7px; color:var(--ink-dim); font-size:8.5px;
   font-variant-numeric:tabular-nums; }
-/* Quiet Weave: half-hour periods remain the interaction/data layer, but the
-   day reads as three continuous ribbons instead of a wall of little boxes. */
+/* Woven Day v3: one soft gradient tile per half hour. Each tile borrows the
+   colours of its neighbours, so the day morphs instead of breaking into
+   category fragments. */
 .j-day-summary{ display:flex; align-items:baseline; gap:5px; margin:2px 0 9px;
   color:var(--ink-dim); font-size:9px; white-space:nowrap; }
 .j-day-summary .sigil{ color:#d6aa50; font-size:11px; }
@@ -264,26 +265,26 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-weave-meta b{ font-family:var(--font-magic); font-size:9.5px; font-weight:600; letter-spacing:.01em; }
 .j-weave-meta .range{ margin-left:auto; color:var(--ink-dim); font-family:var(--font-mono);
   font-size:8px; font-variant-numeric:tabular-nums; }
-.j-weave-rail{ position:relative; height:24px; }
-.j-weave-thread{ --period-count:12; position:relative; height:24px; min-width:0; }
+.j-weave-rail{ position:relative; height:20px; }
+.j-weave-thread{ --period-count:12; position:relative; display:grid; grid-auto-flow:column;
+  grid-auto-columns:18px; gap:3px; width:max-content; height:18px; min-width:0; }
 .j-weave-row.morning .j-weave-thread{ margin-left:auto; }
 .j-weave-row.daylight .j-weave-thread,.j-weave-row.afterglow .j-weave-thread{ margin-right:auto; }
-.j-weave-art{ position:absolute; inset:0; width:100%; height:100%; overflow:visible;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)); pointer-events:none; }
-.j-weave-base{ fill:#5a547036; stroke:#8f8aa847; stroke-width:.55; }
-.j-weave-deep{ fill:url(#weaveDeep); opacity:.72; }
-.j-weave-deep-edge{ fill:none; stroke:#58c9aa; stroke-width:1.15; stroke-linecap:round; opacity:.92; }
-.j-weave-pit{ fill:url(#weavePit); opacity:.76; }
-.j-weave-pit-edge{ fill:none; stroke:#d96884; stroke-width:.95; stroke-linecap:round; opacity:.9; }
-.j-weave-fray{ stroke:#d96884; stroke-width:.75; stroke-linecap:round; opacity:.65; }
-.j-weave-hit-grid{ position:absolute; inset:0; display:grid;
-  grid-template-columns:repeat(var(--period-count),minmax(0,1fr)); }
-.j-weave-hit{ min-width:0; cursor:default; }
-.j-weave-hit:hover{ background:linear-gradient(90deg,transparent,#ffffff0d,transparent); }
-.j-weave-now{ position:absolute; z-index:2; top:2px; bottom:2px; width:1px;
-  background:#d6aa50; box-shadow:0 0 4px #d6aa5070; pointer-events:none; }
-.j-weave-now::before{ content:""; position:absolute; top:-1px; left:-2.5px; width:6px; height:6px;
-  border-radius:50%; background:#f0c96d; box-shadow:0 0 0 2px #f0c96d24; }
+.j-weave-cell{ position:relative; width:18px; height:18px; border-radius:5px;
+  border:1px solid #ffffff18; box-shadow:inset 0 1px rgba(255,255,255,.24),0 1px 2px rgba(0,0,0,.12);
+  cursor:default; opacity:0; transform:scale(.72); filter:blur(3px);
+  animation:j-weave-morph .48s cubic-bezier(.2,.8,.2,1) forwards;
+  animation-delay:calc(var(--i) * 24ms); transition:transform .15s,filter .15s,box-shadow .15s; }
+.j-weave-cell:hover{ transform:translateY(-2px) scale(1.08); filter:saturate(1.15);
+  box-shadow:inset 0 1px rgba(255,255,255,.34),0 4px 8px rgba(0,0,0,.18); }
+.j-weave-cell.is-current{ border-color:#e0af48; box-shadow:0 0 0 1px #e0af4860,0 0 8px #e0af4850; }
+.j-weave-cell.is-current::after{ content:""; position:absolute; width:4px; height:4px;
+  top:2px; right:2px; border-radius:50%; background:#ffe08a; box-shadow:0 0 5px #e0af48; }
+@keyframes j-weave-morph{
+  0%{ opacity:0; transform:scale(.72); filter:blur(3px) saturate(.65); }
+  62%{ opacity:1; transform:scale(1.08); filter:blur(0) saturate(1.08); }
+  100%{ opacity:1; transform:scale(1); filter:none; }
+}
 .j-weave-row.morning .j-weave-meta b{ color:#e7a779; }
 .j-weave-row.daylight .j-weave-meta b{ color:#e8c36d; }
 .j-weave-row.afterglow .j-weave-meta b{ color:#c6a2c0; }
@@ -437,12 +438,11 @@ body[data-char="pixel"] .shadow{ display:none; }
 .journal .j-weave-row.morning .j-weave-meta b{ color:#a85f32; }
 .journal .j-weave-row.daylight .j-weave-meta b{ color:#93651f; }
 .journal .j-weave-row.afterglow .j-weave-meta b{ color:#76526f; }
-.journal .j-weave-base{ fill:#d8c39a66; stroke:#aa855350; }
-.journal .j-weave-deep-edge{ stroke:#249b80; }
-.journal .j-weave-pit-edge,.journal .j-weave-fray{ stroke:#c44768; }
-.journal .j-weave-hit:hover{ background:linear-gradient(90deg,transparent,#9d6b2b10,transparent); }
-.journal .j-weave-now{ background:#a87328; box-shadow:0 0 4px #a8732860; }
-.journal .j-weave-now::before{ background:#bd8739; box-shadow:0 0 0 2px #bd873926; }
+.journal .j-weave-cell{ border-color:#9e77432c;
+  box-shadow:inset 0 1px rgba(255,255,255,.48),0 1px 2px rgba(83,50,22,.12); }
+.journal .j-weave-cell:hover{ box-shadow:inset 0 1px rgba(255,255,255,.62),0 4px 8px rgba(83,50,22,.18); }
+.journal .j-weave-cell.is-current{ border-color:#a87328;
+  box-shadow:0 0 0 1px #a8732860,0 0 8px #a8732845; }
 .journal .j-expand{ border-color:#a77b4238; }
 .journal .j-expand:hover{ color:#3a2417; background:#ead8b62e; }
 .journal .j-li .dot.neut{ background:#9f907a; }
@@ -862,6 +862,64 @@ const MASCOTS = {
 };
 MASCOTS.lulu.CFG.focused = MASCOTS.lulu.CFG.focusedA;  // headphones version (design decision)
 
+/* PROTOTYPE — session-only Pet Atelier output. The settings page supplies one
+   canonical pixel body + face anchors; the existing state rig supplies every
+   expression, animation, shadow, focus aura, and level-up moment. */
+function prototypeMascotPack(spec){
+  const f = spec.face;
+  const eye = (x, y, ink = 'K', glint = true) => [
+    [x,y,ink],[x+1,y,ink],[x,y+1,ink],[x+1,y+1,ink],...(glint ? [[x,y,'W']] : [])
+  ];
+  const flat = (y, ink = 'K') => [[f.lx,y,ink],[f.lx+1,y,ink],[f.rx,y,ink],[f.rx+1,y,ink]];
+  const eyes = {
+    idle: [...eye(f.lx,f.y),...eye(f.rx,f.y)],
+    focus: [...eye(f.lx,f.y,'K'),...eye(f.rx,f.y,'K'),
+      [f.lx,f.y-1,'M'],[f.lx+1,f.y-1,'M'],[f.rx,f.y-1,'M'],[f.rx+1,f.y-1,'M']],
+    deep: [...eye(f.lx,f.y,'Q'),...eye(f.rx,f.y,'Q')],
+    sleep: flat(f.y+1),
+    proud: [[f.lx,f.y+1,'K'],[f.lx+1,f.y,'K'],[f.lx+2,f.y+1,'K'],
+      [f.rx-1,f.y+1,'K'],[f.rx,f.y,'K'],[f.rx+1,f.y+1,'K']],
+    dizzy: [[f.lx,f.y,'K'],[f.lx+1,f.y+1,'K'],[f.lx,f.y+1,'K'],[f.lx+1,f.y,'K'],
+      [f.rx,f.y,'K'],[f.rx+1,f.y+1,'K'],[f.rx,f.y+1,'K'],[f.rx+1,f.y,'K']],
+    sick: [[f.lx,f.y,'K'],[f.lx+1,f.y+1,'K'],[f.lx,f.y+1,'K'],[f.lx+1,f.y,'K'],
+      [f.rx,f.y,'K'],[f.rx+1,f.y+1,'K'],[f.rx,f.y+1,'K'],[f.rx+1,f.y,'K']],
+    ghost: [...eye(f.lx,f.y,'G',false),...eye(f.rx,f.y,'G',false)],
+    star: [[f.lx,f.y-1,'S'],[f.lx-1,f.y,'S'],[f.lx,f.y,'S'],[f.lx+1,f.y,'S'],[f.lx,f.y+1,'S'],
+      [f.rx,f.y-1,'S'],[f.rx-1,f.y,'S'],[f.rx,f.y,'S'],[f.rx+1,f.y,'S'],[f.rx,f.y+1,'S']]
+  };
+  const mouths = {
+    w:[[f.mx-1,f.my,'M'],[f.mx+1,f.my,'M']],
+    smile:[[f.mx-1,f.my,'M'],[f.mx,f.my+1,'M'],[f.mx+1,f.my,'M']],
+    squ:[[f.mx-1,f.my+1,'M'],[f.mx,f.my,'M'],[f.mx+1,f.my+1,'M']],
+    o:[[f.mx,f.my,'M']]
+  };
+  const p = spec.PAL;
+  return {
+    name:spec.name || 'My little familiar', viewBox:'-1 -2 20 20', BASE:spec.BASE,
+    shadow:{cx:7.5,cy:15.7,rx:6,fill:p.D,op:.27}, poseOrigin:'7.5px 10px', pawColor:p.P,
+    orb:{x:16,y:1}, zzz:{fill:p.A,pts:[[14.5,5.5],[16,3.8],[17.5,2]]},
+    ring:{cx:8,cy:8,r:8.7},
+    sparks:['M0,4 h.7 v-.7 h.7 v.7 h.7 v.7 h-.7 v.7 h-.7 v-.7 h-.7 Z',
+      'M17,10 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z',
+      'M3,0 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z'],
+    bubbles:[[.5,7,.8],[-.8,8.6,.6],[1.4,5.6,.5]],
+    motes:[[-.6,6.2,.7,p.A],[18.2,6.8,.6,'#b9a8ff'],[.4,13.2,.5,p.L]],
+    PAL:{...p,Q:'#2fd6bd',E:'#aef4e6',S:'#ffd76b',G:'#eef3ff',V:'#7d88c9'},
+    EYES:eyes, MOUTHS:mouths,
+    CFG:{
+      idle:{anim:'ffp-bob 3.4s ease-in-out infinite',filter:'none',op:1,orb:p.A,eye:'idle',mouth:'w',aura:0,auraColor:p.L,motes:1,blink:1},
+      focused:{anim:'ffp-bob 2.6s ease-in-out infinite',filter:`drop-shadow(0 4px 10px ${p.A}55)`,op:1,orb:p.A,eye:'focus',mouth:'w',aura:.16,auraColor:p.A,motes:0},
+      deepWork:{anim:'ffp-levitate 5.5s ease-in-out infinite',filter:'drop-shadow(0 0 16px rgba(143,111,216,.45))',op:1,orb:'#b9a8ff',eye:'deep',mouth:'w',aura:.32,auraColor:'#8f6fd8',motes:1,paws:1},
+      dizzy:{anim:'ffp-dizzy 1.1s linear infinite',filter:'none',op:1,orb:p.L,eye:'dizzy',mouth:'squ',aura:0,auraColor:p.L,motes:0},
+      poisoned:{anim:'ffp-queasy 2.1s ease-in-out infinite',filter:'saturate(.72) brightness(.96)',op:1,orb:'#8ee07a',eye:'sick',mouth:'squ',aura:.28,auraColor:'#7cb85c',motes:0,bubbles:1},
+      ghost:{anim:'ffp-float 3.6s ease-in-out infinite',filter:'saturate(.3) hue-rotate(175deg) brightness(1.12)',op:.72,orb:'#dfe9ff',eye:'ghost',mouth:'w',aura:.25,auraColor:'#7fa8ff',motes:1},
+      levelUp:{anim:'ffp-pop 1.3s ease-in-out infinite',filter:'drop-shadow(0 0 12px rgba(255,176,46,.55))',op:1,orb:'#ffe07a',eye:'star',mouth:'smile',aura:.2,auraColor:'#ffb02e',motes:0,ring:1,spark:1},
+      sleeping:{pose:'rotate(90deg) translate(0px,1.5px)',anim:'ffp-sleepbob 4.6s ease-in-out infinite',filter:'brightness(.9) saturate(.85)',op:1,orb:p.L,eye:'sleep',mouth:'o',aura:0,auraColor:p.L,motes:0,zzz:1},
+      proud:{anim:'ffp-proudhop 1.7s ease-in-out infinite',filter:'drop-shadow(0 4px 12px rgba(255,176,46,.35))',op:1,orb:'#ffe28a',eye:'proud',mouth:'smile',aura:0,auraColor:'#ffe28a',motes:1,spark:1}
+    }
+  };
+}
+
 /* generic renderer: one persistent DOM, fed by the active mascot's pack */
 const Mascot = (() => {
   const shade = (hex) => {
@@ -1028,7 +1086,7 @@ const Fam = {
   distractSec: 0, deepSec: 0, switches: [],
   paused: false,
 
-  setCharacter(id){
+  setCharacter(id, persist = true){
     if (!MASCOTS[id]) id = 'lulu';
     this.char = id;
     document.body.dataset.char = 'pixel';
@@ -1037,7 +1095,7 @@ const Fam = {
     holder.className = 'familiar char-pixel';
     Mascot.mount(holder, id);
     Mascot.setState(mascotStateFor(this.state));
-    localStorage.setItem('ff-char', id);
+    if (persist) localStorage.setItem('ff-char', id);
     this.applyLevel();
   },
 
@@ -1230,6 +1288,12 @@ function famSetApp(appName, kind, detail, url, canon){
 }
 
 function famSetCharacter(id){ Fam.setCharacter(id); toast(MASCOTS[Fam.char].name); }
+function famSetPrototypePet(spec){
+  MASCOTS.prototype = prototypeMascotPack(spec);
+  Fam.setCharacter('prototype', false);
+  toast(`${MASCOTS.prototype.name} joined you ✦`);
+  Fam.sparkle(9);
+}
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
 
 /* user went idle / screen locked: close the open entry so away-time
@@ -1632,20 +1696,13 @@ function periodCellMarkup(a, b, now, entries, forceCurrent = false, allowCurrent
     <span class="j-period-track">${fill}</span></div>`;
 }
 
-function weaveCurve(values, direction){
-  const unit = 12, width = Math.max(unit, values.length * unit), base = 12, reach = 7.5;
-  const y = value => base + direction * reach * Math.max(0, Math.min(1, value));
-  const points = [{ x:0, y:y(values[0] || 0) }];
-  values.forEach((value, i) => points.push({ x:(i + .5) * unit, y:y(value) }));
-  points.push({ x:width, y:y(values[values.length - 1] || 0) });
-  let line = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i++){
-    const p = points[i], next = points[i + 1];
-    line += ` Q ${p.x} ${p.y} ${(p.x + next.x) / 2} ${(p.y + next.y) / 2}`;
-  }
-  const last = points[points.length - 1];
-  line += ` T ${last.x} ${last.y}`;
-  return { width, line, area:`${line} L ${width} ${base} L 0 ${base} Z` };
+function weaveMixColor(data){
+  const colors = { deep:[47,174,143], neut:[159,144,122], dist:[193,74,106], away:[232,219,191] };
+  const weights = { ...data.ms, away:data.away };
+  const sum = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+  const rgb = [0,1,2].map(channel => Math.round(Object.entries(weights).reduce(
+    (value, [kind, weight]) => value + colors[kind][channel] * weight / sum, 0)));
+  return `rgb(${rgb.join(',')})`;
 }
 
 function weavePeriodTip(a, b, now, data){
@@ -1684,51 +1741,30 @@ function buildWovenDay(w0, now){
   phases.forEach(phase => {
     phase.count = Math.max(1, Math.ceil((phase.b - phase.a) / J_PERIOD_MS));
   });
-  const maxCount = Math.max(...phases.map(phase => phase.count));
 
   const row = phase => {
     const count = phase.count;
-    const deepValues = [], pitValues = [], hits = [];
+    const periods = [];
     for (let i = 0; i < count; i++){
       const a = phase.a + i * J_PERIOD_MS;
       const b = Math.min(a + J_PERIOD_MS, phase.b);
       const data = periodBreakdown(a, b, now, entries);
-      deepValues.push(data.ms.deep / J_PERIOD_MS);
-      pitValues.push(data.ms.dist / J_PERIOD_MS);
-      const tip = weavePeriodTip(a, b, now, data);
-      hits.push(`<span class="j-weave-hit" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span>`);
+      periods.push({ a, b, data, color:weaveMixColor(data) });
     }
-    const deepCurve = weaveCurve(deepValues, -1);
-    const pitCurve = weaveCurve(pitValues, 1);
-    const hasDeep = deepValues.some(v => v > .001);
-    const hasPit = pitValues.some(v => v > .001);
-    const fray = pitValues.map((v, i) => v > .12
-      ? `<line class="j-weave-fray" x1="${(i + .5) * 12}" y1="${12 + 7.5 * v}"
-          x2="${(i + .5) * 12 + (i % 2 ? 1 : -1)}" y2="${13.5 + 8 * v}"/>`
-      : '').join('');
-    const current = active && phase.a <= now && now < phase.b
-      ? `<span class="j-weave-now" style="left:${(100 * (now - phase.a) / (phase.b - phase.a)).toFixed(2)}%"></span>`
-      : '';
+    const tiles = periods.map((period, i) => {
+      const prev = periods[Math.max(0, i - 1)].color;
+      const next = periods[Math.min(periods.length - 1, i + 1)].color;
+      const tip = weavePeriodTip(period.a, period.b, now, period.data);
+      const current = active && period.a <= now && now < period.b;
+      const bg = `radial-gradient(circle at 28% 20%,rgba(255,255,255,.42),transparent 42%),` +
+        `linear-gradient(135deg,${prev} 0%,${period.color} 48%,${next} 100%)`;
+      return `<span class="j-weave-cell${current ? ' is-current' : ''}" style="--i:${i};background:${bg}"
+        role="img" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span>`;
+    }).join('');
     return `<div class="j-weave-row ${phase.id}">
       <div class="j-weave-meta"><b>${phase.icon} ${phase.name}</b>
         <span class="range">${phase.range}</span></div>
-      <div class="j-weave-rail"><div class="j-weave-thread"
-        style="--period-count:${count};width:${(100 * count / maxCount).toFixed(2)}%">
-        <svg class="j-weave-art" viewBox="0 0 ${deepCurve.width} 24" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="weaveDeep" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#65d8bb"/><stop offset="1" stop-color="#2fae8f" stop-opacity=".22"/>
-            </linearGradient>
-            <linearGradient id="weavePit" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#c14a6a" stop-opacity=".18"/><stop offset="1" stop-color="#d96884"/>
-            </linearGradient>
-          </defs>
-          <rect class="j-weave-base" x=".4" y="9" width="${deepCurve.width - .8}" height="6" rx="3"/>
-          ${hasDeep ? `<path class="j-weave-deep" d="${deepCurve.area}"/><path class="j-weave-deep-edge" d="${deepCurve.line}"/>` : ''}
-          ${hasPit ? `<path class="j-weave-pit" d="${pitCurve.area}"/><path class="j-weave-pit-edge" d="${pitCurve.line}"/>${fray}` : ''}
-        </svg>
-        ${current}<span class="j-weave-hit-grid">${hits.join('')}</span>
-      </div></div>
+      <div class="j-weave-rail"><div class="j-weave-thread" style="--period-count:${count}">${tiles}</div></div>
     </div>`;
   };
 
@@ -2183,6 +2219,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (q.get('mstate')) Mascot.setState(q.get('mstate'));
     Fam.hud(true);
     const journalPreview = q.get('preview');
+    if (journalPreview === 'pet-prototype') {
+      famSetPrototypePet({
+        name:'Pocket Moss', variant:'adventure',
+        PAL:{P:'#b98768',L:'#f0cdb2',A:'#74c8ad',D:'#493833',K:'#241a20',W:'#ffffff',M:'#382421'},
+        BASE:['..P..........P..','.LPP........PPL.','.PPPP......PPPP.','PPPPPPPPPPPPPPPP',
+          'PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP',
+          'PPPLLLLLLLLLLPPP','PPPAAAAAAAAAAPPP','...PPPPPPPPPP...','....PPPPPPPP....',
+          '....PP....PP....','...PPP....PPP...','...PP......PP...'],
+        face:{lx:4,rx:10,y:5,mx:7,my:8}
+      });
+      Fam.setState('focused');
+    }
     if (journalPreview === 'journal' || journalPreview === 'journal-dense') {
       const now = Date.now(), m = 60000;
       if (journalPreview === 'journal-dense') {

@@ -251,47 +251,42 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-period-axis{ display:flex; justify-content:space-between; align-items:center;
   min-height:12px; margin:2px 0 7px; color:var(--ink-dim); font-size:8.5px;
   font-variant-numeric:tabular-nums; }
-/* Today is a different scale: three named, stacked ribbons instead of one
-   48-cell micro-strip. The dashed spine and phase knots make it feel sewn
-   into the parchment rather than dropped in as a chart. */
-.j-day-summary{ display:flex; align-items:center; gap:8px; padding:6px 9px;
-  margin:1px 0 7px; border:1px solid #ffffff10; border-radius:10px; background:#ffffff06; }
-.j-day-summary .sigil{ width:23px; height:23px; display:grid; place-items:center;
-  border-radius:50%; color:#ffd479; background:#ffd47914; flex:none; }
-.j-day-summary .copy{ min-width:0; flex:1; }
-.j-day-summary .copy b{ display:block; font-family:var(--font-magic); font-size:12.5px; line-height:1.15; }
-.j-day-summary .copy small{ display:block; margin-top:1px; color:var(--ink-dim); font-size:8.5px; }
-.j-day-summary .recorded{ color:var(--ink-dim); font-size:9px; white-space:nowrap; }
-.j-woven-head{ display:flex; align-items:baseline; gap:7px; margin:0 0 4px; }
-.j-woven-head b{ font-family:var(--font-magic); font-size:11.5px; font-weight:600; }
-.j-woven-head span{ color:var(--ink-dim); font-size:8.5px; }
-.j-weave-stack{ position:relative; display:flex; flex-direction:column; gap:6px; padding-left:11px; }
-.j-weave-stack::before{ content:""; position:absolute; left:3px; top:10px; bottom:10px;
-  border-left:1px dashed #ffffff1f; }
-.j-weave-row{ position:relative; }
-.j-weave-row::before{ content:""; position:absolute; left:-11px; top:6px; width:7px; height:7px;
-  border:1px solid #ffffff35; border-radius:50%; background:#5a5470; box-shadow:0 0 0 2px #17132d; }
-.j-weave-meta{ display:flex; align-items:baseline; gap:5px; min-height:13px; margin-bottom:2px; }
+/* Quiet Weave: half-hour periods remain the interaction/data layer, but the
+   day reads as three continuous ribbons instead of a wall of little boxes. */
+.j-day-summary{ display:flex; align-items:baseline; gap:5px; margin:2px 0 9px;
+  color:var(--ink-dim); font-size:9px; white-space:nowrap; }
+.j-day-summary .sigil{ color:#d6aa50; font-size:11px; }
+.j-day-summary b{ color:var(--ink); font-family:var(--font-magic); font-size:12px; font-weight:600; }
+.j-day-summary .sep{ opacity:.46; }
+.j-weave-stack{ display:flex; flex-direction:column; gap:10px; margin:0 0 9px; }
+.j-weave-row{ min-width:0; }
+.j-weave-meta{ display:flex; align-items:baseline; gap:6px; min-height:13px; margin-bottom:1px; }
 .j-weave-meta b{ font-family:var(--font-magic); font-size:9.5px; font-weight:600; letter-spacing:.01em; }
-.j-weave-meta .range{ color:var(--ink-dim); font-family:var(--font-mono); font-size:8px;
-  font-variant-numeric:tabular-nums; }
-.j-weave-meta em{ margin-left:auto; color:var(--ink-dim); font-style:normal; font-size:8px; }
-.j-weave-rail{ position:relative; height:15px; display:flex; align-items:stretch; }
-.j-weave-rail::before{ content:""; position:absolute; left:1px; right:1px; top:7px;
-  border-top:1px dashed #ffffff1c; }
-.j-weave-thread{ --period-count:12; position:relative; z-index:1; display:grid;
-  grid-template-columns:repeat(var(--period-count),minmax(0,1fr)); gap:2px; min-width:0; }
+.j-weave-meta .range{ margin-left:auto; color:var(--ink-dim); font-family:var(--font-mono);
+  font-size:8px; font-variant-numeric:tabular-nums; }
+.j-weave-rail{ position:relative; height:24px; }
+.j-weave-thread{ --period-count:12; position:relative; height:24px; min-width:0; }
 .j-weave-row.morning .j-weave-thread{ margin-left:auto; }
 .j-weave-row.daylight .j-weave-thread,.j-weave-row.afterglow .j-weave-thread{ margin-right:auto; }
-.j-weave-thread .j-period{ height:15px; border-radius:4px; }
-.j-weave-rail .j-period-track{ inset:1px; border-radius:2.5px; }
-.j-weave-row.morning::before{ background:#d98d59; }
-.j-weave-row.daylight::before{ background:#d1a13d; }
-.j-weave-row.afterglow::before{ background:#8a6683; }
+.j-weave-art{ position:absolute; inset:0; width:100%; height:100%; overflow:visible;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)); pointer-events:none; }
+.j-weave-base{ fill:#5a547036; stroke:#8f8aa847; stroke-width:.55; }
+.j-weave-deep{ fill:url(#weaveDeep); opacity:.72; }
+.j-weave-deep-edge{ fill:none; stroke:#58c9aa; stroke-width:1.15; stroke-linecap:round; opacity:.92; }
+.j-weave-pit{ fill:url(#weavePit); opacity:.76; }
+.j-weave-pit-edge{ fill:none; stroke:#d96884; stroke-width:.95; stroke-linecap:round; opacity:.9; }
+.j-weave-fray{ stroke:#d96884; stroke-width:.75; stroke-linecap:round; opacity:.65; }
+.j-weave-hit-grid{ position:absolute; inset:0; display:grid;
+  grid-template-columns:repeat(var(--period-count),minmax(0,1fr)); }
+.j-weave-hit{ min-width:0; cursor:default; }
+.j-weave-hit:hover{ background:linear-gradient(90deg,transparent,#ffffff0d,transparent); }
+.j-weave-now{ position:absolute; z-index:2; top:2px; bottom:2px; width:1px;
+  background:#d6aa50; box-shadow:0 0 4px #d6aa5070; pointer-events:none; }
+.j-weave-now::before{ content:""; position:absolute; top:-1px; left:-2.5px; width:6px; height:6px;
+  border-radius:50%; background:#f0c96d; box-shadow:0 0 0 2px #f0c96d24; }
 .j-weave-row.morning .j-weave-meta b{ color:#e7a779; }
 .j-weave-row.daylight .j-weave-meta b{ color:#e8c36d; }
 .j-weave-row.afterglow .j-weave-meta b{ color:#c6a2c0; }
-.j-woven-legend{ justify-content:flex-start; margin:5px 0 7px 11px; }
 /* time view v3: hero + blocks (fewer words, more shape) */
 .j-hero{ display:flex; gap:8px; align-items:stretch; margin:2px 0 10px; }
 .j-ring{ width:74px; height:74px; flex:none; position:relative; }
@@ -435,18 +430,19 @@ body[data-char="pixel"] .shadow{ display:none; }
   box-shadow:0 0 0 1px #2fae8f24,inset 0 1px rgba(255,255,255,.65); }
 .journal .j-period.future{ background:#f5e8cd5c; border-color:#b8915c66; }
 .journal .j-period-legend .neut{ background:#9f907a; }
-.journal .j-day-summary{ color:#3a2417; background:#fffaf0a3; border-color:#dfc89a; }
-.journal .j-day-summary .sigil{ color:#9d6b2b; background:#d8a85f24; }
-.journal .j-day-summary .copy small,.journal .j-day-summary .recorded,
-.journal .j-woven-head span,.journal .j-weave-meta .range,.journal .j-weave-meta em{
-  color:var(--ink-dim); }
-.journal .j-weave-stack::before{ border-color:#a77b4252; }
-.journal .j-weave-row::before{ border-color:#fff8e8; box-shadow:0 0 0 2px #f7e8c8; }
+.journal .j-day-summary{ color:var(--ink-dim); }
+.journal .j-day-summary .sigil{ color:#9d6b2b; }
+.journal .j-day-summary b{ color:#3a2417; }
+.journal .j-weave-meta .range{ color:var(--ink-dim); }
 .journal .j-weave-row.morning .j-weave-meta b{ color:#a85f32; }
 .journal .j-weave-row.daylight .j-weave-meta b{ color:#93651f; }
 .journal .j-weave-row.afterglow .j-weave-meta b{ color:#76526f; }
-.journal .j-weave-rail::before{ border-color:#a77b423d; }
-.journal .j-weave-rail .j-period{ background:#ead9b83b; }
+.journal .j-weave-base{ fill:#d8c39a66; stroke:#aa855350; }
+.journal .j-weave-deep-edge{ stroke:#249b80; }
+.journal .j-weave-pit-edge,.journal .j-weave-fray{ stroke:#c44768; }
+.journal .j-weave-hit:hover{ background:linear-gradient(90deg,transparent,#9d6b2b10,transparent); }
+.journal .j-weave-now{ background:#a87328; box-shadow:0 0 4px #a8732860; }
+.journal .j-weave-now::before{ background:#bd8739; box-shadow:0 0 0 2px #bd873926; }
 .journal .j-expand{ border-color:#a77b4238; }
 .journal .j-expand:hover{ color:#3a2417; background:#ead8b62e; }
 .journal .j-li .dot.neut{ background:#9f907a; }
@@ -1636,6 +1632,29 @@ function periodCellMarkup(a, b, now, entries, forceCurrent = false, allowCurrent
     <span class="j-period-track">${fill}</span></div>`;
 }
 
+function weaveCurve(values, direction){
+  const unit = 12, width = Math.max(unit, values.length * unit), base = 12, reach = 7.5;
+  const y = value => base + direction * reach * Math.max(0, Math.min(1, value));
+  const points = [{ x:0, y:y(values[0] || 0) }];
+  values.forEach((value, i) => points.push({ x:(i + .5) * unit, y:y(value) }));
+  points.push({ x:width, y:y(values[values.length - 1] || 0) });
+  let line = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length - 1; i++){
+    const p = points[i], next = points[i + 1];
+    line += ` Q ${p.x} ${p.y} ${(p.x + next.x) / 2} ${(p.y + next.y) / 2}`;
+  }
+  const last = points[points.length - 1];
+  line += ` T ${last.x} ${last.y}`;
+  return { width, line, area:`${line} L ${width} ${base} L 0 ${base} Z` };
+}
+
+function weavePeriodTip(a, b, now, data){
+  if (a >= now) return `${fmtClock(a)}–${fmtClock(b)} · upcoming`;
+  return `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} deep · ` +
+    `${fmtRailDur(data.ms.neut)} neutral · ${fmtRailDur(data.ms.dist)} pit` +
+    (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} away` : '');
+}
+
 function buildWovenDay(w0, now){
   const entries = collectPeriodEntries(w0, now);
   const noon = new Date(w0); noon.setHours(12, 0, 0, 0);
@@ -1669,32 +1688,52 @@ function buildWovenDay(w0, now){
 
   const row = phase => {
     const count = phase.count;
-    const totals = { deep:0, neut:0, dist:0 };
-    const cells = [];
+    const deepValues = [], pitValues = [], hits = [];
     for (let i = 0; i < count; i++){
       const a = phase.a + i * J_PERIOD_MS;
       const b = Math.min(a + J_PERIOD_MS, phase.b);
       const data = periodBreakdown(a, b, now, entries);
-      totals.deep += data.ms.deep; totals.neut += data.ms.neut; totals.dist += data.ms.dist;
-      cells.push(periodCellMarkup(a, b, now, entries, false, active));
+      deepValues.push(data.ms.deep / J_PERIOD_MS);
+      pitValues.push(data.ms.dist / J_PERIOD_MS);
+      const tip = weavePeriodTip(a, b, now, data);
+      hits.push(`<span class="j-weave-hit" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span>`);
     }
-    const tracked = totals.deep + totals.neut + totals.dist;
-    const deepPct = tracked ? Math.round(100 * totals.deep / tracked) : 0;
-    const mood = tracked < 30000 ? 'quiet' : `${deepPct}% deep`;
+    const deepCurve = weaveCurve(deepValues, -1);
+    const pitCurve = weaveCurve(pitValues, 1);
+    const hasDeep = deepValues.some(v => v > .001);
+    const hasPit = pitValues.some(v => v > .001);
+    const fray = pitValues.map((v, i) => v > .12
+      ? `<line class="j-weave-fray" x1="${(i + .5) * 12}" y1="${12 + 7.5 * v}"
+          x2="${(i + .5) * 12 + (i % 2 ? 1 : -1)}" y2="${13.5 + 8 * v}"/>`
+      : '').join('');
+    const current = active && phase.a <= now && now < phase.b
+      ? `<span class="j-weave-now" style="left:${(100 * (now - phase.a) / (phase.b - phase.a)).toFixed(2)}%"></span>`
+      : '';
     return `<div class="j-weave-row ${phase.id}">
       <div class="j-weave-meta"><b>${phase.icon} ${phase.name}</b>
-        <span class="range">${phase.range}</span><em>${mood}</em></div>
+        <span class="range">${phase.range}</span></div>
       <div class="j-weave-rail"><div class="j-weave-thread"
-        style="--period-count:${count};width:${(100 * count / maxCount).toFixed(2)}%">${cells.join('')}</div></div>
+        style="--period-count:${count};width:${(100 * count / maxCount).toFixed(2)}%">
+        <svg class="j-weave-art" viewBox="0 0 ${deepCurve.width} 24" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="weaveDeep" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#65d8bb"/><stop offset="1" stop-color="#2fae8f" stop-opacity=".22"/>
+            </linearGradient>
+            <linearGradient id="weavePit" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#c14a6a" stop-opacity=".18"/><stop offset="1" stop-color="#d96884"/>
+            </linearGradient>
+          </defs>
+          <rect class="j-weave-base" x=".4" y="9" width="${deepCurve.width - .8}" height="6" rx="3"/>
+          ${hasDeep ? `<path class="j-weave-deep" d="${deepCurve.area}"/><path class="j-weave-deep-edge" d="${deepCurve.line}"/>` : ''}
+          ${hasPit ? `<path class="j-weave-pit" d="${pitCurve.area}"/><path class="j-weave-pit-edge" d="${pitCurve.line}"/>${fray}` : ''}
+        </svg>
+        ${current}<span class="j-weave-hit-grid">${hits.join('')}</span>
+      </div></div>
     </div>`;
   };
 
-  return `<div class="j-woven-head"><b>✦ woven day</b><span>one stitch · 30m</span></div>
-    <div class="j-weave-stack" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">
+  return `<div class="j-weave-stack" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">
       ${phases.map(row).join('')}
-    </div>
-    <div class="j-period-legend j-woven-legend" aria-label="period colors">
-      <span><i class="deep"></i>deep</span><span><i class="neut"></i>neutral</span><span><i class="dist"></i>pit</span>
     </div>`;
 }
 
@@ -1820,10 +1859,10 @@ function renderJournal(){
         </div>
       </div>`;
     const dayHero = `<div class="j-day-summary">
-      <span class="sigil">✦</span>
-      <span class="copy"><b>${pct}% deep today</b>
-        <small>${fmtDur(deep)} woven · ${dist > 30000 ? `${fmtDur(dist)} frayed` : 'a clean thread'}</small></span>
-      <span class="recorded">${fmtDur(total)} recorded</span>
+      <span class="sigil">✦</span><b>${pct}% deep today</b><span class="sep">·</span>
+      <span>${fmtDur(deep)} woven</span><span class="sep">·</span>
+      <span>${dist > 30000 ? `${fmtDur(dist)} frayed` : 'a clean thread'}</span><span class="sep">·</span>
+      <span>${fmtDur(total)} recorded</span>
     </div>`;
     html += (J.tf >= 1440 ? dayHero : timeHero) +
       buildPeriodRail(w0, now, J.tf) +

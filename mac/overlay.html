@@ -251,6 +251,47 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-period-axis{ display:flex; justify-content:space-between; align-items:center;
   min-height:12px; margin:2px 0 7px; color:var(--ink-dim); font-size:8.5px;
   font-variant-numeric:tabular-nums; }
+/* Today is a different scale: three named, stacked ribbons instead of one
+   48-cell micro-strip. The dashed spine and phase knots make it feel sewn
+   into the parchment rather than dropped in as a chart. */
+.j-day-summary{ display:flex; align-items:center; gap:8px; padding:6px 9px;
+  margin:1px 0 7px; border:1px solid #ffffff10; border-radius:10px; background:#ffffff06; }
+.j-day-summary .sigil{ width:23px; height:23px; display:grid; place-items:center;
+  border-radius:50%; color:#ffd479; background:#ffd47914; flex:none; }
+.j-day-summary .copy{ min-width:0; flex:1; }
+.j-day-summary .copy b{ display:block; font-family:var(--font-magic); font-size:12.5px; line-height:1.15; }
+.j-day-summary .copy small{ display:block; margin-top:1px; color:var(--ink-dim); font-size:8.5px; }
+.j-day-summary .recorded{ color:var(--ink-dim); font-size:9px; white-space:nowrap; }
+.j-woven-head{ display:flex; align-items:baseline; gap:7px; margin:0 0 4px; }
+.j-woven-head b{ font-family:var(--font-magic); font-size:11.5px; font-weight:600; }
+.j-woven-head span{ color:var(--ink-dim); font-size:8.5px; }
+.j-weave-stack{ position:relative; display:flex; flex-direction:column; gap:6px; padding-left:11px; }
+.j-weave-stack::before{ content:""; position:absolute; left:3px; top:10px; bottom:10px;
+  border-left:1px dashed #ffffff1f; }
+.j-weave-row{ position:relative; }
+.j-weave-row::before{ content:""; position:absolute; left:-11px; top:6px; width:7px; height:7px;
+  border:1px solid #ffffff35; border-radius:50%; background:#5a5470; box-shadow:0 0 0 2px #17132d; }
+.j-weave-meta{ display:flex; align-items:baseline; gap:5px; min-height:13px; margin-bottom:2px; }
+.j-weave-meta b{ font-family:var(--font-magic); font-size:9.5px; font-weight:600; letter-spacing:.01em; }
+.j-weave-meta .range{ color:var(--ink-dim); font-family:var(--font-mono); font-size:8px;
+  font-variant-numeric:tabular-nums; }
+.j-weave-meta em{ margin-left:auto; color:var(--ink-dim); font-style:normal; font-size:8px; }
+.j-weave-rail{ position:relative; height:15px; display:flex; align-items:stretch; }
+.j-weave-rail::before{ content:""; position:absolute; left:1px; right:1px; top:7px;
+  border-top:1px dashed #ffffff1c; }
+.j-weave-thread{ --period-count:12; position:relative; z-index:1; display:grid;
+  grid-template-columns:repeat(var(--period-count),minmax(0,1fr)); gap:2px; min-width:0; }
+.j-weave-row.morning .j-weave-thread{ margin-left:auto; }
+.j-weave-row.daylight .j-weave-thread,.j-weave-row.afterglow .j-weave-thread{ margin-right:auto; }
+.j-weave-thread .j-period{ height:15px; border-radius:4px; }
+.j-weave-rail .j-period-track{ inset:1px; border-radius:2.5px; }
+.j-weave-row.morning::before{ background:#d98d59; }
+.j-weave-row.daylight::before{ background:#d1a13d; }
+.j-weave-row.afterglow::before{ background:#8a6683; }
+.j-weave-row.morning .j-weave-meta b{ color:#e7a779; }
+.j-weave-row.daylight .j-weave-meta b{ color:#e8c36d; }
+.j-weave-row.afterglow .j-weave-meta b{ color:#c6a2c0; }
+.j-woven-legend{ justify-content:flex-start; margin:5px 0 7px 11px; }
 /* time view v3: hero + blocks (fewer words, more shape) */
 .j-hero{ display:flex; gap:8px; align-items:stretch; margin:2px 0 10px; }
 .j-ring{ width:74px; height:74px; flex:none; position:relative; }
@@ -394,6 +435,18 @@ body[data-char="pixel"] .shadow{ display:none; }
   box-shadow:0 0 0 1px #2fae8f24,inset 0 1px rgba(255,255,255,.65); }
 .journal .j-period.future{ background:#f5e8cd5c; border-color:#b8915c66; }
 .journal .j-period-legend .neut{ background:#9f907a; }
+.journal .j-day-summary{ color:#3a2417; background:#fffaf0a3; border-color:#dfc89a; }
+.journal .j-day-summary .sigil{ color:#9d6b2b; background:#d8a85f24; }
+.journal .j-day-summary .copy small,.journal .j-day-summary .recorded,
+.journal .j-woven-head span,.journal .j-weave-meta .range,.journal .j-weave-meta em{
+  color:var(--ink-dim); }
+.journal .j-weave-stack::before{ border-color:#a77b4252; }
+.journal .j-weave-row::before{ border-color:#fff8e8; box-shadow:0 0 0 2px #f7e8c8; }
+.journal .j-weave-row.morning .j-weave-meta b{ color:#a85f32; }
+.journal .j-weave-row.daylight .j-weave-meta b{ color:#93651f; }
+.journal .j-weave-row.afterglow .j-weave-meta b{ color:#76526f; }
+.journal .j-weave-rail::before{ border-color:#a77b423d; }
+.journal .j-weave-rail .j-period{ background:#ead9b83b; }
 .journal .j-expand{ border-color:#a77b4238; }
 .journal .j-expand:hover{ color:#3a2417; background:#ead8b62e; }
 .journal .j-li .dot.neut{ background:#9f907a; }
@@ -1534,66 +1587,130 @@ function fmtRailDur(ms){
   return m ? `${m}m` : '<1m';
 }
 
-/* A period is the stable visual unit. We aggregate raw checkpoints directly
-   (rather than merged app segments) so a two-minute gap is still visible as
-   blank parchment. Today includes ghost periods through midnight, making the
-   chain's rhythm stable instead of growing unevenly one app switch at a time. */
-function buildPeriodRail(w0, now, timeframe){
-  let railEnd = now;
-  if (timeframe >= 1440){
-    const dayEnd = new Date(w0);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-    railEnd = dayEnd.getTime();
-  }
-  const count = Math.max(1, Math.ceil((railEnd - w0) / J_PERIOD_MS));
-  const entries = windowEntries().map(h => ({
+/* Aggregate raw checkpoints directly (rather than merged app segments) so a
+   two-minute gap stays visible as blank parchment. */
+function collectPeriodEntries(w0, now){
+  return windowEntries().map(h => ({
     kind: h.kind,
     a: Math.max(h.t0, w0),
     b: Math.min(h.t1, now)
   })).filter(h => h.b > h.a);
+}
 
+function periodBreakdown(a, b, now, entries){
+  const liveEnd = Math.min(b, now);
+  const elapsed = Math.max(0, Math.min(J_PERIOD_MS, liveEnd - a));
+  const ms = { deep: 0, neut: 0, dist: 0 };
+  if (elapsed > 0){
+    for (const h of entries){
+      const overlap = Math.min(h.b, liveEnd) - Math.max(h.a, a);
+      if (overlap > 0) ms[kindCls(h.kind)] += overlap;
+    }
+    // Imported/replayed history can overlap. Preserve its mix but never let a
+    // 30-minute stitch paint more than the time that has actually elapsed.
+    const raw = ms.deep + ms.neut + ms.dist;
+    if (raw > elapsed){
+      const scale = elapsed / raw;
+      ms.deep *= scale; ms.neut *= scale; ms.dist *= scale;
+    }
+  }
+  const tracked = ms.deep + ms.neut + ms.dist;
+  return { ms, elapsed, away: Math.max(0, elapsed - tracked), tracked };
+}
+
+function periodCellMarkup(a, b, now, entries, forceCurrent = false, allowCurrent = true){
+  const data = periodBreakdown(a, b, now, entries);
+  const future = a >= now;
+  const current = forceCurrent || (allowCurrent && a <= now && now < b);
+  const tip = future
+    ? `${fmtClock(a)}–${fmtClock(b)} · upcoming`
+    : `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} deep · ` +
+      `${fmtRailDur(data.ms.neut)} neutral · ${fmtRailDur(data.ms.dist)} pit` +
+      (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} away` : '');
+  const fill = ['deep', 'neut', 'dist'].map(k => {
+    const pct = Math.max(0, Math.min(100, 100 * data.ms[k] / J_PERIOD_MS));
+    return pct > .01 ? `<i class="${k}" style="width:${pct.toFixed(2)}%"></i>` : '';
+  }).join('');
+  return `<div class="j-period${future ? ' future' : ''}${current ? ' is-current' : ''}"
+    role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
+    <span class="j-period-track">${fill}</span></div>`;
+}
+
+function buildWovenDay(w0, now){
+  const entries = collectPeriodEntries(w0, now);
+  const noon = new Date(w0); noon.setHours(12, 0, 0, 0);
+  const dusk = new Date(w0); dusk.setHours(18, 0, 0, 0);
+  const six = new Date(w0); six.setHours(6, 0, 0, 0);
+  const dayEnd = new Date(w0); dayEnd.setDate(dayEnd.getDate() + 1);
+  const first = entries.length ? Math.min(...entries.map(h => h.a)) : now;
+  const last = entries.length ? Math.max(...entries.map(h => h.b)) : now;
+  const firstBeforeNoon = entries.some(h => h.a < noon.getTime());
+  const boot = Math.max(w0, Math.floor(first / J_PERIOD_MS) * J_PERIOD_MS);
+  const morningStart = firstBeforeNoon ? boot : six.getTime();
+  const active = !!Fam.cur;
+  const eveningVisualEnd = now < dusk.getTime()
+    ? dayEnd.getTime()
+    : active
+      ? Math.floor(now / J_PERIOD_MS) * J_PERIOD_MS + J_PERIOD_MS
+      : Math.ceil(Math.max(last, dusk.getTime() + 1) / J_PERIOD_MS) * J_PERIOD_MS;
+  const eveningEnd = Math.min(dayEnd.getTime(), Math.max(dusk.getTime() + J_PERIOD_MS, eveningVisualEnd));
+  const phases = [
+    { id:'morning', icon:'☼', name:'morning thread', a:morningStart, b:noon.getTime(),
+      range:firstBeforeNoon ? `${fmtClock(boot)} → noon` : 'quiet → noon' },
+    { id:'daylight', icon:'☀', name:'daylight weave', a:noon.getTime(), b:dusk.getTime(),
+      range:'noon → 18:00' },
+    { id:'afterglow', icon:'☾', name:'afterglow', a:dusk.getTime(), b:eveningEnd,
+      range:`18:00 → ${now < dusk.getTime() ? 'later' : active ? 'now' : last > dusk.getTime() ? fmtClock(last) : 'quiet'}` }
+  ];
+  phases.forEach(phase => {
+    phase.count = Math.max(1, Math.ceil((phase.b - phase.a) / J_PERIOD_MS));
+  });
+  const maxCount = Math.max(...phases.map(phase => phase.count));
+
+  const row = phase => {
+    const count = phase.count;
+    const totals = { deep:0, neut:0, dist:0 };
+    const cells = [];
+    for (let i = 0; i < count; i++){
+      const a = phase.a + i * J_PERIOD_MS;
+      const b = Math.min(a + J_PERIOD_MS, phase.b);
+      const data = periodBreakdown(a, b, now, entries);
+      totals.deep += data.ms.deep; totals.neut += data.ms.neut; totals.dist += data.ms.dist;
+      cells.push(periodCellMarkup(a, b, now, entries, false, active));
+    }
+    const tracked = totals.deep + totals.neut + totals.dist;
+    const deepPct = tracked ? Math.round(100 * totals.deep / tracked) : 0;
+    const mood = tracked < 30000 ? 'quiet' : `${deepPct}% deep`;
+    return `<div class="j-weave-row ${phase.id}">
+      <div class="j-weave-meta"><b>${phase.icon} ${phase.name}</b>
+        <span class="range">${phase.range}</span><em>${mood}</em></div>
+      <div class="j-weave-rail"><div class="j-weave-thread"
+        style="--period-count:${count};width:${(100 * count / maxCount).toFixed(2)}%">${cells.join('')}</div></div>
+    </div>`;
+  };
+
+  return `<div class="j-woven-head"><b>✦ woven day</b><span>one stitch · 30m</span></div>
+    <div class="j-weave-stack" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">
+      ${phases.map(row).join('')}
+    </div>
+    <div class="j-period-legend j-woven-legend" aria-label="period colors">
+      <span><i class="deep"></i>deep</span><span><i class="neut"></i>neutral</span><span><i class="dist"></i>pit</span>
+    </div>`;
+}
+
+function buildPeriodRail(w0, now, timeframe){
+  if (timeframe >= 1440) return buildWovenDay(w0, now);
+  const count = Math.max(1, Math.ceil((now - w0) / J_PERIOD_MS));
+  const entries = collectPeriodEntries(w0, now);
   const periods = [];
   for (let i = 0; i < count; i++){
     const a = w0 + i * J_PERIOD_MS;
-    const b = Math.min(a + J_PERIOD_MS, railEnd);
-    const liveEnd = Math.min(b, now);
-    const elapsed = Math.max(0, Math.min(J_PERIOD_MS, liveEnd - a));
-    const ms = { deep: 0, neut: 0, dist: 0 };
-    if (elapsed > 0){
-      for (const h of entries){
-        const overlap = Math.min(h.b, liveEnd) - Math.max(h.a, a);
-        if (overlap > 0) ms[kindCls(h.kind)] += overlap;
-      }
-      // Imported/replayed history can overlap. Preserve its mix but never let
-      // a 30-minute chapter paint more than the time that has actually elapsed.
-      const raw = ms.deep + ms.neut + ms.dist;
-      if (raw > elapsed){
-        const scale = elapsed / raw;
-        ms.deep *= scale; ms.neut *= scale; ms.dist *= scale;
-      }
-    }
-    const tracked = ms.deep + ms.neut + ms.dist;
-    const away = Math.max(0, elapsed - tracked);
-    const future = a >= now;
-    const current = timeframe < 1440 ? i === count - 1 : a <= now && now < b;
-    const tip = future
-      ? `${fmtClock(a)}–${fmtClock(b)} · upcoming`
-      : `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(ms.deep)} deep · ` +
-        `${fmtRailDur(ms.neut)} neutral · ${fmtRailDur(ms.dist)} pit` +
-        (away >= 30000 ? ` · ${fmtRailDur(away)} away` : '');
-    const fill = ['deep', 'neut', 'dist'].map(k => {
-      const pct = Math.max(0, Math.min(100, 100 * ms[k] / J_PERIOD_MS));
-      return pct > .01 ? `<i class="${k}" style="width:${pct.toFixed(2)}%"></i>` : '';
-    }).join('');
-    periods.push(`<div class="j-period${future ? ' future' : ''}${current ? ' is-current' : ''}"
-      role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
-      <span class="j-period-track">${fill}</span></div>`);
+    const b = Math.min(a + J_PERIOD_MS, now);
+    periods.push(periodCellMarkup(a, b, now, entries, i === count - 1));
   }
 
-  const axis = timeframe >= 1440
-    ? '<div class="j-period-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>'
-    : `<div class="j-period-axis"><span>${fmtClock(w0)}</span>` +
-      (count > 1 ? `<span>${fmtClock(w0 + J_PERIOD_MS)}</span>` : '') + '<span>now</span></div>';
+  const axis = `<div class="j-period-axis"><span>${fmtClock(w0)}</span>` +
+    (count > 1 ? `<span>${fmtClock(w0 + J_PERIOD_MS)}</span>` : '') + '<span>now</span></div>';
   return `<div class="j-period-summary">
       <span class="j-period-title"><b>30m</b> periods</span>
       <span class="j-period-legend" aria-label="period colors">
@@ -1687,7 +1804,7 @@ function renderJournal(){
     const pct = Math.round(100 * deep / total);
     const R = 30, C = 2 * Math.PI * R;
     const note = J_NOTES.find(n => pct >= n.min).note;
-    html += `
+    const timeHero = `
       <div class="j-hero">
         <div class="j-ring">
           <svg viewBox="0 0 74 74">
@@ -1701,7 +1818,14 @@ function renderJournal(){
           <div class="j-tile deep"><span class="v">${fmtDur(deep)}</span><span class="k">deep work</span></div>
           <div class="j-tile pit"><span class="v">${dist > 30000 ? '\u2212' + fmtDur(dist) : '0m'}</span><span class="k">the pit</span></div>
         </div>
-      </div>` +
+      </div>`;
+    const dayHero = `<div class="j-day-summary">
+      <span class="sigil">✦</span>
+      <span class="copy"><b>${pct}% deep today</b>
+        <small>${fmtDur(deep)} woven · ${dist > 30000 ? `${fmtDur(dist)} frayed` : 'a clean thread'}</small></span>
+      <span class="recorded">${fmtDur(total)} recorded</span>
+    </div>`;
+    html += (J.tf >= 1440 ? dayHero : timeHero) +
       buildPeriodRail(w0, now, J.tf) +
       renderSessions(merged) +
       `<div class="j-note" style="margin-top:8px">${note}</div>`;
@@ -2042,17 +2166,29 @@ document.addEventListener('DOMContentLoaded', () => {
         Fam.cur = {app:'Arc',kind:'neutral',detail:'127.0.0.1',canon:'Arc localhost',t0:now-m};
         J.tf = 30;
       } else {
+        const at = (hour, minute = 0) => {
+          const d = new Date(now); d.setHours(hour, minute, 0, 0); return d.getTime();
+        };
         Fam.history = [
-          {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:now-164*m,t1:now-122*m},
-          {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:now-118*m,t1:now-94*m},
-          {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:now-91*m,t1:now-72*m},
-          {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:now-69*m,t1:now-61*m},
-          {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:now-58*m,t1:now-37*m}
-        ];
+          {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:at(8,10),t1:at(9,20)},
+          {app:'Arc',kind:'neutral',detail:'morning tabs',canon:'Arc research',t0:at(9,30),t1:at(10,15)},
+          {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:at(10,20),t1:at(11,50)},
+          {app:'Mail',kind:'neutral',detail:'inbox',canon:'Mail',t0:at(12,0),t1:at(12,40)},
+          {app:'Figma',kind:'cad',detail:'Woven Day studies',canon:'Woven Day',t0:at(12,45),t1:at(14,30)},
+          {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:at(14,30),t1:at(15,10)},
+          {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:at(15,20),t1:at(17,45)},
+          {app:'Messages',kind:'neutral',detail:'catch up',canon:'Messages',t0:at(18,0),t1:at(18,50)},
+          {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:at(19,0),t1:at(20,10)},
+          {app:'YouTube',kind:'distraction',detail:'Home',canon:'YouTube',t0:at(20,10),t1:at(20,35)}
+        ].map(h => ({...h, t1:Math.min(h.t1, now)})).filter(h => h.t0 < now && h.t1 > h.t0);
         Fam.cur = {app:'VS Code',kind:'code',detail:'Cozy Parchment journal',canon:'Cozy Parchment journal',t0:now-32*m};
         J.tf = 1440;
       }
-      Fam.streakStart = Fam.cur.t0;
+      if (q.get('offline') === '1' && Fam.cur) {
+        Fam.history.push({...Fam.cur, t1:now-5*m});
+        Fam.cur = null;
+      }
+      Fam.streakStart = Fam.cur ? Fam.cur.t0 : null;
       Fam.level = 4; Fam.xp = 180; Fam.focus = 76;
       Fam.resources = {protein:7,iron:4,spellbook:3,fragment:6};
       Fam.renderRes(); Fam.renderXP(); Fam.setFocus(76); Fam.renderStreak();

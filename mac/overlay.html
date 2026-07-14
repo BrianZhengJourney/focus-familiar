@@ -218,6 +218,39 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-strip .deep{ background:#2fae8f; } .j-strip .neut{ background:#3d3a52; } .j-strip .dist{ background:#c14a6a; }
 .j-strip i:hover{ filter:brightness(1.25); }
 .j-strip-cap{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-dim); margin:-7px 0 8px; }
+/* fixed half-hour chapters: the cell is time; its three fills are meaning.
+   App/site identity belongs in the bulletin below, never in this rail. */
+.j-period-summary{ display:flex; align-items:center; gap:8px; margin:1px 0 5px; }
+.j-period-title{ font-family:var(--font-magic); font-size:10.5px; color:var(--ink); white-space:nowrap; }
+.j-period-title b{ font-size:12px; font-weight:600; }
+.j-period-legend{ margin-left:auto; display:flex; align-items:center; gap:7px;
+  color:var(--ink-dim); font-size:8.5px; white-space:nowrap; }
+.j-period-legend span{ display:flex; align-items:center; gap:3px; }
+.j-period-legend i{ width:6px; height:6px; border-radius:50%; display:inline-block; }
+.j-period-legend .deep{ background:#2fae8f; }
+.j-period-legend .neut{ background:#5a5470; }
+.j-period-legend .dist{ background:#c14a6a; }
+.j-period-rail{ --period-count:1; display:grid;
+  grid-template-columns:repeat(var(--period-count),minmax(0,1fr)); gap:5px; }
+.j-period{ position:relative; min-width:0; height:24px; overflow:hidden;
+  border:1px solid #ffffff12; border-radius:8px; background:#ffffff09;
+  box-shadow:inset 0 1px rgba(255,255,255,.04); transition:transform .12s,filter .12s; }
+.j-period:hover{ transform:translateY(-1px); filter:brightness(1.08); }
+.j-period.is-current{ border-color:#2fae8f88; box-shadow:0 0 0 1px #2fae8f1f,inset 0 1px rgba(255,255,255,.1); }
+.j-period.future{ opacity:.28; border-style:dashed; }
+.j-period-track{ position:absolute; inset:3px; display:flex; overflow:hidden;
+  border-radius:5px; background:#ffffff05; }
+.j-period-track i{ display:block; height:100%; flex:0 0 auto; min-width:0; }
+.j-period-track .deep{ background:linear-gradient(90deg,#2fae8f,#58c9aa); }
+.j-period-track .neut{ background:#5a5470; }
+.j-period-track .dist{ background:linear-gradient(90deg,#c14a6a,#d96884); }
+.j-period-rail.many{ gap:2px; }
+.j-period-rail.many .j-period{ height:18px; border-radius:4px; }
+.j-period-rail.many .j-period-track{ inset:1px; border-radius:2.5px; }
+.j-period-rail.many .j-period:nth-child(2n + 1):not(:first-child){ margin-left:1.5px; }
+.j-period-axis{ display:flex; justify-content:space-between; align-items:center;
+  min-height:12px; margin:2px 0 7px; color:var(--ink-dim); font-size:8.5px;
+  font-variant-numeric:tabular-nums; }
 /* time view v3: hero + blocks (fewer words, more shape) */
 .j-hero{ display:flex; gap:8px; align-items:stretch; margin:2px 0 10px; }
 .j-ring{ width:74px; height:74px; flex:none; position:relative; }
@@ -242,7 +275,12 @@ body[data-char="pixel"] .shadow{ display:none; }
   padding:9px 12px 8px; border-left:3px solid #3d3a52; }
 .j-sess.deep{ border-left-color:#2fae8f; }
 .j-sess.dist{ border-left-color:#c14a6a; }
-.j-sess-head{ display:flex; align-items:center; gap:9px; margin-bottom:6px; }
+.j-sess-head{ width:100%; display:flex; align-items:center; gap:9px; margin:0 0 6px;
+  padding:3px; border:0; border-radius:7px; color:inherit; background:transparent;
+  font:inherit; text-align:left; cursor:pointer; -webkit-appearance:none; }
+.j-sess-head:disabled{ cursor:default; }
+.j-sess-head:disabled .chev{ visibility:hidden; }
+.j-sess-head:focus-visible,.j-expand:focus-visible{ outline:2px solid #2fae8f; outline-offset:2px; }
 .j-sess-head .tm{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-dim);
   font-variant-numeric:tabular-nums; flex:none; }
 .j-sess-head .mini{ flex:1; display:flex; height:8px; border-radius:4px; overflow:hidden;
@@ -252,9 +290,12 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-sess-head .mini .deep{ background:#2fae8f; } .j-sess-head .mini .neut{ background:#3d3a52; }
 .j-sess-head .mini .dist{ background:#c14a6a; }
 .j-sess-head .du{ font-family:var(--font-magic); font-size:13px; color:#f4f1ff; flex:none; }
+.j-sess-head .chev{ width:10px; flex:none; color:var(--ink-dim); font-size:10px;
+  transition:transform .18s; }
+.j-sess-head[aria-expanded="true"] .chev{ transform:rotate(180deg); }
 .j-li{ display:flex; align-items:center; gap:8px; padding:3.5px 5px; border-radius:7px; }
 .j-li:hover{ background:#ffffff0d; }
-.j-sess-head:hover{ background:#ffffff08; border-radius:7px; }
+.j-sess-head:not(:disabled):hover{ background:#ffffff08; }
 .j-li .dot{ width:7px; height:7px; border-radius:50%; flex:none; }
 .j-li .dot.deep{ background:#2fae8f; } .j-li .dot.neut{ background:#5a5470; }
 .j-li .dot.dist{ background:#c14a6a; }
@@ -263,7 +304,12 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-li .nm{ flex:1; font-size:12.5px; color:var(--ink); overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
 .j-li .du{ font-size:10.5px; color:var(--ink-dim); flex:none; font-variant-numeric:tabular-nums; }
-.j-li.more{ font-size:10.5px; color:var(--ink-dim); padding-left:15px; }
+.j-expand{ width:100%; display:flex; align-items:center; justify-content:center; gap:5px;
+  margin:4px 0 0; padding:6px 8px 2px; border:0; border-top:1px dashed #ffffff14;
+  background:transparent; color:var(--ink-dim); font:inherit; font-size:10.5px; cursor:pointer; }
+.j-expand:hover{ color:var(--ink); }
+.j-expand .arr{ font-size:9px; transition:transform .18s; }
+.j-expand[aria-expanded="true"] .arr{ transform:rotate(180deg); }
 
 /* quest view */
 .q-wrap{ padding:2px 0; }
@@ -316,9 +362,10 @@ body[data-char="pixel"] .shadow{ display:none; }
 .journal .j-close,.journal .j-now .jn-sub,.journal .j-empty,.journal .j-strip-cap,
 .journal .j-legend,.journal .j-total,.journal .j-item .min,.journal .j-li .du,
 .journal .j-sess-head .tm,.journal .q-sub,.journal .wk-day,.journal .wk-dayline .n,
-.journal .wk-dayline .v{ color:var(--ink-dim); }
+.journal .wk-dayline .v,.journal .j-period-axis,.journal .j-period-legend,
+.journal .j-sess-head .chev,.journal .j-expand{ color:var(--ink-dim); }
 .journal .j-now,.journal .j-now b,.journal .j-li .nm,.journal .j-item,
-.journal .wk-row-total{ color:var(--ink); }
+.journal .wk-row-total,.journal .j-period-title{ color:var(--ink); }
 .journal .j-now .pct-good{ color:#167c67; }
 .journal .j-now .pct-mid{ color:#9a641e; }
 .journal .j-now .pct-bad{ color:#aa3e5c; }
@@ -332,13 +379,23 @@ body[data-char="pixel"] .shadow{ display:none; }
 .journal .q-title{ color:#3a2417; }
 .journal .j-tile,.journal .j-sess{ background:#fffaf0b8; border-color:#dfc89a; }
 .journal .j-sess{ box-shadow:0 2px 7px rgba(93,61,31,.06); }
-.journal .j-sess-head:hover,.journal .j-li:hover{ background:#ead8b651; }
+.journal .j-sess-head:not(:disabled):hover,.journal .j-li:hover{ background:#ead8b651; }
 .journal .j-sess-head .mini,.journal .j-strip,.journal .j-bar,.journal .wk-bar{
   background:#c9ae7c33;
 }
-.journal .j-bar .neut,.journal .j-strip .neut,.journal .j-sess-head .mini .neut{
+.journal .j-bar .neut,.journal .j-strip .neut,.journal .j-sess-head .mini .neut,
+.journal .j-period-track .neut{
   background:#9f907a;
 }
+.journal .j-period{ background:#ead9b84a; border-color:#d9bd895e;
+  box-shadow:inset 0 1px rgba(255,255,255,.5); }
+.journal .j-period-track{ background:#c9ae7c24; }
+.journal .j-period.is-current{ border-color:#2fae8fa8;
+  box-shadow:0 0 0 1px #2fae8f24,inset 0 1px rgba(255,255,255,.65); }
+.journal .j-period.future{ background:#f5e8cd5c; border-color:#b8915c66; }
+.journal .j-period-legend .neut{ background:#9f907a; }
+.journal .j-expand{ border-color:#a77b4238; }
+.journal .j-expand:hover{ color:#3a2417; background:#ead8b62e; }
 .journal .j-li .dot.neut{ background:#9f907a; }
 .journal .j-note,.journal .j-sh,.journal .q-node.main .q-title{ color:#8a5a33; }
 .journal .j-sh.bad,.journal .q-node.bad .q-title{ color:#a23d5b; }
@@ -1322,11 +1379,25 @@ const J_VIEWS = [ { id: 'quest', label: '⚔️ quest' }, { id: 'week', label: '
 const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
                    built:   { icon: '🛠️', title: 'built',      cls: '' },
                    distracted: { icon: '🕳️', title: 'distracted', cls: 'bad' } };
-const J = { tf: 30, view: 'time', open: { read: false, built: false, distracted: false } };
+const J = { tf: 30, view: 'time', openSess: null,
+  open: { read: false, built: false, distracted: false } };
 
-function jSetTf(min){ J.view = 'time'; J.tf = min; renderJournal(); }
-function jExpandSess(id){ J.openSess = id; renderJournal(); }
-function jSetView(v){ J.view = v; renderJournal(); }
+function jSetTf(min){ J.view = 'time'; J.tf = min; J.openSess = null; renderJournal(); }
+function jToggleSess(id){
+  const body = document.getElementById('journalBody');
+  const scrollTop = body ? body.scrollTop : 0;
+  J.openSess = J.openSess === id ? null : id;
+  renderJournal();
+  // The journal body is rerendered wholesale. Put the reader back at the
+  // same place so expanding a long bulletin feels like a disclosure, not a jump.
+  requestAnimationFrame(() => { if (body) body.scrollTop = scrollTop; });
+}
+function jSessKey(e, id){
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  jToggleSess(id);
+}
+function jSetView(v){ J.view = v; J.openSess = null; renderJournal(); }
 function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
 
 function renderTabs(){
@@ -1372,7 +1443,7 @@ function mergeSegments(w0, now, labels){
     const key = canonKey(s) + '|' + (DEEP_KINDS.has(s.kind) ? 'deep' : s.kind);
     const last = merged[merged.length - 1];
     if (last && last.key === key && s.a - last.b < 120000) last.b = Math.max(last.b, s.b);
-    else merged.push({ a: s.a, b: s.b, key, kind: s.kind, url: s.url || '',
+    else merged.push({ a: s.a, b: s.b, sourceT0: s.t0, key, kind: s.kind, url: s.url || '',
                        label: (labels && labels[canonKey(s)]) || normTitle(s.detail) || s.app });
   }
   return merged;
@@ -1442,9 +1513,10 @@ function buildSessions(merged){
     const last = sessions[sessions.length - 1];
     if (last && m.a - last.b <= 10 * 60000){
       last.b = Math.max(last.b, m.b);
+      last.anchor = Math.min(last.anchor, m.sourceT0 || m.a);
       last.items.push(m);
     } else {
-      sessions.push({ a: m.a, b: m.b, items: [m] });
+      sessions.push({ a: m.a, b: m.b, anchor: m.sourceT0 || m.a, items: [m] });
     }
   }
   return sessions;
@@ -1452,6 +1524,84 @@ function buildSessions(merged){
 
 function kindCls(kind){
   return DEEP_KINDS.has(kind) ? 'deep' : kind === 'distraction' ? 'dist' : 'neut';
+}
+
+const J_PERIOD_MS = 30 * 60000;
+
+function fmtRailDur(ms){
+  if (ms <= 0) return '0m';
+  const m = Math.round(ms / 60000);
+  return m ? `${m}m` : '<1m';
+}
+
+/* A period is the stable visual unit. We aggregate raw checkpoints directly
+   (rather than merged app segments) so a two-minute gap is still visible as
+   blank parchment. Today includes ghost periods through midnight, making the
+   chain's rhythm stable instead of growing unevenly one app switch at a time. */
+function buildPeriodRail(w0, now, timeframe){
+  let railEnd = now;
+  if (timeframe >= 1440){
+    const dayEnd = new Date(w0);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    railEnd = dayEnd.getTime();
+  }
+  const count = Math.max(1, Math.ceil((railEnd - w0) / J_PERIOD_MS));
+  const entries = windowEntries().map(h => ({
+    kind: h.kind,
+    a: Math.max(h.t0, w0),
+    b: Math.min(h.t1, now)
+  })).filter(h => h.b > h.a);
+
+  const periods = [];
+  for (let i = 0; i < count; i++){
+    const a = w0 + i * J_PERIOD_MS;
+    const b = Math.min(a + J_PERIOD_MS, railEnd);
+    const liveEnd = Math.min(b, now);
+    const elapsed = Math.max(0, Math.min(J_PERIOD_MS, liveEnd - a));
+    const ms = { deep: 0, neut: 0, dist: 0 };
+    if (elapsed > 0){
+      for (const h of entries){
+        const overlap = Math.min(h.b, liveEnd) - Math.max(h.a, a);
+        if (overlap > 0) ms[kindCls(h.kind)] += overlap;
+      }
+      // Imported/replayed history can overlap. Preserve its mix but never let
+      // a 30-minute chapter paint more than the time that has actually elapsed.
+      const raw = ms.deep + ms.neut + ms.dist;
+      if (raw > elapsed){
+        const scale = elapsed / raw;
+        ms.deep *= scale; ms.neut *= scale; ms.dist *= scale;
+      }
+    }
+    const tracked = ms.deep + ms.neut + ms.dist;
+    const away = Math.max(0, elapsed - tracked);
+    const future = a >= now;
+    const current = timeframe < 1440 ? i === count - 1 : a <= now && now < b;
+    const tip = future
+      ? `${fmtClock(a)}–${fmtClock(b)} · upcoming`
+      : `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(ms.deep)} deep · ` +
+        `${fmtRailDur(ms.neut)} neutral · ${fmtRailDur(ms.dist)} pit` +
+        (away >= 30000 ? ` · ${fmtRailDur(away)} away` : '');
+    const fill = ['deep', 'neut', 'dist'].map(k => {
+      const pct = Math.max(0, Math.min(100, 100 * ms[k] / J_PERIOD_MS));
+      return pct > .01 ? `<i class="${k}" style="width:${pct.toFixed(2)}%"></i>` : '';
+    }).join('');
+    periods.push(`<div class="j-period${future ? ' future' : ''}${current ? ' is-current' : ''}"
+      role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
+      <span class="j-period-track">${fill}</span></div>`);
+  }
+
+  const axis = timeframe >= 1440
+    ? '<div class="j-period-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>'
+    : `<div class="j-period-axis"><span>${fmtClock(w0)}</span>` +
+      (count > 1 ? `<span>${fmtClock(w0 + J_PERIOD_MS)}</span>` : '') + '<span>now</span></div>';
+  return `<div class="j-period-summary">
+      <span class="j-period-title"><b>30m</b> periods</span>
+      <span class="j-period-legend" aria-label="period colors">
+        <span><i class="deep"></i>deep</span><span><i class="neut"></i>neutral</span><span><i class="dist"></i>pit</span>
+      </span>
+    </div>
+    <div class="j-period-rail${count > 8 ? ' many' : ''}" style="--period-count:${count}"
+      onmousemove="stripTip(event)" onmouseleave="stripTip(null)">${periods.join('')}</div>${axis}`;
 }
 
 function renderSessions(merged){
@@ -1471,9 +1621,13 @@ function renderSessions(merged){
       }
       const total = deep + dist + neut || 1;
       const rows = Object.values(agg).sort((a, b) => b.ms - a.ms);
-      const sessId = 's' + sess.a;
+      // sourceT0 is not clipped by the rolling window, unlike sess.a. Using it
+      // keeps this key stable across the click -> rerender cycle.
+      const sessId = 's' + sess.anchor;
       const expanded = J.openSess === sessId;
       const shown = expanded ? rows : rows.slice(0, 4);
+      const canExpand = rows.length > 4;
+      const rowsId = 'jr-' + sessId;
       const domCls = deep >= total * 0.5 ? 'deep' : dist >= total * 0.4 ? 'dist' : '';
       const mini = ['deep', 'neut', 'dist'].map((k, i) => {
         const v = [deep, neut, dist][i];
@@ -1482,26 +1636,32 @@ function renderSessions(merged){
       const headTip = `${fmtClock(sess.a)}–${fmtClock(sess.b)} · ` +
         `${Math.round(100 * deep / total)}% deep` + (dist > 60000 ? ` · ${fmtDur(dist)} in the pit` : '');
       return `<div class="j-sess ${domCls}">
-        <div class="j-sess-head" data-tip="${esc(headTip)}">
+        <button type="button" class="j-sess-head" data-tip="${esc(headTip)}"
+          aria-expanded="${expanded}" aria-controls="${rowsId}"
+          ${canExpand ? `onclick="jToggleSess('${sessId}')" onkeydown="jSessKey(event,'${sessId}')"` : 'disabled'}>
           <span class="tm">${fmtClock(sess.a)}–${fmtClock(sess.b)}</span>
           <span class="mini">${mini}</span>
           <span class="du">${fmtDur(sess.b - sess.a)}</span>
-        </div>` +
+          <span class="chev" aria-hidden="true">⌄</span>
+        </button><div class="j-sess-rows" id="${rowsId}">` +
         shown.map(g => `<div class="j-li" data-tip="${esc(g.label + ' — ' + fmtDur(g.ms))}">
           <span class="dot ${kindCls(g.kind)}"></span>${iconFor(g)}
           <span class="nm">${esc(g.label)}</span>
           <span class="du">${fmtDur(g.ms)}</span>
-        </div>`).join('') +
-        (rows.length > 4 && !expanded
-          ? `<div class="j-li more" style="cursor:pointer" onclick="jExpandSess('${sessId}')">+ ${rows.length - 4} more</div>`
-          : expanded && rows.length > 4
-          ? `<div class="j-li more" style="cursor:pointer" onclick="jExpandSess(null)">show less</div>`
+        </div>`).join('') + `</div>` +
+        (canExpand
+          ? `<button type="button" class="j-expand" aria-expanded="${expanded}" aria-controls="${rowsId}"
+              onclick="jToggleSess('${sessId}')" onkeydown="jSessKey(event,'${sessId}')">
+              <span>${expanded ? 'show less' : `+ ${rows.length - 4} more`}</span><span class="arr" aria-hidden="true">⌄</span>
+            </button>`
           : '') +
       `</div>`;
     }).join('') + `</div>`;
 }
 
 function renderJournal(){
+  const hoverTip = document.getElementById('stripTip');
+  if (hoverTip) hoverTip.style.opacity = 0;
   renderNow();
   renderTabs();
   if (J.view === 'quest') return renderQuest();
@@ -1542,7 +1702,7 @@ function renderJournal(){
           <div class="j-tile pit"><span class="v">${dist > 30000 ? '\u2212' + fmtDur(dist) : '0m'}</span><span class="k">the pit</span></div>
         </div>
       </div>` +
-      buildStrip(w0, now, labels) +
+      buildPeriodRail(w0, now, J.tf) +
       renderSessions(merged) +
       `<div class="j-note" style="margin-top:8px">${note}</div>`;
   }
@@ -1850,8 +2010,8 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     bridge({ type: 'ctxMenu' });
   });
-  // preview mode in a normal browser. `?preview=journal` seeds a realistic
-  // day so the production panel can be reviewed without running the app.
+  // Preview mode in a normal browser. `journal-dense` is the regression
+  // fixture for a 21-item half hour and the expandable bulletin.
   const q = new URLSearchParams(location.search);
   if (q.has('preview')) {
     document.body.style.background = '#1a1534';
@@ -1859,21 +2019,44 @@ document.addEventListener('DOMContentLoaded', () => {
     if (q.get('state')) Fam.setState(q.get('state'));
     if (q.get('mstate')) Mascot.setState(q.get('mstate'));
     Fam.hud(true);
-    if (q.get('preview') === 'journal') {
+    const journalPreview = q.get('preview');
+    if (journalPreview === 'journal' || journalPreview === 'journal-dense') {
       const now = Date.now(), m = 60000;
-      Fam.history = [
-        {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:now-164*m,t1:now-122*m},
-        {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:now-118*m,t1:now-94*m},
-        {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:now-91*m,t1:now-72*m},
-        {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:now-69*m,t1:now-61*m},
-        {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:now-58*m,t1:now-37*m}
-      ];
-      Fam.cur = {app:'VS Code',kind:'code',detail:'Cozy Parchment journal',canon:'Cozy Parchment journal',t0:now-32*m};
-      Fam.streakStart = now-32*m;
+      if (journalPreview === 'journal-dense') {
+        const dense = [
+          ['WeChat','neutral',5], ['Mail','neutral',2], ['Finder','neutral',1],
+          ['Slack','neutral',1], ['Calendar','neutral',1], ['Notes','neutral',1],
+          ['Spotify','neutral',1], ['Messages','neutral',1], ['Preview','neutral',1],
+          ['Figma','cad',2], ['Terminal','term',1], ['X','distraction',1],
+          ['YouTube','distraction',1], ['VS Code','code',2], ['Notion','neutral',1],
+          ['Linear','neutral',1], ['GitHub','code',1], ['Safari','neutral',1],
+          ['System Settings','neutral',1], ['Raycast','neutral',1]
+        ];
+        let cursor = now - 29 * m;
+        Fam.history = dense.map(([app, kind, minutes]) => {
+          const entry = { app, kind, detail: `${app} activity`, canon: app,
+            t0: cursor, t1: cursor + minutes * m };
+          cursor = entry.t1;
+          return entry;
+        });
+        Fam.cur = {app:'Arc',kind:'neutral',detail:'127.0.0.1',canon:'Arc localhost',t0:now-m};
+        J.tf = 30;
+      } else {
+        Fam.history = [
+          {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:now-164*m,t1:now-122*m},
+          {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:now-118*m,t1:now-94*m},
+          {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:now-91*m,t1:now-72*m},
+          {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:now-69*m,t1:now-61*m},
+          {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:now-58*m,t1:now-37*m}
+        ];
+        Fam.cur = {app:'VS Code',kind:'code',detail:'Cozy Parchment journal',canon:'Cozy Parchment journal',t0:now-32*m};
+        J.tf = 1440;
+      }
+      Fam.streakStart = Fam.cur.t0;
       Fam.level = 4; Fam.xp = 180; Fam.focus = 76;
       Fam.resources = {protein:7,iron:4,spellbook:3,fragment:6};
       Fam.renderRes(); Fam.renderXP(); Fam.setFocus(76); Fam.renderStreak();
-      J.tf = 1440; J.view = 'time';
+      J.view = 'time'; J.openSess = null;
       document.getElementById('journal').classList.add('on');
       document.getElementById('stage').classList.add('journal-open');
       Mascot.setState(mascotStateFor(Fam.state));

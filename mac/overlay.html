@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>Focus Familiar overlay</title>
+<title>Mimo 米墨</title>
 <style>
 /* ── transparent overlay: the creature lives bottom-right ── */
 :root{
@@ -488,7 +488,7 @@ body[data-char="pixel"] .shadow{ display:none; }
 <body data-state="idle" data-fam-face="open">
 
 <div class="stage" id="stage">
-  <div class="status-badge" id="statusBadge"><span class="sb-dot"></span><span id="statusText">😐 idle</span></div>
+  <div class="status-badge" id="statusBadge"><span class="sb-dot"></span><span id="statusText">😐 发发呆</span></div>
   <div class="hud" id="hud">
     <div class="hud-row" id="resRow"></div>
     <div class="hud-row">
@@ -498,7 +498,7 @@ body[data-char="pixel"] .shadow{ display:none; }
     </div>
   </div>
   <div class="pomo-wrap" id="pomoWrap">
-    <span class="chip pomo" onclick="famPomodoro(0)" title="click to call off the hunt">🏹 <b id="pomoTime">25:00</b><span class="pomobar"><span id="pomoFill"></span></span></span>
+    <span class="chip pomo" id="pomoChip" onclick="famPomodoro(0)" title="结束这次冒险">🏹 <b id="pomoTime">25:00</b><span class="pomobar"><span id="pomoFill"></span></span></span>
   </div>
   <div class="toast" id="toast"></div>
   <div class="bubble" id="bubble">
@@ -507,9 +507,9 @@ body[data-char="pixel"] .shadow{ display:none; }
   </div>
   <div class="journal" id="journal">
     <div class="j-head">
-      <span>✦ today's journal</span>
+      <span id="journalTitle">✦ 今日手记</span>
       <span style="flex:1"></span>
-      <button class="j-close" title="open as a page" onclick="bridge({type:'openPage'})">&#8599;</button>
+      <button class="j-close" id="openPageButton" title="在新页面打开" onclick="bridge({type:'openPage'})">&#8599;</button>
       <button class="j-close" onclick="famToggleJournal()">✕</button>
     </div>
     <div class="j-now" id="journalNow"></div>
@@ -521,6 +521,26 @@ body[data-char="pixel"] .shadow{ display:none; }
 </div>
 
 <script>
+let LANG = 'zh';
+const tx = (zh, en) => LANG === 'zh' ? zh : en;
+function famSetLanguage(lang){
+  LANG = lang === 'en' ? 'en' : 'zh';
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.title = LANG === 'zh' ? 'Mimo 米墨' : 'Mimo';
+  const title = document.getElementById('journalTitle');
+  if (title) title.textContent = tx('✦ 今日手记', "✦ today's journal");
+  const page = document.getElementById('openPageButton');
+  if (page) page.title = tx('在新页面打开', 'open as a page');
+  const pomo = document.getElementById('pomoChip');
+  if (pomo) pomo.title = tx('结束这次冒险', 'call off this quest');
+  if (typeof Fam !== 'undefined') {
+    const st = statusCopy(Fam.state);
+    const status = document.getElementById('statusText');
+    if (status) status.textContent = st.label;
+    if (document.getElementById('journal')?.classList.contains('on')) renderJournal();
+  }
+}
+
 /* ═══ PixelMascot family — ported from design_handoff_focus_familiar 2 ═══
    One generic grid renderer + per-mascot data packs (README implementation
    note). PAL/BASE/EYES/MOUTHS/CFG and all geometry are verbatim from
@@ -1102,22 +1122,12 @@ const Fam = {
     this.applyLevel();
   },
 
-  STATUS: {
-    idle:     { cls: '',         label: '😐 idle' },
-    focused:  { cls: 'focus',    label: '🎯 focusing' },
-    scholar:  { cls: 'focus',    label: '📖 focusing — reading' },
-    evolved:  { cls: 'focus',    label: '✦ focusing — on a streak' },
-    dizzy:    { cls: 'distract', label: '🌀 getting distracted' },
-    poisoned: { cls: 'distract', label: '☠️ distracted' },
-    ghost:    { cls: 'distract', label: '👻 very distracted' },
-  },
-
   setState(s){
     if (this.state === s) return;
     this.state = s;
     document.body.dataset.state = s;
     Mascot.setState(mascotStateFor(s));
-    const st = this.STATUS[s] || this.STATUS.idle;
+    const st = statusCopy(s);
     document.getElementById('statusBadge').className =
       'status-badge' + (st.cls ? ' ' + st.cls : '');
     document.getElementById('statusText').textContent = st.label;
@@ -1205,13 +1215,25 @@ const Fam = {
     ring.classList.remove('burst'); void ring.offsetWidth; ring.classList.add('burst');
     this.setState('evolved');
     this.sparkle(9);
-    toast(`✦ evolved — lv.${this.level} ✦`);
+    toast(tx(`✦ 长大了——lv.${this.level} ✦`, `✦ evolved — lv.${this.level} ✦`));
     bridge({ type: 'levelUp', level: this.level });   // Swift: victory walk + optional chime
     setTimeout(() => { if (this.state === 'evolved') this.setState('focused'); }, 8000);
   },
 
   hud(on){ document.getElementById('hud').classList.toggle('on', on); },
 };
+
+function statusCopy(state){
+  return ({
+    idle:     { cls: '',         label: tx('😐 发发呆', '😐 idle') },
+    focused:  { cls: 'focus',    label: tx('🎯 正在成长', '🎯 growing') },
+    scholar:  { cls: 'focus',    label: tx('📖 正在成长 · 阅读', '📖 growing · reading') },
+    evolved:  { cls: 'focus',    label: tx('✦ 连续成长中', '✦ growing · on a streak') },
+    dizzy:    { cls: 'distract', label: tx('🌀 有点分心', '🌀 getting distracted') },
+    poisoned: { cls: 'distract', label: tx('☠️ 掉进分心坑', '☠️ distracted') },
+    ghost:    { cls: 'distract', label: tx('👻 飘得很远', '👻 very distracted') },
+  })[state] || { cls:'', label:tx('😐 发发呆','😐 idle') };
+}
 
 let _toastT;
 function toast(msg){
@@ -1234,12 +1256,12 @@ setInterval(() => {
     if (Fam.deepSec > 0 && Fam.deepSec % 45 === 0) Fam.gain(RESOURCE_FOR(kind));
     if (++Fam._deepXPsec >= 60) { Fam._deepXPsec = 0; Fam.addXP(1); }   // +1 XP per deep minute
     const m = Fam.streakMin();
-    if (m === 25 && !Fam._t25) { Fam._t25 = true; toast('🔥 25-minute streak · +25 XP'); Fam.addXP(25); sound('streak'); }
+    if (m === 25 && !Fam._t25) { Fam._t25 = true; toast(tx('🔥 连续成长 25 分钟 · +25 XP','🔥 25-minute growth streak · +25 XP')); Fam.addXP(25); sound('streak'); }
   } else if (kind === 'distraction') {
     Fam.distractSec++; Fam.deepSec = 0; Fam.streakStart = null; Fam._t25 = false;
     Fam.setFocus(Fam.focus - 0.5);
     if (Fam.distractSec === 8)  Fam.setState('dizzy');
-    if (Fam.distractSec === 45) { Fam.setState('poisoned'); toast('☠️ poisoned by the feed'); sound('poison'); }
+    if (Fam.distractSec === 45) { Fam.setState('poisoned'); toast(tx('☠️ 被信息流毒到了','☠️ poisoned by the feed')); sound('poison'); }
     if (Fam.distractSec === 120) Fam.setState('ghost');
   } else {
     // neutral: corruption wears off, then settle to idle
@@ -1294,7 +1316,7 @@ function famSetCharacter(id){ Fam.setCharacter(id); toast(MASCOTS[Fam.char].name
 function famSetPrototypePet(spec){
   MASCOTS.prototype = prototypeMascotPack(spec);
   Fam.setCharacter('prototype', false);
-  toast(`${MASCOTS.prototype.name} joined you ✦`);
+  toast(tx(`${MASCOTS.prototype.name} 住进桌面了 ✦`, `${MASCOTS.prototype.name} joined you ✦`));
   Fam.sparkle(9);
 }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
@@ -1322,7 +1344,7 @@ let proudUntil = 0;
 function famProud(label){
   proudUntil = Date.now() + 5000;
   Mascot.setState('proud');
-  toast(label || '🎉 shipped! +10 XP');
+  toast(label || tx('🎉 做出来了！+10 XP','🎉 shipped! +10 XP'));
   Fam.addXP(10);
   sound('streak');
   setTimeout(() => { proudUntil = 0; Mascot.setState(mascotStateFor(Fam.state)); }, 5200);
@@ -1335,7 +1357,7 @@ function famEraseSince(ts){
   if (Fam.cur && Fam.cur.t0 > ts) Fam.cur = null;
   else if (Fam.cur) Fam.cur.t0 = Math.max(Fam.cur.t0, 0);
   Fam.week = (Fam.week || []).filter(h => h.t1 <= ts);
-  toast('🫥 forgotten.');
+  toast(tx('🫥 已经忘掉了。','🫥 forgotten.'));
 }
 
 /* called by Swift on launch with today's persisted entries (JSONL replay) */
@@ -1441,13 +1463,13 @@ function famToggleContextLegacy(){
   const s25 = windowStats(25), s60 = windowStats(60);
 
   const curLine = Fam.cur
-    ? `<div class="bb-line">You're in <b>${Fam.cur.app}</b> — ${fmt(now - Fam.cur.t0)} so far.</div>` : '';
+    ? `<div class="bb-line">${tx(`你在 <b>${Fam.cur.app}</b>——已经 ${fmt(now - Fam.cur.t0)}。`, `You're in <b>${Fam.cur.app}</b> — ${fmt(now - Fam.cur.t0)} so far.`)}</div>` : '';
 
   const col = (label, s) => s.total < 30000
-    ? `<div class="bb-col"><div class="k">${label}</div><div class="sub" style="margin-top:6px">not enough data yet</div></div>`
+    ? `<div class="bb-col"><div class="k">${label}</div><div class="sub" style="margin-top:6px">${tx('数据还不够','not enough data yet')}</div></div>`
     : `<div class="bb-col"><div class="k">${label}</div>
        <div class="pct ${pctCls(s.pct)}">${s.pct}%</div>
-       <div class="sub">${s.deepMin}m deep work</div></div>`;
+       <div class="sub">${tx(`成长 ${s.deepMin} 分钟`, `${s.deepMin}m growth`)}</div></div>`;
 
   // 📖 read: deep reading entries, deduped by canonical key so the same
   // paper under different titles collapses to its best-known name
@@ -1471,15 +1493,15 @@ function famToggleContextLegacy(){
 
   const streak = Fam.streakMin();
   document.getElementById('bubbleInner').innerHTML = `
-    <div class="bb-head">✦ here's your thread</div>
+    <div class="bb-head">${tx('✦ 这是你刚才留下的线','✦ here is your thread')}</div>
     ${curLine}
-    <div class="bb-cols">${col('LAST 25 MIN', s25)}${col('LAST HOUR', s60)}</div>
+    <div class="bb-cols">${col(tx('过去 25 分钟','LAST 25 MIN'), s25)}${col(tx('过去一小时','LAST HOUR'), s60)}</div>
     ${buildStrip(now - 3600000, now, labels, { minLabelPct: 18 })}
-    ${read ? `<div class="bb-sec"><div class="sh">READ</div>${read}</div>` : ''}
-    ${built ? `<div class="bb-sec"><div class="sh">BUILT</div>${built}</div>` : ''}
-    ${!read && !built ? '<div class="bb-line bb-dim">…still getting to know your rhythm. give me a few minutes.</div>' : ''}
-    <div class="bb-line" style="margin-top:7px">${streak > 0 ? `focus streak: <b>${streak}m</b> 🔥` : 'no active streak — feed me.'}</div>
-    <button class="bb-btn" onclick="closeBubble()">ok, back to work</button><button class="bb-btn" onclick="famToggleJournal()">full history ↗</button>`;
+    ${read ? `<div class="bb-sec"><div class="sh">${tx('读过','READ')}</div>${read}</div>` : ''}
+    ${built ? `<div class="bb-sec"><div class="sh">${tx('做过','BUILT')}</div>${built}</div>` : ''}
+    ${!read && !built ? `<div class="bb-line bb-dim">${tx('…我还在熟悉你的节奏。再给我几分钟。','…still getting to know your rhythm. give me a few minutes.')}</div>` : ''}
+    <div class="bb-line" style="margin-top:7px">${streak > 0 ? tx(`连续成长：<b>${streak} 分钟</b> 🔥`,`growth streak: <b>${streak}m</b> 🔥`) : tx('还没有连续成长——喂饱我吧。','no active streak — feed me.')}</div>
+    <button class="bb-btn" onclick="closeBubble()">${tx('好，继续','ok, back to work')}</button><button class="bb-btn" onclick="famToggleJournal()">${tx('完整手记 ↗','full journal ↗')}</button>`;
   document.getElementById('journal').classList.remove('on');
   b.classList.add('on');
   bridge({ type: 'bubble', on: true });
@@ -1487,14 +1509,11 @@ function famToggleContextLegacy(){
 
 /* ── journal render + toggle: time views, quest story, week heatmap ── */
 const J_TIMEFRAMES = [
-  { label: '30 min', min: 30 },
-  { label: '1 h',    min: 60 },
-  { label: 'today',  min: 1440 },
+  { zh: '30 分钟', en: '30 min', min: 30 },
+  { zh: '1 小时',  en: '1 h',    min: 60 },
+  { zh: '今天',    en: 'today',  min: 1440 },
 ];
-const J_VIEWS = [ { id: 'quest', label: '⚔️ quest' }, { id: 'week', label: '▦ week' } ];
-const SEC_META = { read:    { icon: '📖', title: 'read',       cls: '' },
-                   built:   { icon: '🛠️', title: 'built',      cls: '' },
-                   distracted: { icon: '🕳️', title: 'distracted', cls: 'bad' } };
+const J_VIEWS = [ { id: 'quest', zh: '⚔️ 冒险', en: '⚔️ quest' }, { id: 'week', zh: '▦ 本周', en: '▦ week' } ];
 const J = { tf: 30, view: 'time', openSess: null,
   open: { read: false, built: false, distracted: false } };
 
@@ -1519,9 +1538,9 @@ function jToggleSec(s){ J.open[s] = !J.open[s]; renderJournal(); }
 function renderTabs(){
   document.getElementById('journalTabs').innerHTML =
     J_TIMEFRAMES.map(t =>
-      `<button class="j-tab ${J.view === 'time' && t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${t.label}</button>`).join('') +
+      `<button class="j-tab ${J.view === 'time' && t.min === J.tf ? 'cur' : ''}" onclick="jSetTf(${t.min})">${tx(t.zh,t.en)}</button>`).join('') +
     J_VIEWS.map(v =>
-      `<button class="j-tab ${J.view === v.id ? 'cur' : ''}" onclick="jSetView('${v.id}')">${v.label}</button>`).join('');
+      `<button class="j-tab ${J.view === v.id ? 'cur' : ''}" onclick="jSetView('${v.id}')">${tx(v.zh,v.en)}</button>`).join('');
 }
 
 /* ── segment strip: merged per-activity bars with hover tooltips.
@@ -1577,7 +1596,7 @@ function buildStrip(w0, now, labels, { minLabelPct = 12 } = {}){
     return `<i class="${cls}" style="width:${pct.toFixed(2)}%" data-tip="${tip.replace(/"/g, '&quot;')}">${inline}</i>`;
   }).join('');
   return `<div class="j-strip" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">${inner}</div>
-          <div class="j-strip-cap"><span>${fmtClock(merged[0].a)}</span><span>now</span></div>`;
+          <div class="j-strip-cap"><span>${fmtClock(merged[0].a)}</span><span>${tx('现在','now')}</span></div>`;
 }
 
 function stripTip(e){
@@ -1600,10 +1619,10 @@ function stripTip(e){
 }
 
 const J_NOTES = [
-  { min: 70, note: 'an honest stretch of work. i am well fed. ✦' },
-  { min: 40, note: 'decent — the flame flickers, but holds.' },
-  { min: 15, note: 'we wobble. close the feed and feed me instead.' },
-  { min: 0,  note: 'we do not speak of this window. 🕳️' },
+  { min: 70, zh:'今天长得很稳，我吃饱了。✦', en:'an honest stretch of growth. i am well fed. ✦' },
+  { min: 40, zh:'不错——火苗晃了晃，但还亮着。', en:'decent — the flame flickers, but holds.' },
+  { min: 15, zh:'有点摇晃。关掉信息流，换你来喂我。', en:'we wobble. close the feed and feed me instead.' },
+  { min: 0,  zh:'这一段，我们就不提了。🕳️', en:'we do not speak of this window. 🕳️' },
 ];
 
 /* the old thread bubble, folded into the journal as a live header */
@@ -1614,11 +1633,11 @@ function renderNow(){
   const s25 = windowStats(25), s60 = windowStats(60);
   const pc = p => `<span class="${p >= 65 ? 'pct-good' : p >= 35 ? 'pct-mid' : 'pct-bad'}">${p}%</span>`;
   const cur = Fam.cur
-    ? `You're in <b>${Fam.cur.app}</b> — ${fmtDur(now - Fam.cur.t0)}`
-    : 'away';
+    ? tx(`你在 <b>${Fam.cur.app}</b>——${fmtDur(now - Fam.cur.t0)}`, `You're in <b>${Fam.cur.app}</b> — ${fmtDur(now - Fam.cur.t0)}`)
+    : tx('暂时离开','away');
   const streak = Fam.streakMin();
-  el.innerHTML = `<div>${cur}${streak > 0 ? ` · streak <b>${streak}m</b> 🔥` : ''} · ✦ lv.${Fam.level}</div>` +
-    `<div class="jn-sub">last 25 min ${pc(s25.pct)} deep · last hour ${pc(s60.pct)} deep</div>`;
+  el.innerHTML = `<div>${cur}${streak > 0 ? tx(` · 连续成长 <b>${streak} 分钟</b> 🔥`,` · streak <b>${streak}m</b> 🔥`) : ''} · ✦ lv.${Fam.level}</div>` +
+    `<div class="jn-sub">${tx(`过去 25 分钟 ${pc(s25.pct)} 成长 · 过去一小时 ${pc(s60.pct)} 成长`,`last 25 min ${pc(s25.pct)} growth · last hour ${pc(s60.pct)} growth`)}</div>`;
 }
 
 /* cluster merged segments into sessions (gaps > 10 min split), then
@@ -1686,10 +1705,10 @@ function periodCellMarkup(a, b, now, entries, forceCurrent = false, allowCurrent
   const future = a >= now;
   const current = forceCurrent || (allowCurrent && a <= now && now < b);
   const tip = future
-    ? `${fmtClock(a)}–${fmtClock(b)} · upcoming`
-    : `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} deep · ` +
-      `${fmtRailDur(data.ms.neut)} neutral · ${fmtRailDur(data.ms.dist)} pit` +
-      (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} away` : '');
+    ? `${fmtClock(a)}–${fmtClock(b)} · ${tx('还没发生','upcoming')}`
+    : `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} ${tx('成长','growth')} · ` +
+      `${fmtRailDur(data.ms.neut)} ${tx('日常','everyday')} · ${fmtRailDur(data.ms.dist)} ${tx('分心','distracted')}` +
+      (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} ${tx('离开','away')}` : '');
   const fill = ['deep', 'neut', 'dist'].map(k => {
     const pct = Math.max(0, Math.min(100, 100 * data.ms[k] / J_PERIOD_MS));
     return pct > .01 ? `<i class="${k}" style="width:${pct.toFixed(2)}%"></i>` : '';
@@ -1717,10 +1736,10 @@ function weaveBlendColor(from, to, amount){
 function weaveCssColor(rgb){ return `rgb(${rgb.join(',')})`; }
 
 function weavePeriodTip(a, b, now, data){
-  if (a >= now) return `${fmtClock(a)}–${fmtClock(b)} · upcoming`;
-  return `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} deep · ` +
-    `${fmtRailDur(data.ms.neut)} neutral · ${fmtRailDur(data.ms.dist)} pit` +
-    (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} away` : '');
+  if (a >= now) return `${fmtClock(a)}–${fmtClock(b)} · ${tx('还没发生','upcoming')}`;
+  return `${fmtClock(a)}–${fmtClock(b)} · ${fmtRailDur(data.ms.deep)} ${tx('成长','growth')} · ` +
+    `${fmtRailDur(data.ms.neut)} ${tx('日常','everyday')} · ${fmtRailDur(data.ms.dist)} ${tx('分心','distracted')}` +
+    (data.away >= 30000 ? ` · ${fmtRailDur(data.away)} ${tx('离开','away')}` : '');
 }
 
 function buildWovenDay(w0, now){
@@ -1742,12 +1761,12 @@ function buildWovenDay(w0, now){
       : Math.ceil(Math.max(last, dusk.getTime() + 1) / J_PERIOD_MS) * J_PERIOD_MS;
   const eveningEnd = Math.min(dayEnd.getTime(), Math.max(dusk.getTime() + J_PERIOD_MS, eveningVisualEnd));
   const phases = [
-    { id:'morning', icon:'☼', name:'morning thread', a:morningStart, b:noon.getTime(),
-      range:firstBeforeNoon ? `${fmtClock(boot)} → noon` : 'quiet → noon' },
-    { id:'daylight', icon:'☀', name:'daylight weave', a:noon.getTime(), b:dusk.getTime(),
-      range:'noon → 18:00' },
-    { id:'afterglow', icon:'☾', name:'afterglow', a:dusk.getTime(), b:eveningEnd,
-      range:`18:00 → ${now < dusk.getTime() ? 'later' : active ? 'now' : last > dusk.getTime() ? fmtClock(last) : 'quiet'}` }
+    { id:'morning', icon:'☼', name:tx('晨线','morning thread'), a:morningStart, b:noon.getTime(),
+      range:firstBeforeNoon ? `${fmtClock(boot)} → ${tx('中午','noon')}` : tx('安静 → 中午','quiet → noon') },
+    { id:'daylight', icon:'☀', name:tx('日织','daylight weave'), a:noon.getTime(), b:dusk.getTime(),
+      range:tx('中午 → 18:00','noon → 18:00') },
+    { id:'afterglow', icon:'☾', name:tx('暮光','afterglow'), a:dusk.getTime(), b:eveningEnd,
+      range:`18:00 → ${now < dusk.getTime() ? tx('稍后','later') : active ? tx('现在','now') : last > dusk.getTime() ? fmtClock(last) : tx('安静','quiet')}` }
   ];
   phases.forEach(phase => {
     phase.count = Math.max(1, Math.ceil((phase.b - phase.a) / J_PERIOD_MS));
@@ -1808,11 +1827,11 @@ function buildPeriodRail(w0, now, timeframe){
   }
 
   const axis = `<div class="j-period-axis"><span>${fmtClock(w0)}</span>` +
-    (count > 1 ? `<span>${fmtClock(w0 + J_PERIOD_MS)}</span>` : '') + '<span>now</span></div>';
+    (count > 1 ? `<span>${fmtClock(w0 + J_PERIOD_MS)}</span>` : '') + `<span>${tx('现在','now')}</span></div>`;
   return `<div class="j-period-summary">
-      <span class="j-period-title"><b>30m</b> periods</span>
-      <span class="j-period-legend" aria-label="period colors">
-        <span><i class="deep"></i>deep</span><span><i class="neut"></i>neutral</span><span><i class="dist"></i>pit</span>
+      <span class="j-period-title"><b>30m</b> ${tx('一格','periods')}</span>
+      <span class="j-period-legend" aria-label="${tx('时间颜色','period colors')}">
+        <span><i class="deep"></i>${tx('成长','growth')}</span><span><i class="neut"></i>${tx('日常','everyday')}</span><span><i class="dist"></i>${tx('分心','pit')}</span>
       </span>
     </div>
     <div class="j-period-rail${count > 8 ? ' many' : ''}" style="--period-count:${count}"
@@ -1849,7 +1868,7 @@ function renderSessions(merged){
         return v > 0 ? `<i class="${k}" style="width:${(100 * v / total).toFixed(1)}%"></i>` : '';
       }).join('');
       const headTip = `${fmtClock(sess.a)}–${fmtClock(sess.b)} · ` +
-        `${Math.round(100 * deep / total)}% deep` + (dist > 60000 ? ` · ${fmtDur(dist)} in the pit` : '');
+        `${Math.round(100 * deep / total)}% ${tx('成长','growth')}` + (dist > 60000 ? ` · ${fmtDur(dist)} ${tx('掉进分心坑','in the pit')}` : '');
       return `<div class="j-sess ${domCls}">
         <button type="button" class="j-sess-head" data-tip="${esc(headTip)}"
           aria-expanded="${expanded}" aria-controls="${rowsId}"
@@ -1867,7 +1886,7 @@ function renderSessions(merged){
         (canExpand
           ? `<button type="button" class="j-expand" aria-expanded="${expanded}" aria-controls="${rowsId}"
               onclick="jToggleSess('${sessId}')" onkeydown="jSessKey(event,'${sessId}')">
-              <span>${expanded ? 'show less' : `+ ${rows.length - 4} more`}</span><span class="arr" aria-hidden="true">⌄</span>
+              <span>${expanded ? tx('收起','show less') : tx(`+ 另外 ${rows.length - 4} 项`,`+ ${rows.length - 4} more`)}</span><span class="arr" aria-hidden="true">⌄</span>
             </button>`
           : '') +
       `</div>`;
@@ -1901,7 +1920,8 @@ function renderJournal(){
   if (total > 30000){
     const pct = Math.round(100 * deep / total);
     const R = 30, C = 2 * Math.PI * R;
-    const note = J_NOTES.find(n => pct >= n.min).note;
+    const noteCopy = J_NOTES.find(n => pct >= n.min);
+    const note = tx(noteCopy.zh, noteCopy.en);
     const timeHero = `
       <div class="j-hero">
         <div class="j-ring">
@@ -1910,18 +1930,18 @@ function renderJournal(){
             <circle cx="37" cy="37" r="${R}" fill="none" stroke="#2fae8f" stroke-width="7"
               stroke-linecap="round" stroke-dasharray="${(C * pct / 100).toFixed(1)} ${C.toFixed(1)}"/>
           </svg>
-          <div class="pct"><b>${pct}%</b><span>DEEP</span></div>
+          <div class="pct"><b>${pct}%</b><span>${tx('成长','GROWTH')}</span></div>
         </div>
         <div class="j-tiles">
-          <div class="j-tile deep"><span class="v">${fmtDur(deep)}</span><span class="k">deep work</span></div>
-          <div class="j-tile pit"><span class="v">${dist > 30000 ? '\u2212' + fmtDur(dist) : '0m'}</span><span class="k">the pit</span></div>
+          <div class="j-tile deep"><span class="v">${fmtDur(deep)}</span><span class="k">${tx('成长','growth')}</span></div>
+          <div class="j-tile pit"><span class="v">${dist > 30000 ? '\u2212' + fmtDur(dist) : '0m'}</span><span class="k">${tx('分心坑','the pit')}</span></div>
         </div>
       </div>`;
     const dayHero = `<div class="j-day-summary">
-      <span class="sigil">✦</span><b>${pct}% deep today</b><span class="sep">·</span>
-      <span>${fmtDur(deep)} woven</span><span class="sep">·</span>
-      <span>${dist > 30000 ? `${fmtDur(dist)} frayed` : 'a clean thread'}</span><span class="sep">·</span>
-      <span>${fmtDur(total)} recorded</span>
+      <span class="sigil">✦</span><b>${tx(`今天 ${pct}% 成长`,`${pct}% growth today`)}</b><span class="sep">·</span>
+      <span>${tx(`${fmtDur(deep)} 织入成长`,`${fmtDur(deep)} woven`)}</span><span class="sep">·</span>
+      <span>${dist > 30000 ? tx(`${fmtDur(dist)} 散线`,`${fmtDur(dist)} frayed`) : tx('线织得很干净','a clean thread')}</span><span class="sep">·</span>
+      <span>${tx(`记下 ${fmtDur(total)}`,`${fmtDur(total)} recorded`)}</span>
     </div>`;
     html += (J.tf >= 1440 ? dayHero : timeHero) +
       buildPeriodRail(w0, now, J.tf) +
@@ -1929,8 +1949,7 @@ function renderJournal(){
       `<div class="j-note" style="margin-top:8px">${note}</div>`;
   }
   document.getElementById('journalBody').innerHTML =
-    html || `<div class="j-empty">the pages for this window are blank.<br>
-      go build something, read something, break something —<br>i'll write it down. ✦</div>`;
+    html || `<div class="j-empty">${tx('这一页还是空的。<br>去做点什么、读点什么、拆点什么——<br>我会替你记下来。✦',"the pages for this window are blank.<br>go build something, read something, break something —<br>i'll write it down. ✦")}</div>`;
 }
 
 /* ── quest view: the day retold as an RPG ── */
@@ -1973,20 +1992,21 @@ function renderQuest(){
 
   let html = '';
   if (!entries.length) {
-    html = '<div class="j-empty">the quest log is blank — the adventure hasn\'t started yet. ✦</div>';
+    html = `<div class="j-empty">${tx('冒险还没开始，地图上还是一片空白。✦',"the quest log is blank — the adventure hasn't started yet. ✦")}</div>`;
   } else {
-    html += node('🏰', 'dawn', `first sighted at ${fmtClock(entries[0].a)}`);
-    if (deepG[0]) html += node('⚔️', `MAIN QUEST — ${deepG[0].label}`,
-      `${fmtDur(deepG[0].ms)} of honest work`, 'main');
+    html += node('🏰', tx('启程','dawn'), tx(`${fmtClock(entries[0].a)} 第一次出现`,`first sighted at ${fmtClock(entries[0].a)}`));
+    if (deepG[0]) html += node('⚔️', tx(`主线冒险——${deepG[0].label}`,`MAIN QUEST — ${deepG[0].label}`),
+      tx(`认真成长了 ${fmtDur(deepG[0].ms)}`,`${fmtDur(deepG[0].ms)} of honest growth`), 'main');
     deepG.slice(1, 4).filter(g => g.ms > 8 * 60000).forEach(g =>
-      html += node('🗡️', `side quest — ${g.label}`, fmtDur(g.ms)));
-    if (neut > 5 * 60000) html += node('🧾', 'admin tax', `${fmtDur(neut)} — tolerated, grudgingly`);
-    if (distTotal > 3 * 60000) html += node('🕳️', 'the distraction pit',
+      html += node('🗡️', tx(`支线——${g.label}`,`side quest — ${g.label}`), fmtDur(g.ms)));
+    if (neut > 5 * 60000) html += node('🧾', tx('日常杂事','admin tax'), tx(`${fmtDur(neut)}——勉强接受吧`,`${fmtDur(neut)} — tolerated, grudgingly`));
+    if (distTotal > 3 * 60000) html += node('🕳️', tx('分心坑','the distraction pit'),
       `−${fmtDur(distTotal)} · ` + distG.slice(0, 2).map(g => `${g.label} (${fmtDur(g.ms)})`).join(' · '), 'bad');
     html += node('✦', `lv.${Fam.level} · ${Fam.xp}/${Fam.xpToNext()} XP`,
-      best > 60000 ? `best streak: ${fmtDur(best)} unbroken` : 'no streak worth singing about yet', 'gold');
+      best > 60000 ? tx(`最长连续成长：${fmtDur(best)}`,`best growth streak: ${fmtDur(best)} unbroken`) : tx('还没有值得唱出来的连续成长','no streak worth singing about yet'), 'gold');
     const pct = deepTotal + neut + distTotal > 0 ? Math.round(100 * deepTotal / (deepTotal + neut + distTotal)) : 0;
-    html += `<div class="j-note" style="margin-top:8px">${J_NOTES.find(n => pct >= n.min).note}</div>`;
+    const note = J_NOTES.find(n => pct >= n.min);
+    html += `<div class="j-note" style="margin-top:8px">${tx(note.zh,note.en)}</div>`;
   }
   document.getElementById('journalBody').innerHTML = `<div class="q-wrap">${html}</div>`;
 }
@@ -2023,7 +2043,7 @@ function renderWeek(){
       }
     }
   }
-  const dayName = d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + (d.toDateString() === new Date().toDateString() ? '·' : '');
+  const dayName = d => (LANG === 'zh' ? ['日','一','二','三','四','五','六'] : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'])[d.getDay()] + (d.toDateString() === new Date().toDateString() ? '·' : '');
   let grid = '';
   days.forEach((d, di) => {
     grid += `<div class="wk-day">${dayName(d)}</div>`;
@@ -2032,7 +2052,7 @@ function renderWeek(){
       let style = '';
       if (c.dist > c.deep && c.dist > 3 * 60000) style = `background:rgba(193,74,106,${Math.min(.9, .25 + c.dist / 3600000)})`;
       else if (c.deep > 60000) style = `background:rgba(47,174,143,${Math.min(.95, .2 + c.deep / 3600000)})`;
-      const tip = `${dayName(d)} ${String(hr).padStart(2,'0')}:00 — ${fmtDur(c.deep)} deep${c.dist > 60000 ? ', ' + fmtDur(c.dist) + ' distracted' : ''}`;
+      const tip = `${dayName(d)} ${String(hr).padStart(2,'0')}:00 — ${fmtDur(c.deep)} ${tx('成长','growth')}${c.dist > 60000 ? ', ' + fmtDur(c.dist) + tx(' 分心',' distracted') : ''}`;
       grid += `<div class="wk-cell" style="${style}" data-tip="${c.deep + c.dist > 60000 ? tip : ''}"></div>`;
     }
   });
@@ -2049,9 +2069,9 @@ function renderWeek(){
   });
   document.getElementById('journalBody').innerHTML = `
     <div class="wk-grid" onmousemove="stripTip(event)" onmouseleave="stripTip(null)">${grid}</div>
-    <div class="wk-legend"><span><i style="background:rgba(47,174,143,.7)"></i>deep</span>
-      <span><i style="background:rgba(193,74,106,.6)"></i>distracted</span><span>hours 0–23 →</span></div>
-    <div class="wk-days">${dayLines || '<div class="j-empty">one day of data so far — the map fills in as the week goes.</div>'}</div>`;
+    <div class="wk-legend"><span><i style="background:rgba(47,174,143,.7)"></i>${tx('成长','growth')}</span>
+      <span><i style="background:rgba(193,74,106,.6)"></i>${tx('分心','distracted')}</span><span>${tx('0–23 点 →','hours 0–23 →')}</span></div>
+    <div class="wk-days">${dayLines || `<div class="j-empty">${tx('目前只有一天的数据；这一周会慢慢长出来。','one day of data so far — the map fills in as the week goes.')}</div>`}</div>`;
 }
 
 /* ── pomodoro: the hunt ── */
@@ -2065,7 +2085,7 @@ function famPomodoro(min){
   Pomo.wounded = false;
   document.getElementById('pomoWrap').classList.add('on');
   Pomo.timer = setInterval(pomoTick, 1000);
-  toast(`🏹 the hunt begins — ${min} minutes`);
+  toast(tx(`🏹 冒险开始——${min} 分钟`,`🏹 the quest begins — ${min} minutes`));
   sound('streak');
   pomoTick();
 }
@@ -2078,16 +2098,16 @@ function pomoTick(){
   if (Fam.cur && Fam.cur.kind === 'distraction' && !Pomo.wounded){
     Pomo.wounded = true;
     Fam.setState('poisoned');
-    toast('🩸 the hunt is wounded — come back');
+    toast(tx('🩸 冒险受伤了——回来吧','🩸 the quest is wounded — come back'));
     sound('poison');
   }
 }
 function endPomo(success){
   clearInterval(Pomo.timer); Pomo.timer = null;
   document.getElementById('pomoWrap').classList.remove('on');
-  if (success && !Pomo.wounded){ toast('🏹 hunt complete · +35 XP'); Fam.addXP(35); Fam.sparkle(7); sound('streak'); }
-  else if (success){ toast('🏹 hunt finished — limping, but done · +15 XP'); Fam.addXP(15); }
-  else toast('🏹 hunt called off');
+  if (success && !Pomo.wounded){ toast(tx('🏹 冒险完成 · +35 XP','🏹 quest complete · +35 XP')); Fam.addXP(35); Fam.sparkle(7); sound('streak'); }
+  else if (success){ toast(tx('🏹 跌跌撞撞，但完成了 · +15 XP','🏹 quest finished — limping, but done · +15 XP')); Fam.addXP(15); }
+  else toast(tx('🏹 冒险结束','🏹 quest called off'));
 }
 
 /* ── markdown export (Swift pulls this string and writes/copies it) ── */
@@ -2101,9 +2121,10 @@ function famExportMD(){
     return items.length ? `\n\n## ${name}\n` + items.map(g => `- ${g.label} — ${fmtDur(g.ms)}`).join('\n') : '';
   };
   const st = windowStats(24 * 60);
-  return `# Focus Journal — ${new Date().toDateString()}\n\n` +
-    `**${st.pct}% deep** · ${fmtDur(st.deepMin * 60000)} deep work · familiar lv.${Fam.level} (${Fam.xp}/${Fam.xpToNext()} XP)` +
-    sec('📖 Read', 'read') + sec('🛠️ Built', 'built') + sec('🕳️ Distractions', 'distracted') + '\n';
+  return `# ${tx('Mimo 今日手记','Mimo Journal')} — ${new Date().toDateString()}\n\n` +
+    tx(`**${st.pct}% 成长** · 成长 ${fmtDur(st.deepMin * 60000)} · 米墨 lv.${Fam.level} (${Fam.xp}/${Fam.xpToNext()} XP)`,
+       `**${st.pct}% growth** · ${fmtDur(st.deepMin * 60000)} growth · Mimo lv.${Fam.level} (${Fam.xp}/${Fam.xpToNext()} XP)`) +
+    sec(tx('📖 读过','📖 Read'), 'read') + sec(tx('🛠️ 做过','🛠️ Built'), 'built') + sec(tx('🕳️ 分心','🕳️ Distractions'), 'distracted') + '\n';
 }
 
 /* ── full-page HTML export: standalone journal for the browser.
@@ -2132,9 +2153,9 @@ function famExportHTML(){
   };
 
   const css = document.querySelector('style').textContent;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+  return `<!DOCTYPE html><html lang="${LANG === 'zh' ? 'zh-CN' : 'en'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Focus Journal — ${new Date().toDateString()}</title>
+<title>${tx('Mimo 今日手记','Mimo Journal')} — ${new Date().toDateString()}</title>
 <style>${css}</style>
 <style>
   html, body{ overflow:auto !important; height:auto !important;
@@ -2159,17 +2180,17 @@ function famExportHTML(){
   .page .j-block .tm, .page .j-block .du{ color:#b9b3d6; }
 </style></head>
 <body><div class="page">
-  <h1>✦ Focus Journal</h1>
-  <div class="meta">${new Date().toDateString()} · recorded by your familiar (lv.${Fam.level}) ·
-    <b style="color:#7df0cf">${st.pct}% deep</b> · ${fmtDur(st.deepMin * 60000)} deep work</div>
-  <h2>the day, hour by hour</h2>
+  <h1>✦ ${tx('Mimo 今日手记','Mimo Journal')}</h1>
+  <div class="meta">${new Date().toDateString()} · ${tx(`米墨替你记下 · lv.${Fam.level}`,`recorded by Mimo · lv.${Fam.level}`)} ·
+    <b style="color:#7df0cf">${st.pct}% ${tx('成长','growth')}</b> · ${fmtDur(st.deepMin * 60000)} ${tx('成长','growth')}</div>
+  <h2>${tx('一天留下的纹理','the day, hour by hour')}</h2>
   ${buildStrip(w0, now, labels)}
-  <h2>⚔️ quest log</h2>
+  <h2>${tx('⚔️ 冒险手记','⚔️ quest log')}</h2>
   ${questHTML}
-  ${fullSec('📖 everything read', 'read')}
-  ${fullSec('🛠️ everything built', 'built')}
-  ${fullSec('🕳️ every distraction', 'distracted')}
-  <h2>▦ the week so far</h2>
+  ${fullSec(tx('📖 读过的一切','📖 everything read'), 'read')}
+  ${fullSec(tx('🛠️ 做过的一切','🛠️ everything built'), 'built')}
+  ${fullSec(tx('🕳️ 每一次分心','🕳️ every distraction'), 'distracted')}
+  <h2>${tx('▦ 这一周','▦ the week so far')}</h2>
   ${weekHTML}
 </div>
 <script>document.querySelectorAll('[data-tip]').forEach(e => { if (e.dataset.tip) e.title = e.dataset.tip; });<\/script>
@@ -2235,6 +2256,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Preview mode in a normal browser. `journal-dense` is the regression
   // fixture for a 21-item half hour and the expandable bulletin.
   const q = new URLSearchParams(location.search);
+  famSetLanguage(q.get('lang') || LANG);
   if (q.has('preview')) {
     document.body.style.background = '#1a1534';
     if (q.get('char')) Fam.setCharacter(q.get('char'));

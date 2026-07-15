@@ -1,9 +1,9 @@
 #!/bin/bash
-# Build FocusFamiliar.app — no Xcode project needed, just swiftc.
+# Build Mimo.app — no Xcode project needed, just swiftc.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP=build/FocusFamiliar.app
+APP=build/Mimo.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
@@ -11,7 +11,7 @@ cp Info.plist "$APP/Contents/"
 cp overlay.html settings.html "$APP/Contents/Resources/"
 cp AppIcon.icns "$APP/Contents/Resources/" 2>/dev/null || true
 
-swiftc -O panel_geometry.swift main.swift product.swift -o "$APP/Contents/MacOS/FocusFamiliar" \
+swiftc -O panel_geometry.swift main.swift product.swift -o "$APP/Contents/MacOS/Mimo" \
   -framework Cocoa -framework WebKit -framework Carbon
 
 codesign --force -s - "$APP"

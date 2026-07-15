@@ -2,19 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Focus Familiar</string>
-  <key>CFBundleDisplayName</key><string>Focus Familiar</string>
+  <key>CFBundleName</key><string>Mimo</string>
+  <key>CFBundleDisplayName</key><string>Mimo</string>
   <key>CFBundleIdentifier</key><string>com.brianzheng.focusfamiliar</string>
   <key>CFBundleVersion</key><string>0.2.0</string>
   <key>CFBundleShortVersionString</key><string>0.2.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleExecutable</key><string>FocusFamiliar</string>
+  <key>CFBundleExecutable</key><string>Mimo</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>Focus Familiar reads the current browser tab's address to tell deep work from doomscrolling. Nothing leaves your Mac.</string>
+  <string>Mimo reads the current browser tab's address locally, so it can tell growth from distraction. Nothing leaves your Mac.</string>
 </dict>
 </plist>

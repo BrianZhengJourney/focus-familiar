@@ -1,4 +1,4 @@
-// Focus Familiar — productization layer
+// Mimo — productization layer
 // settings window (HTML), data retention/eraser, git-commit celebration
 
 import Cocoa
@@ -40,10 +40,11 @@ func eraseAllHistory() {
 }
 
 func historyStats() -> String {
-    guard let files = try? FileManager.default.contentsOfDirectory(at: logDir, includingPropertiesForKeys: [.fileSizeKey]) else { return "no data yet" }
+    guard let files = try? FileManager.default.contentsOfDirectory(at: logDir, includingPropertiesForKeys: [.fileSizeKey]) else { return voice("还没有数据", "no data yet") }
     let logs = files.filter { $0.lastPathComponent.hasPrefix("activity-") }
     let bytes = logs.compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.reduce(0, +)
-    return "\(logs.count) day\(logs.count == 1 ? "" : "s") on disk · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · all local"
+    return voice("本地保存了 \(logs.count) 天 · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · 全部只在这台 Mac 上",
+                 "\(logs.count) day\(logs.count == 1 ? "" : "s") on disk · \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) · all local")
 }
 
 // ── automation permission status (no prompt) ────────────────
@@ -159,7 +160,7 @@ extension AppDelegate {
         }
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 780),
                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        win.title = "Focus Familiar"
+        win.title = voice("Mimo 米墨", "Mimo")
         win.contentView = web
         win.isReleasedWhenClosed = false
         win.center()
@@ -171,11 +172,11 @@ extension AppDelegate {
 
     func permLine(_ code: OSStatus) -> String {
         switch code {
-        case 0: return "granted — the familiar can read tab addresses"
-        case -1744: return "not yet enabled"
-        case -1743: return "denied — System Settings → Privacy → Automation"
-        case -600: return "open your browser, then click Enable"
-        default: return "no default browser found"
+        case 0: return voice("已授权——米墨可以读取标签页地址", "granted — Mimo can read tab addresses")
+        case -1744: return voice("尚未启用", "not yet enabled")
+        case -1743: return voice("已拒绝——系统设置 → 隐私与安全性 → 自动化", "denied — System Settings → Privacy → Automation")
+        case -600: return voice("打开浏览器，然后点击启用", "open your browser, then click Enable")
+        default: return voice("找不到默认浏览器", "no default browser found")
         }
     }
 
@@ -197,6 +198,7 @@ extension AppDelegate {
         rules.sort { ($0["label"] as? String ?? "").lowercased() < ($1["label"] as? String ?? "").lowercased() }
         let state: [String: Any] = [
             "character": d.string(forKey: "character") ?? "lulu",
+            "language": voiceLanguage(),
             "permCode": Int(code),
             "permText": permLine(code),
             "rules": rules,
@@ -236,7 +238,7 @@ extension AppDelegate {
             panel.canChooseFiles = true
             panel.allowsMultipleSelection = false
             panel.allowedContentTypes = [.image]
-            panel.message = "Choose a reference for your tiny familiar"
+            panel.message = voice("为你的小伴灵选择一张参考图片", "Choose a reference for your tiny familiar")
             if panel.runModal() == .OK, let url = panel.url,
                let uri = petReferenceDataURI(url) {
                 let name = url.deletingPathExtension().lastPathComponent
@@ -260,6 +262,14 @@ extension AppDelegate {
             if let secs = body["secs"] as? Double { d.set(secs, forKey: "idleThreshold") }
         case "sounds":
             d.set(body["on"] as? Bool ?? false, forKey: "soundOn")
+        case "language":
+            let lang = body["language"] as? String == "en" ? "en" : "zh"
+            d.set(lang, forKey: "voiceLanguage")
+            js("famSetLanguage('\(lang)')")
+            settingsWin?.title = voice("Mimo 米墨", "Mimo")
+            buildMainMenu()
+            rebuildStatusItem()
+            pushSettingsState()
         case "login":
             let svc = SMAppService.mainApp
             if body["on"] as? Bool == true { try? svc.register() } else { try? svc.unregister() }
@@ -290,10 +300,10 @@ extension AppDelegate {
                 eraseSince(start); js("famEraseSince(\(start))")
             case "all":
                 let a = NSAlert()
-                a.messageText = "Delete all history?"
-                a.informativeText = "Every day of activity, gone. XP and level stay. No undo."
-                a.addButton(withTitle: "Delete Everything")
-                a.addButton(withTitle: "Cancel")
+                a.messageText = voice("删除全部历史记录？", "Delete all history?")
+                a.informativeText = voice("所有活动记录都会消失；XP 和等级会保留。此操作无法撤销。", "Every day of activity, gone. XP and level stay. No undo.")
+                a.addButton(withTitle: voice("全部删除", "Delete Everything"))
+                a.addButton(withTitle: voice("取消", "Cancel"))
                 a.alertStyle = .warning
                 if a.runModal() == .alertFirstButtonReturn {
                     eraseAllHistory(); js("famEraseSince(0)")

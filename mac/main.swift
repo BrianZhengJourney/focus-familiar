@@ -1,4 +1,4 @@
-// Focus Familiar — native macOS overlay
+// Mimo — native macOS overlay
 // A small creature that floats above your desktop, watches which app is
 // frontmost (no permissions needed for that), and reacts: deep work feeds
 // it, doomscrolling corrupts it. ⌥Space asks it what you were doing.
@@ -7,6 +7,14 @@ import Cocoa
 import WebKit
 import Carbon.HIToolbox
 import ServiceManagement
+
+func voiceLanguage() -> String {
+    UserDefaults.standard.string(forKey: "voiceLanguage") ?? "zh"
+}
+
+func voice(_ zh: String, _ en: String) -> String {
+    voiceLanguage() == "zh" ? zh : en
+}
 
 // ── app classification ──────────────────────────────────────
 // kind strings understood by overlay.html:
@@ -509,14 +517,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func buildMainMenu() {
         let root = NSMenu()
         let appItem = NSMenuItem()
-        let appMenu = NSMenu(title: "Focus Familiar")
+        let appMenu = NSMenu(title: "Mimo")
 
-        let settings = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: voice("设置…", "Settings…"), action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         appMenu.addItem(settings)
         appMenu.addItem(NSMenuItem.separator())
 
-        let quit = NSMenuItem(title: "Quit Focus Familiar", action: #selector(quitApp(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: voice("退出 Mimo", "Quit Mimo"), action: #selector(quitApp(_:)), keyEquivalent: "q")
         quit.target = self
         appMenu.addItem(quit)
 
@@ -542,36 +550,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
 
         let menu = NSMenu()
-        menu.addItem(item("What was I doing?  (⌥Space)", #selector(openJournal), "j", "book"))
+        menu.addItem(item(voice("刚才在做什么？  (⌥Space)", "What was I doing?  (⌥Space)"), #selector(openJournal), "j", "book"))
 
         let huntMenu = NSMenu()
         for min in [25, 50] {
-            let it = NSMenuItem(title: "\(min) minutes", action: #selector(startHunt(_:)), keyEquivalent: "")
+            let it = NSMenuItem(title: voice("\(min) 分钟", "\(min) minutes"), action: #selector(startHunt(_:)), keyEquivalent: "")
             it.representedObject = min; it.target = self
             huntMenu.addItem(it)
         }
-        let huntRoot = item("Begin a hunt", nil, "", "scope")
+        let huntRoot = item(voice("开始一次冒险", "Begin a quest"), nil, "", "scope")
         menu.addItem(huntRoot)
         menu.setSubmenu(huntMenu, for: huntRoot)
 
         menu.addItem(NSMenuItem.separator())
 
-        menu.addItem(item("Settings…", #selector(showSettings), ",", "gearshape"))
-        let hide = item("Hide familiar", #selector(toggleOverlay(_:)), "h", "eye.slash")
+        menu.addItem(item(voice("设置…", "Settings…"), #selector(showSettings), ",", "gearshape"))
+        let hide = item(voice("藏起米墨", "Hide Mimo"), #selector(toggleOverlay(_:)), "h", "eye.slash")
         hide.identifier = .init("hideToggle")
         menu.addItem(hide)
 
         menu.addItem(NSMenuItem.separator())
-        let ai = NSMenuItem(title: "AI: checking…", action: nil, keyEquivalent: "")
+        let ai = NSMenuItem(title: voice("AI：检查中…", "AI: checking…"), action: nil, keyEquivalent: "")
         ai.isEnabled = false
         ai.identifier = .init("aiStatus")
         menu.addItem(ai)
 
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(item("Quit Focus Familiar", #selector(quitApp(_:)), "q", "power"))
+        menu.addItem(item(voice("退出 Mimo", "Quit Mimo"), #selector(quitApp(_:)), "q", "power"))
 
         menu.delegate = self
         statusItem.menu = menu
+    }
+
+    func rebuildStatusItem() {
+        if statusItem != nil { NSStatusBar.system.removeStatusItem(statusItem) }
+        buildStatusItem()
     }
 
     @objc func quitApp(_ sender: Any?) {
@@ -852,11 +865,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if s[key] != label { s[key] = label; seenItems = s }
     }
 
-    static let kinds: [(id: String, label: String)] = [
-        ("code", "Deep — code"), ("term", "Deep — terminal"), ("cad", "Deep — CAD/design"),
-        ("paper", "Deep — reading"), ("notes", "Deep — notes"),
-        ("neutral", "Neutral"), ("distraction", "Distraction"),
-    ]
+    var ruleKinds: [(id: String, label: String)] { [
+        ("code", voice("成长 · 编程", "Growth · code")), ("term", voice("成长 · 终端", "Growth · terminal")),
+        ("cad", voice("成长 · 设计", "Growth · CAD/design")), ("paper", voice("成长 · 阅读", "Growth · reading")),
+        ("notes", voice("成长 · 笔记", "Growth · notes")), ("neutral", voice("日常", "Everyday")),
+        ("distraction", voice("分心", "Distraction")),
+    ] }
 
     @objc func openRules() {
         let seen = seenItems
@@ -867,8 +881,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             table.rowHeight = 26
             table.dataSource = self
             table.delegate = self
-            let cName = NSTableColumn(identifier: .init("name")); cName.title = "App / site"; cName.width = 250
-            let cKind = NSTableColumn(identifier: .init("kind")); cKind.title = "Counts as"; cKind.width = 150
+            let cName = NSTableColumn(identifier: .init("name")); cName.title = voice("App / 网站", "App / site"); cName.width = 250
+            let cKind = NSTableColumn(identifier: .init("kind")); cKind.title = voice("记作", "Counts as"); cKind.width = 150
             table.addTableColumn(cName); table.addTableColumn(cKind)
 
             let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 430, height: 380))
@@ -878,7 +892,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let win = NSWindow(contentRect: scroll.frame,
                                styleMask: [.titled, .closable, .resizable],
                                backing: .buffered, defer: false)
-            win.title = "Focus Rules — what counts as deep work"
+            win.title = voice("Mimo 成长规则", "Mimo Growth Rules")
             win.contentView = scroll
             win.isReleasedWhenClosed = false
             win.center()
@@ -924,17 +938,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             openJournalPage()
         case "ctxMenu":
             let m = NSMenu()
-            let hideIt = NSMenuItem(title: overlayHidden ? "Show familiar" : "Hide familiar",
+            let hideIt = NSMenuItem(title: overlayHidden ? voice("显示米墨", "Show Mimo") : voice("藏起米墨", "Hide Mimo"),
                                     action: #selector(toggleOverlay(_:)), keyEquivalent: "")
             hideIt.target = self
             hideIt.image = NSImage(systemSymbolName: "eye.slash", accessibilityDescription: nil)
             m.addItem(hideIt)
-            let settingsIt = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: "")
+            let settingsIt = NSMenuItem(title: voice("设置…", "Settings…"), action: #selector(showSettings), keyEquivalent: "")
             settingsIt.target = self
             settingsIt.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
             m.addItem(settingsIt)
             m.addItem(NSMenuItem.separator())
-            m.addItem(NSMenuItem(title: "Quit Focus Familiar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+            let quitIt = NSMenuItem(title: voice("退出 Mimo", "Quit Mimo"), action: #selector(quitApp(_:)), keyEquivalent: "")
+            quitIt.target = self
+            m.addItem(quitIt)
             m.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         case "log":
             if let entry = body["entry"] as? [String: Any] { appendLog(entry) }
@@ -985,6 +1001,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // then greet with whatever is frontmost right now
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === settingsWeb { pushSettingsState(); return }
+        js("famSetLanguage('\(voiceLanguage())')")
         js("famLoadHistory(\(readTodayLog()))")
         js("famLoadWeek(\(readWeekLog()))")
         if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }
@@ -1007,12 +1024,12 @@ extension AppDelegate: NSTableViewDataSource, NSTableViewDelegate {
         let pop = NSPopUpButton()
         pop.bezelStyle = .rounded
         pop.controlSize = .small
-        for k in Self.kinds {
+        for k in ruleKinds {
             pop.addItem(withTitle: k.label)
             pop.lastItem?.representedObject = k.id
         }
         let current = ruleOverrides[key] ?? defaultKind(key)
-        if let idx = Self.kinds.firstIndex(where: { $0.id == current }) { pop.selectItem(at: idx) }
+        if let idx = ruleKinds.firstIndex(where: { $0.id == current }) { pop.selectItem(at: idx) }
         pop.tag = row
         pop.target = self
         pop.action = #selector(rulePicked(_:))

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>Focus Familiar — Settings</title>
+<title>Mimo 米墨 — 设置</title>
 <style>
 :root{
   --ink:#e9e6f7; --dim:#9d97b8; --card:#241f42; --line:#ffffff14;
@@ -116,100 +116,127 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </head>
 <body>
 
-<h1>🐾 Focus Familiar</h1>
-<div class="tagline">it feeds on your focus, gets poisoned by doomscrolling, and remembers what you were doing. everything stays on this Mac.</div>
+<h1>🐾 Mimo <span style="font-size:.62em;color:var(--dim)">米墨</span></h1>
+<div class="tagline" data-zh="住在桌面角落，陪你一起成长。它记得你在做什么，而一切只留在这台 Mac 上。" data-en="A tiny familiar who grows with your attention and remembers your day. Everything stays on this Mac.">住在桌面角落，陪你一起成长。它记得你在做什么，而一切只留在这台 Mac 上。</div>
 
 <div class="sec">
-  <h2><span class="ico">🐾</span>Your familiar</h2>
+  <h2><span class="ico">🐾</span><span data-zh="你的伴灵" data-en="Your familiar">你的伴灵</span></h2>
   <div class="cards" id="cards"></div>
 </div>
 
 <div class="sec" id="petLab">
-  <h2><span class="ico">✦</span>DIY Pet Atelier <span class="proto-tag">PROTOTYPE</span></h2>
+  <h2><span class="ico">✦</span><span data-zh="DIY 伴灵工坊" data-en="DIY Pet Atelier">DIY 伴灵工坊</span> <span class="proto-tag">PROTOTYPE</span></h2>
   <div class="petlab-intro">
     <div class="pet-source"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"></div>
-    <div class="petlab-copy"><b>turn one image into a tiny familiar</b>
-      <span>colour is sampled locally; the house rig supplies the cuteness, shadow, moods, and evolution moments.</span>
+    <div class="petlab-copy"><b data-zh="用一张图片，做出你的桌面伴灵" data-en="turn one image into a tiny familiar">用一张图片，做出你的桌面伴灵</b>
+      <span data-zh="颜色只在本地提取；米墨的像素骨架负责可爱、影子、情绪和成长瞬间。" data-en="Colour is sampled locally; Mimo's pixel rig supplies the cuteness, shadow, moods, and evolution moments.">颜色只在本地提取；米墨的像素骨架负责可爱、影子、情绪和成长瞬间。</span>
       <div class="petlab-actions">
-        <button type="button" onclick="send({type:'petUpload'})">upload image…</button>
-        <input class="pet-name" id="petName" value="My little familiar" maxlength="28"
-          oninput="petLab.name=this.value || 'My little familiar'; renderPetLab()">
+        <button type="button" onclick="send({type:'petUpload'})" data-zh="上传图片…" data-en="Upload image…">上传图片…</button>
+        <input class="pet-name" id="petName" value="我的小伴灵" maxlength="28"
+          oninput="petLab.name=this.value || tx('我的小伴灵','My little familiar'); renderPetLab()">
         <span class="pet-swatches" id="petSwatches"></span>
       </div>
     </div>
   </div>
   <div class="pet-candidates" id="petCandidates"></div>
   <div class="petlab-state" id="petLabState"><span class="dot"></span>
-    sample palette ready · upload an image to make it yours · session only
+    调色盘已就绪 · 上传图片试试看 · 本次运行有效
   </div>
 </div>
 
 
 <div class="sec">
-  <h2><span class="ico">📜</span>Rules — what counts as what</h2>
+  <h2><span class="ico">📜</span><span data-zh="成长规则" data-en="Growth rules">成长规则</span></h2>
   <div class="chips" id="chips"></div>
-  <div class="rules" id="rules"><div class="note">use your Mac for a bit — apps and sites appear here as the familiar meets them.</div></div>
-  <div class="note">💪 protein · ⛓️ iron · 📐 blueprints · 📖 spellbooks · 📝 fragments — deep work in disguise. 🕳️ is the pit.</div>
+  <div class="rules" id="rules"><div class="note">先使用一会儿 Mac；米墨遇见的 app 和网站会出现在这里。</div></div>
+  <div class="note" data-zh="💪 蛋白质 · ⛓️ 铁 · 📐 蓝图 · 📖 魔法书 · 📝 碎片——都是成长留下的养分。🕳️ 是分心坑。" data-en="💪 protein · ⛓️ iron · 📐 blueprints · 📖 spellbooks · 📝 fragments — nourishment gathered while growing. 🕳️ is the distraction pit.">💪 蛋白质 · ⛓️ 铁 · 📐 蓝图 · 📖 魔法书 · 📝 碎片——都是成长留下的养分。🕳️ 是分心坑。</div>
 </div>
 
 <div class="sec">
-  <h2><span class="ico">🔑</span>Access</h2>
+  <h2><span class="ico">🔑</span><span data-zh="权限" data-en="Access">权限</span></h2>
   <div class="permrow">
-    <span style="font-size:12px">Browser awareness</span> <span class="pill ask" id="permPill">checking…</span>
-    <button onclick="send({type:'grant'})">Enable…</button>
-    <button onclick="send({type:'recheck'})">Re-check</button>
+    <span style="font-size:12px" data-zh="浏览器感知" data-en="Browser awareness">浏览器感知</span> <span class="pill ask" id="permPill">检查中…</span>
+    <button onclick="send({type:'grant'})" data-zh="启用…" data-en="Enable…">启用…</button>
+    <button onclick="send({type:'recheck'})" data-zh="重新检查" data-en="Re-check">重新检查</button>
   </div>
-  <div class="note">Reads only the active tab's <b>address</b>, locally, so the familiar can tell arXiv from YouTube Shorts. Without it, browsers count as neutral. Nothing ever leaves your Mac.</div>
+  <div class="note" data-zh="只在本地读取当前标签页的<b>地址</b>，让米墨分得清 arXiv 和 YouTube Shorts。未授权时，浏览器会记作日常。信息不会离开你的 Mac。" data-en="Reads only the active tab's <b>address</b>, locally, so Mimo can tell arXiv from YouTube Shorts. Without it, browsers count as everyday time. Nothing ever leaves your Mac.">只在本地读取当前标签页的<b>地址</b>，让米墨分得清 arXiv 和 YouTube Shorts。未授权时，浏览器会记作日常。信息不会离开你的 Mac。</div>
 </div>
 
 <div class="sec">
-  <h2><span class="ico">⚙️</span>General</h2>
-  <div class="row"><span class="grow">Consider me away after</span>
+  <h2><span class="ico">⚙️</span><span data-zh="通用" data-en="General">通用</span></h2>
+  <div class="row"><span class="grow" data-zh="多久没有操作后记为离开" data-en="Consider me away after">多久没有操作后记为离开</span>
     <select id="idleSel" onchange="send({type:'idle', secs:+this.value})">
-      <option value="60">1 minute</option><option value="150">2.5 minutes</option>
-      <option value="300">5 minutes</option><option value="600">10 minutes</option>
+      <option value="60" data-zh="1 分钟" data-en="1 minute">1 分钟</option><option value="150" data-zh="2.5 分钟" data-en="2.5 minutes">2.5 分钟</option>
+      <option value="300" data-zh="5 分钟" data-en="5 minutes">5 分钟</option><option value="600" data-zh="10 分钟" data-en="10 minutes">10 分钟</option>
     </select></div>
-  <div class="row"><span class="grow">Sounds (level-ups, streaks, poisonings)</span>
+  <div class="row"><span class="grow" data-zh="声音（升级、连续成长、掉进分心坑）" data-en="Sounds (level-ups, streaks, distractions)">声音（升级、连续成长、掉进分心坑）</span>
     <label class="toggle"><input type="checkbox" id="sndTog" onchange="send({type:'sounds', on:this.checked})"><i></i></label></div>
-  <div class="row"><span class="grow">Start at login</span>
+  <div class="row"><span class="grow" data-zh="登录时启动" data-en="Start at login">登录时启动</span>
     <label class="toggle"><input type="checkbox" id="loginTog" onchange="send({type:'login', on:this.checked})"><i></i></label></div>
-  <div class="row"><span class="grow">Celebrate commits in</span>
-    <button id="projBtn" onclick="send({type:'projects'})">choose…</button></div>
+  <div class="row"><span class="grow" data-zh="庆祝这些项目里的 commit" data-en="Celebrate commits in">庆祝这些项目里的 commit</span>
+    <button id="projBtn" onclick="send({type:'projects'})">选择…</button></div>
+  <div class="row"><span class="grow" data-zh="界面语言" data-en="Language">界面语言</span>
+    <select id="langSel" onchange="changeLanguage(this.value)">
+      <option value="zh">中文</option><option value="en">English</option>
+    </select></div>
 </div>
 
 <div class="sec">
-  <h2><span class="ico">🗄️</span>Data &amp; privacy</h2>
+  <h2><span class="ico">🗄️</span><span data-zh="数据与隐私" data-en="Data &amp; privacy">数据与隐私</span></h2>
   <div class="stats" id="stats">—</div>
-  <div class="row"><span class="grow">Keep history for</span>
+  <div class="row"><span class="grow" data-zh="保留历史记录" data-en="Keep history for">保留历史记录</span>
     <select id="retSel" onchange="send({type:'retention', days:+this.value})">
-      <option value="30">30 days</option><option value="90">90 days</option>
-      <option value="365">1 year</option><option value="0">forever</option>
+      <option value="30" data-zh="30 天" data-en="30 days">30 天</option><option value="90" data-zh="90 天" data-en="90 days">90 天</option>
+      <option value="365" data-zh="1 年" data-en="1 year">1 年</option><option value="0" data-zh="永久" data-en="forever">永久</option>
     </select></div>
   <div class="forget">
-    <button onclick="send({type:'forget', span:'hour'})">Forget last hour</button>
-    <button onclick="send({type:'forget', span:'today'})">Forget today</button>
-    <button class="danger" onclick="send({type:'forget', span:'all'})">Everything…</button>
-    <button onclick="send({type:'reveal'})">📂 Data folder</button>
+    <button onclick="send({type:'forget', span:'hour'})" data-zh="忘掉上一小时" data-en="Forget last hour">忘掉上一小时</button>
+    <button onclick="send({type:'forget', span:'today'})" data-zh="忘掉今天" data-en="Forget today">忘掉今天</button>
+    <button class="danger" onclick="send({type:'forget', span:'all'})" data-zh="全部忘掉…" data-en="Forget everything…">全部忘掉…</button>
+    <button onclick="send({type:'reveal'})" data-zh="📂 数据文件夹" data-en="📂 Data folder">📂 数据文件夹</button>
   </div>
 </div>
 
 <div class="sec">
-  <h2><span class="ico">✨</span>The essentials</h2>
+  <h2><span class="ico">✨</span><span data-zh="基本操作" data-en="The essentials">基本操作</span></h2>
   <div class="cheats">
-    <span class="kbd">⌥ space</span><span>"what was I doing?" — journal &amp; thread</span>
-    <span class="kbd">click pet</span><span>same thing</span>
-    <span class="kbd">right-click pet</span><span>hide it</span>
-    <span class="kbd">drag to edge</span><span>tuck it away · click the peek to bring back</span>
-    <span class="kbd">🏹 menu</span><span>begin a hunt — a pomodoro your familiar joins</span>
+    <span class="kbd">⌥ space</span><span data-zh="“刚才在做什么？”——打开今日手记" data-en="‘What was I doing?’ — open today's journal">“刚才在做什么？”——打开今日手记</span>
+    <span class="kbd" data-zh="点击伴灵" data-en="click pet">点击伴灵</span><span data-zh="也是打开今日手记" data-en="same thing">也是打开今日手记</span>
+    <span class="kbd" data-zh="右键伴灵" data-en="right-click pet">右键伴灵</span><span data-zh="藏起来" data-en="hide it">藏起来</span>
+    <span class="kbd" data-zh="拖到边缘" data-en="drag to edge">拖到边缘</span><span data-zh="让它躲进屏幕边缘；点击露出的一角即可回来" data-en="tuck it away; click the peek to bring it back">让它躲进屏幕边缘；点击露出的一角即可回来</span>
+    <span class="kbd">🏹</span><span data-zh="开始一次冒险——米墨会陪你完成番茄钟" data-en="begin a quest — a pomodoro Mimo joins">开始一次冒险——米墨会陪你完成番茄钟</span>
   </div>
 </div>
 
-<div class="footer"><button class="primary" onclick="send({type:'done'})">Let's go ✦</button></div>
+<div class="footer"><button class="primary" onclick="send({type:'done'})" data-zh="开始吧 ✦" data-en="Let's go ✦">开始吧 ✦</button></div>
 
 <script>
+let LANG = 'zh';
+const tx = (zh, en) => LANG === 'zh' ? zh : en;
+function applyLanguage(){
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.title = LANG === 'zh' ? 'Mimo 米墨 — 设置' : 'Mimo — Settings';
+  document.querySelectorAll('[data-zh][data-en]').forEach(el => {
+    el.innerHTML = LANG === 'zh' ? el.dataset.zh : el.dataset.en;
+  });
+  const input = document.getElementById('petName');
+  if (input && (input.value === '我的小伴灵' || input.value === 'My little familiar')) {
+    input.value = tx('我的小伴灵', 'My little familiar');
+    petLab.name = input.value;
+  }
+  const petState = document.getElementById('petLabState');
+  if (petState && typeof petLab !== 'undefined' && petLab.picked < 0) petState.innerHTML =
+    `<span class="dot"></span>${tx('调色盘已就绪 · 上传图片试试看 · 本次运行有效','sample palette ready · upload an image to make it yours · session only')}`;
+}
+function changeLanguage(lang){
+  LANG = lang === 'en' ? 'en' : 'zh';
+  applyLanguage(); renderCards(); renderPetLab(); renderChips(); renderRules();
+  send({type:'language', language:LANG});
+}
+
 /* mini pixel renders — idle pose of each mascot, data from the design handoff */
 const MINI = {
-  lulu: { name: '噜噜 LuLu', desc: 'butter hamster',
+  lulu: { name: '噜噜 LuLu', desc: 'butter hamster', descZh: '黄油小仓鼠',
     PAL: { Y:'#ffd982', y:'#fff0c4', O:'#ffb043', C:'#fff1cf', N:'#c96f3f', F:'#f7c778',
            T:'#e69b3d', B:'#ff9d6b', K:'#2b1c12', W:'#ffffff', H:'#f2bc61', M:'#8a5a33' },
     BASE: ['....Y......YB.......','...yY.....YYYy......','..YYYY...YYYY..T....','.YyYYYYYYYYYY.TT....',
@@ -218,14 +245,14 @@ const MINI = {
            '.YYYYYYYYYYYHH......','.YFF.YHHY.FF.H......','..FF......FF........'],
     EYES: [[4,6,'K'],[5,6,'K'],[4,7,'K'],[5,7,'K'],[4,6,'W'],[9,6,'K'],[10,6,'K'],[9,7,'K'],[10,7,'K'],[9,6,'W']],
     MOUTH: [[5,10,'M'],[7,10,'M']], vb: '-1 -1 22 18' },
-  clawd: { name: 'Clawd', desc: 'terracotta voxel',
+  clawd: { name: 'Clawd', desc: 'terracotta voxel', descZh: '赤陶方块兽',
     PAL: { U:'#d97757', u:'#efa07f', K:'#151210', W:'#ffffff', R:'#8c4526' },
     BASE: ['..uuuuuuuuuuu.......','..UUUUUUUUUUU.......','..UUUUUUUUUUU.......','uuUUUUUUUUUUUuu.....',
            'UUUUUUUUUUUUUUU.....','UUUUUUUUUUUUUUU.....','..UUUUUUUUUUU.......','..UUUUUUUUUUU.......',
            '..UUUUUUUUUUU.......','..UU..U.U..UU.......','..UU..U.U..UU.......'],
     EYES: [[4,4,'K'],[5,4,'K'],[4,5,'K'],[5,5,'K'],[4,4,'W'],[9,4,'K'],[10,4,'K'],[9,5,'K'],[10,5,'K'],[9,4,'W']],
     MOUTH: [[5,7,'R'],[7,7,'R']], vb: '-1 -2 22 19' },
-  nat: { name: 'Nat', desc: 'snorkeling kitty',
+  nat: { name: 'Nat', desc: 'snorkeling kitty', descZh: '浮潜小猫',
     PAL: { y:'#fdfbf6', p:'#f4a9bd', k:'#3b3733', N:'#e88aa0', B:'#f9c6d2', X:'#f06292',
            W:'#ffffff', K:'#2b2624', M:'#8a7a68' },
     BASE: ['.y...........y......','.yp.........py......','.ypy.......ypy......','.yyyyyyyyyyyyy......',
@@ -255,19 +282,19 @@ function miniSVG(m){
 }
 
 const PET_TEMPLATES = [
-  { key:'round', label:'round & cozy', desc:'soft silhouette · sleepy little feet',
+  { key:'round', label:'round & cozy', labelZh:'圆滚滚', desc:'soft silhouette · sleepy little feet', descZh:'柔软轮廓 · 困困的小脚',
     BASE:['...P........P...','..LPP......PPL..','.PPPPPPPPPPPPPP.','PPPPPPPPPPPPPPPP',
       'PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP',
       'PPPPLLLLLLLLPPPP','.PPPPAALLAAPPPP.','.PPPPPPPPPPPPPP.','..PPPPPPPPPPPP..',
       '...PPPPPPPPPP...','...PP..PP..PP...','....PP....PP....'],
     face:{lx:4,rx:10,y:5,mx:7,my:8} },
-  { key:'adventure', label:'tiny adventurer', desc:'bright ears · built-in little scarf',
+  { key:'adventure', label:'tiny adventurer', labelZh:'小小冒险家', desc:'bright ears · built-in little scarf', descZh:'亮亮的耳朵 · 自带小围巾',
     BASE:['..P..........P..','.LPP........PPL.','.PPPP......PPPP.','PPPPPPPPPPPPPPPP',
       'PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP',
       'PPPLLLLLLLLLLPPP','PPPAAAAAAAAAAPPP','...PPPPPPPPPP...', '....PPPPPPPP....',
       '....PP....PP....','...PPP....PPP...','...PP......PP...'],
     face:{lx:4,rx:10,y:5,mx:7,my:8} },
-  { key:'strange', label:'strange little thing', desc:'one antenna · curious blob energy',
+  { key:'strange', label:'strange little thing', labelZh:'古怪小东西', desc:'one antenna · curious blob energy', descZh:'一根天线 · 好奇的果冻感',
     BASE:['......A.........','.....AAA........','......P.........','...PPPPPPPP.....',
       '..PPLLLLLLPP....','.PPLLLLLLLLLPP..','PPLLLLLLLLLLLPP.','PPLLLLLLLLLLLPPP',
       'PPLLLLLLLLLLLPP.','.PPLLLLLLLLLPP..','..PPPAALLAPPP...','...PPPPPPPP.....',
@@ -275,7 +302,7 @@ const PET_TEMPLATES = [
     face:{lx:4,rx:10,y:6,mx:7,my:9} }
 ];
 
-const petLab = { name:'My little familiar', palette:['#d68b68','#f1c7a7','#76c8b0'], picked:-1 };
+const petLab = { name:'我的小伴灵', palette:['#d68b68','#f1c7a7','#76c8b0'], picked:-1 };
 
 function mixHex(a, b, t){
   const av = parseInt(a.slice(1),16), bv = parseInt(b.slice(1),16);
@@ -298,9 +325,9 @@ function renderPetLab(){
   const specs = PET_TEMPLATES.map(petSpec);
   document.getElementById('petCandidates').innerHTML = specs.map((spec, i) => `
     <div class="pet-option ${petLab.picked === i ? 'sel' : ''}">
-      ${miniSVG(spec)}<div class="nm">${PET_TEMPLATES[i].label}</div>
-      <div class="ds">${PET_TEMPLATES[i].desc}</div>
-      <button type="button" onclick="usePetCandidate(${i})">${petLab.picked === i ? 'on your desktop ✦' : 'try this one'}</button>
+      ${miniSVG(spec)}<div class="nm">${LANG === 'zh' ? PET_TEMPLATES[i].labelZh : PET_TEMPLATES[i].label}</div>
+      <div class="ds">${LANG === 'zh' ? PET_TEMPLATES[i].descZh : PET_TEMPLATES[i].desc}</div>
+      <button type="button" onclick="usePetCandidate(${i})">${petLab.picked === i ? tx('已住进桌面 ✦','on your desktop ✦') : tx('试试这个','try this one')}</button>
     </div>`).join('');
   document.getElementById('petSwatches').innerHTML = petLab.palette.map(c => `<i style="background:${c}"></i>`).join('');
 }
@@ -310,8 +337,10 @@ function usePetCandidate(i){
   const spec = petSpec(PET_TEMPLATES[i]);
   send({type:'petPrototype',spec});
   renderPetLab();
-  document.getElementById('petLabState').innerHTML = `<span class="dot"></span>
-    ${PET_TEMPLATES[i].label} is live · inherits focus, sleep, poison, proud, and level-up states`;
+  const label = LANG === 'zh' ? PET_TEMPLATES[i].labelZh : PET_TEMPLATES[i].label;
+  document.getElementById('petLabState').innerHTML = `<span class="dot"></span>${LANG === 'zh'
+    ? `${label} 已住进桌面 · 会成长、睡觉、分心、骄傲，也会升级`
+    : `${label} is live · inherits growth, sleep, distraction, proud, and level-up states`}`;
 }
 
 function rgbHex(r,g,b){ return '#' + ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0'); }
@@ -351,13 +380,15 @@ function loadPetImageData(url, sourceName){
     const guessed=(sourceName||'').replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();
     if(guessed){ petLab.name=guessed.slice(0,28); document.getElementById('petName').value=petLab.name; }
     renderPetLab();
-    document.getElementById('petLabState').innerHTML='<span class="dot"></span>palette sampled locally · choose one interpretation';
+    document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${tx('已在本地提取调色盘 · 选择一种模样','palette sampled locally · choose one interpretation')}`;
   };
   img.src=url;
 }
 
-const KINDS = [['code','💪 code'],['term','⛓️ terminal'],['cad','📐 CAD/design'],['paper','📖 reading'],
-               ['notes','📝 notes'],['neutral','😐 neutral'],['distraction','🕳️ distraction']];
+const kinds = () => [['code',tx('💪 成长 · 编程','💪 growth · code')],['term',tx('⛓️ 成长 · 终端','⛓️ growth · terminal')],
+  ['cad',tx('📐 成长 · 设计','📐 growth · CAD/design')],['paper',tx('📖 成长 · 阅读','📖 growth · reading')],
+  ['notes',tx('📝 成长 · 笔记','📝 growth · notes')],['neutral',tx('😐 日常','😐 everyday')],
+  ['distraction',tx('🕳️ 分心','🕳️ distraction')]];
 const KIND_ICO = { code:'💪', term:'⛓️', cad:'📐', paper:'📖', notes:'📝', neutral:'😐', distraction:'🕳️' };
 
 function send(msg){
@@ -369,18 +400,19 @@ let S = { character: 'lulu' };
 function renderCards(){
   document.getElementById('cards').innerHTML = Object.entries(MINI).map(([id, m]) => `
     <div class="card ${S.character === id ? 'sel' : ''}" onclick="pick('${id}')">
-      ${miniSVG(m)}<div class="nm">${m.name}</div><div class="ds">${m.desc}</div>
+      ${miniSVG(m)}<div class="nm">${m.name}</div><div class="ds">${LANG === 'zh' ? m.descZh : m.desc}</div>
     </div>`).join('');
 }
 function pick(id){ S.character = id; renderCards(); send({ type: 'pick', id }); }
 
-const FILTERS = [['all','all'],['deep','\u{1F4AA} deep'],['neutral','\u{1F610} neutral'],['distraction','\u{1F573}\uFE0F pit']];
+const filters = () => [['all',tx('全部','all')],['deep',tx('\u{1F4AA} 成长','\u{1F4AA} growth')],
+  ['neutral',tx('\u{1F610} 日常','\u{1F610} everyday')],['distraction',tx('\u{1F573}\uFE0F 分心坑','\u{1F573}\uFE0F pit')]];
 let ruleFilter = 'all';
 
 function setFilter(f){ ruleFilter = f; renderChips(); renderRules(); }
 
 function renderChips(){
-  document.getElementById('chips').innerHTML = FILTERS.map(([f, label]) =>
+  document.getElementById('chips').innerHTML = filters().map(([f, label]) =>
     `<span class="chip ${ruleFilter === f ? 'cur' : ''}" onclick="setFilter('${f}')">${label}</span>`).join('');
 }
 
@@ -392,7 +424,10 @@ function ruleBucket(kind){
 
 function renderRules(){
   const box = document.getElementById('rules');
-  if (!S.rules || !S.rules.length) return;
+  if (!S.rules || !S.rules.length) {
+    box.innerHTML = `<div class="note">${tx('先使用一会儿 Mac；米墨遇见的 app 和网站会出现在这里。','Use your Mac for a bit; apps and sites appear here as Mimo meets them.')}</div>`;
+    return;
+  }
   const rows = S.rules.filter(r => ruleFilter === 'all' || ruleBucket(r.kind) === ruleFilter);
   box.innerHTML = rows.map(r => `
     <div class="rule">
@@ -401,14 +436,17 @@ function renderRules(){
         : `<span class="rico">${KIND_ICO[r.kind] || '\u{1F610}'}</span>`}
       <span class="rname" title="${r.key}">${r.label}</span>
       <select onchange="send({type:'rule', key:'${r.key.replace(/'/g, "\\'")}', kind:this.value})">
-        ${KINDS.map(([k, n]) => `<option value="${k}" ${k === r.kind ? 'selected' : ''}>${n}</option>`).join('')}
+        ${kinds().map(([k, n]) => `<option value="${k}" ${k === r.kind ? 'selected' : ''}>${n}</option>`).join('')}
       </select></div>`).join('')
-    || '<div class="note">nothing in this bucket yet.</div>';
+    || `<div class="note">${tx('这里还没有内容。','nothing in this bucket yet.')}</div>`;
 }
 
 /* Swift pushes the whole state here */
 function initSettings(state){
   S = state;
+  LANG = state.language === 'en' ? 'en' : 'zh';
+  document.getElementById('langSel').value = LANG;
+  applyLanguage();
   renderCards();
   renderChips();
   renderRules();
@@ -420,8 +458,9 @@ function initSettings(state){
   document.getElementById('sndTog').checked = !!state.sounds;
   document.getElementById('loginTog').checked = !!state.login;
   document.getElementById('stats').textContent = state.stats || '';
-  document.getElementById('projBtn').textContent = (state.projects || 'choose') + '…';
+  document.getElementById('projBtn').textContent = (state.projects || tx('选择','choose')) + '…';
 }
+applyLanguage();
 renderCards();
 renderPetLab();
 </script>

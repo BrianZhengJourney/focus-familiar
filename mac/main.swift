@@ -400,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildPanel()
+        buildMainMenu()
         buildStatusItem()
         watchApps()
         registerHotKey()
@@ -418,7 +419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         revealOverlay(forceHome: true)
-        return false
+        showSettings()
+        return true
     }
 
     func applicationDidChangeScreenParameters(_ notification: Notification) {
@@ -504,6 +506,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     // — status bar: LuLu icon + a short, visual menu —
+    func buildMainMenu() {
+        let root = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "Focus Familiar")
+
+        let settings = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        appMenu.addItem(settings)
+        appMenu.addItem(NSMenuItem.separator())
+
+        let quit = NSMenuItem(title: "Quit Focus Familiar", action: #selector(quitApp(_:)), keyEquivalent: "q")
+        quit.target = self
+        appMenu.addItem(quit)
+
+        root.addItem(appItem)
+        root.setSubmenu(appMenu, for: appItem)
+        NSApp.mainMenu = root
+    }
+
     func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let icon = luluStatusIcon() as NSImage? {
@@ -547,10 +568,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         menu.addItem(ai)
 
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(item("Quit Focus Familiar", #selector(NSApplication.terminate(_:)), "q", "power"))
+        menu.addItem(item("Quit Focus Familiar", #selector(quitApp(_:)), "q", "power"))
 
         menu.delegate = self
         statusItem.menu = menu
+    }
+
+    @objc func quitApp(_ sender: Any?) {
+        NSApp.terminate(sender)
     }
 
     // — app watching —

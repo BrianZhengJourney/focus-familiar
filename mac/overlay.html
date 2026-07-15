@@ -280,6 +280,7 @@ body[data-char="pixel"] .shadow{ display:none; }
 .j-weave-cell.is-current{ border-color:#e0af48; box-shadow:0 0 0 1px #e0af4860,0 0 8px #e0af4850; }
 .j-weave-cell.is-current::after{ content:""; position:absolute; width:4px; height:4px;
   top:2px; right:2px; border-radius:50%; background:#ffe08a; box-shadow:0 0 5px #e0af48; }
+.j-weave-cell.is-future{ border-color:#ffffff0b; box-shadow:inset 0 1px rgba(255,255,255,.12); }
 @keyframes j-weave-morph{
   0%{ opacity:0; transform:scale(.72); filter:blur(3px) saturate(.65); }
   62%{ opacity:1; transform:scale(1.08); filter:blur(0) saturate(1.08); }
@@ -443,6 +444,8 @@ body[data-char="pixel"] .shadow{ display:none; }
 .journal .j-weave-cell:hover{ box-shadow:inset 0 1px rgba(255,255,255,.62),0 4px 8px rgba(83,50,22,.18); }
 .journal .j-weave-cell.is-current{ border-color:#a87328;
   box-shadow:0 0 0 1px #a8732860,0 0 8px #a8732845; }
+.journal .j-weave-cell.is-future{ border-color:#a77b4214;
+  box-shadow:inset 0 1px rgba(255,255,255,.3); }
 .journal .j-expand{ border-color:#a77b4238; }
 .journal .j-expand:hover{ color:#3a2417; background:#ead8b62e; }
 .journal .j-li .dot.neut{ background:#9f907a; }
@@ -1696,14 +1699,22 @@ function periodCellMarkup(a, b, now, entries, forceCurrent = false, allowCurrent
     <span class="j-period-track">${fill}</span></div>`;
 }
 
+const WEAVE_BACKGROUND = [247, 238, 219];
+
 function weaveMixColor(data){
   const colors = { deep:[47,174,143], neut:[159,144,122], dist:[193,74,106], away:[232,219,191] };
   const weights = { ...data.ms, away:data.away };
-  const sum = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
-  const rgb = [0,1,2].map(channel => Math.round(Object.entries(weights).reduce(
+  const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+  if (sum <= 0) return [...WEAVE_BACKGROUND];
+  return [0,1,2].map(channel => Math.round(Object.entries(weights).reduce(
     (value, [kind, weight]) => value + colors[kind][channel] * weight / sum, 0)));
-  return `rgb(${rgb.join(',')})`;
 }
+
+function weaveBlendColor(from, to, amount){
+  return from.map((value, channel) => Math.round(value + (to[channel] - value) * amount));
+}
+
+function weaveCssColor(rgb){ return `rgb(${rgb.join(',')})`; }
 
 function weavePeriodTip(a, b, now, data){
   if (a >= now) return `${fmtClock(a)}–${fmtClock(b)} · upcoming`;
@@ -1749,8 +1760,20 @@ function buildWovenDay(w0, now){
       const a = phase.a + i * J_PERIOD_MS;
       const b = Math.min(a + J_PERIOD_MS, phase.b);
       const data = periodBreakdown(a, b, now, entries);
-      periods.push({ a, b, data, color:weaveMixColor(data) });
+      periods.push({ a, b, data, rgb:weaveMixColor(data), future:a >= now });
     }
+    // The unknown future is blank parchment, not "neutral" and certainly not
+    // black. Let the next three cells carry the current colour gently into the
+    // page; phases that have not started yet simply rest in the background.
+    const firstFuture = periods.findIndex(period => period.future);
+    if (firstFuture >= 0){
+      const anchor = firstFuture > 0 ? periods[firstFuture - 1].rgb : WEAVE_BACKGROUND;
+      for (let i = firstFuture; i < periods.length; i++){
+        const fade = Math.min(1, (i - firstFuture + 1) / 3);
+        periods[i].rgb = weaveBlendColor(anchor, WEAVE_BACKGROUND, fade);
+      }
+    }
+    periods.forEach(period => { period.color = weaveCssColor(period.rgb); });
     const tiles = periods.map((period, i) => {
       const prev = periods[Math.max(0, i - 1)].color;
       const next = periods[Math.min(periods.length - 1, i + 1)].color;
@@ -1758,7 +1781,7 @@ function buildWovenDay(w0, now){
       const current = active && period.a <= now && now < period.b;
       const bg = `radial-gradient(circle at 28% 20%,rgba(255,255,255,.42),transparent 42%),` +
         `linear-gradient(135deg,${prev} 0%,${period.color} 48%,${next} 100%)`;
-      return `<span class="j-weave-cell${current ? ' is-current' : ''}" style="--i:${i};background:${bg}"
+      return `<span class="j-weave-cell${current ? ' is-current' : ''}${period.future ? ' is-future' : ''}" style="--i:${i};background:${bg}"
         role="img" data-tip="${esc(tip)}" aria-label="${esc(tip)}"></span>`;
     }).join('');
     return `<div class="j-weave-row ${phase.id}">

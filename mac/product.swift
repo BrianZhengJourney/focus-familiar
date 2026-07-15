@@ -77,19 +77,78 @@ func appIconDataURI(_ bundleId: String) -> String? {
 
 func petReferenceDataURI(_ url: URL) -> String? {
     guard let source = NSImage(contentsOf: url), source.size.width > 0, source.size.height > 0 else { return nil }
-    let side = min(source.size.width, source.size.height)
-    let crop = NSRect(x: (source.size.width - side) / 2,
-                      y: (source.size.height - side) / 2,
-                      width: side, height: side)
+    let scale = min(256 / source.size.width, 256 / source.size.height)
+    let fitted = NSSize(width: source.size.width * scale, height: source.size.height * scale)
+    let destination = NSRect(x: (256 - fitted.width) / 2, y: (256 - fitted.height) / 2,
+                             width: fitted.width, height: fitted.height)
     let image = NSImage(size: NSSize(width: 256, height: 256))
     image.lockFocus()
     NSGraphicsContext.current?.imageInterpolation = .high
-    source.draw(in: NSRect(x: 0, y: 0, width: 256, height: 256),
-                from: crop, operation: .copy, fraction: 1)
+    source.draw(in: destination, from: NSRect(origin: .zero, size: source.size),
+                operation: .copy, fraction: 1)
     image.unlockFocus()
     guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
           let png = rep.representation(using: .png, properties: [:]) else { return nil }
     return "data:image/png;base64," + png.base64EncodedString()
+}
+
+func validGeneratedPetSpec(_ spec: [String: Any]) -> Bool {
+    func integer(_ value: Any?) -> Int? {
+        if let value = value as? Int { return value }
+        guard let number = value as? NSNumber,
+              number.doubleValue.isFinite,
+              number.doubleValue.rounded() == number.doubleValue else { return nil }
+        return number.intValue
+    }
+    guard integer(spec["schemaVersion"]) == 1,
+          let name = spec["name"] as? String,
+          (1...60).contains(name.count),
+          !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+          let palette = spec["PAL"] as? [String: String], (7...16).contains(palette.count),
+          Set(["P", "L", "A", "D", "K", "W", "M"]).isSubset(of: Set(palette.keys)),
+          palette.allSatisfy({ key, value in
+              key.count == 1 && value.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil
+          }),
+          let base = spec["BASE"] as? [String], (6...24).contains(base.count),
+          let width = base.first?.count, (6...24).contains(width) else { return false }
+
+    let height = base.count
+    let allowed = Set(palette.keys.compactMap(\.first)).union([Character(".")])
+    func validRows(_ rows: [String]) -> Bool {
+        rows.count == height && rows.joined().contains(where: { $0 != "." }) && rows.allSatisfy { row in
+            row.count == width && row.allSatisfy { allowed.contains($0) }
+        }
+    }
+    guard validRows(base),
+          let forms = spec["EVOLUTION_BASES"] as? [[String]],
+          (1...3).contains(forms.count), forms.allSatisfy(validRows),
+          let face = spec["face"] as? [String: Any],
+          let lx = integer(face["lx"]), let rx = integer(face["rx"]),
+          let y = integer(face["y"]), let mx = integer(face["mx"]), let my = integer(face["my"]),
+          (1..<(width - 2)).contains(lx), (lx + 2..<(width - 1)).contains(rx),
+          (1..<(height - 1)).contains(y), (1..<(width - 1)).contains(mx),
+          (0..<(height - 1)).contains(my) else { return false }
+
+    func validPixels(_ value: Any?) -> Bool {
+        guard let pixels = value as? [Any], (1...64).contains(pixels.count) else { return false }
+        return pixels.allSatisfy { value in
+            guard let pixel = value as? [Any], pixel.count == 3,
+                  let x = integer(pixel[0]), let y = integer(pixel[1]),
+                  let token = pixel[2] as? String, token.count == 1,
+                  palette[token] != nil else { return false }
+            return (0..<width).contains(x) && (0..<height).contains(y)
+        }
+    }
+    guard validPixels(spec["EYES"]), validPixels(spec["MOUTH"]) else { return false }
+
+    if let viewBox = spec["vb"] as? String {
+        let tokens = viewBox.split(whereSeparator: \.isWhitespace)
+        let values = tokens.compactMap { Double(String($0)) }
+        guard tokens.count == 4, values.count == 4, values.allSatisfy(\.isFinite),
+              values[0] >= -64, values[1] >= -64,
+              values[2] > 0, values[2] <= 64, values[3] > 0, values[3] <= 64 else { return false }
+    }
+    return true
 }
 
 func defaultBrowserBundleId() -> String? {
@@ -104,8 +163,9 @@ func defaultBrowserBundleId() -> String? {
 
 final class GitWatcher {
     var timer: Timer?
-    var mtimes: [String: Date] = [:]
+    private var mtimes: [String: Date] = [:]
     var onCommit: ((String) -> Void)?
+    private let queue = DispatchQueue(label: "com.brianzheng.mimo.git-watcher", qos: .utility)
 
     static func projectsDir() -> URL {
         if let p = UserDefaults.standard.string(forKey: "projectsDir") {
@@ -115,13 +175,25 @@ final class GitWatcher {
     }
 
     func start() {
-        scan(initial: true)
+        scheduleScan(initial: true)
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            self?.scan(initial: false)
+            self?.scheduleScan(initial: false)
         }
     }
 
-    func scan(initial: Bool) {
+    func resetAndScan() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.mtimes.removeAll()
+            self.scan(initial: true)
+        }
+    }
+
+    private func scheduleScan(initial: Bool) {
+        queue.async { [weak self] in self?.scan(initial: initial) }
+    }
+
+    private func scan(initial: Bool) {
         let dir = GitWatcher.projectsDir()
         guard let kids = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
         for repo in kids {
@@ -134,7 +206,7 @@ final class GitWatcher {
             if let text = try? String(contentsOf: head, encoding: .utf8),
                let last = text.split(separator: "\n").last,
                last.contains("commit") {
-                onCommit?(key)
+                DispatchQueue.main.async { [weak self] in self?.onCommit?(key) }
             }
         }
     }
@@ -143,6 +215,29 @@ final class GitWatcher {
 // ── the one settings window (hosts settings.html) ───────────
 
 extension AppDelegate {
+
+    func settingsCall(_ function: String, _ payload: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        settingsWeb?.evaluateJavaScript("\(function)(\(json))", completionHandler: nil)
+    }
+
+    func storedCustomPetSpec() -> [String: Any]? {
+        guard let json = UserDefaults.standard.string(forKey: "customPetSpec"),
+              let data = json.data(using: .utf8),
+              let spec = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              validGeneratedPetSpec(spec) else { return nil }
+        return spec
+    }
+
+    func restoreCustomPetIfNeeded() {
+        guard let spec = storedCustomPetSpec(),
+              let data = try? JSONSerialization.data(withJSONObject: spec),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let select = UserDefaults.standard.string(forKey: "character") == "prototype"
+        js("famRegisterPrototypePet(\(json), \(select ? "true" : "false"))")
+    }
 
     @objc func showSettings() {
         if let w = settingsWin {
@@ -188,15 +283,11 @@ extension AppDelegate {
         for (key, label) in seenItems {
             var row: [String: Any] = ["key": key, "label": label,
                                       "kind": ruleOverrides[key] ?? defaultKind(key)]
-            if let uri = appIconDataURI(key) { row["icon"] = uri }          // a real app
-            else if key.contains("."), !key.hasPrefix("com."), !key.hasPrefix("org."),
-                    !key.hasPrefix("net."), !key.hasPrefix("dev."), !key.hasPrefix("md.") {
-                row["icon"] = "https://www.google.com/s2/favicons?domain=\(key)&sz=64"  // a site
-            }
+            if let uri = appIconDataURI(key) { row["icon"] = uri }          // local app icon only
             rules.append(row)
         }
         rules.sort { ($0["label"] as? String ?? "").lowercased() < ($1["label"] as? String ?? "").lowercased() }
-        let state: [String: Any] = [
+        var state: [String: Any] = [
             "character": d.string(forKey: "character") ?? "lulu",
             "language": voiceLanguage(),
             "permCode": Int(code),
@@ -208,7 +299,10 @@ extension AppDelegate {
             "login": SMAppService.mainApp.status == .enabled,
             "stats": historyStats(),
             "projects": GitWatcher.projectsDir().lastPathComponent,
+            "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
+            "openAIConfigured": MimoSecret.openAI.isConfigured,
         ]
+        if let customPet = storedCustomPetSpec() { state["customPet"] = customPet }
         guard let data = try? JSONSerialization.data(withJSONObject: state),
               let json = String(data: data, encoding: .utf8) else { return }
         settingsWeb?.evaluateJavaScript("initSettings(\(json))", completionHandler: nil)
@@ -223,12 +317,13 @@ extension AppDelegate {
                 d.set(id, forKey: "character")
             }
         case "petPrototype":
-            // PROTOTYPE — inject the generated pack into the running overlay
-            // only. Nothing (including the source image) is persisted.
             if let spec = body["spec"] as? [String: Any],
+               validGeneratedPetSpec(spec),
                JSONSerialization.isValidJSONObject(spec),
                let data = try? JSONSerialization.data(withJSONObject: spec),
                let json = String(data: data, encoding: .utf8) {
+                d.set(json, forKey: "customPetSpec")
+                d.set("prototype", forKey: "character")
                 js("famSetPrototypePet(\(json))")
                 revealOverlay()
             }
@@ -246,6 +341,92 @@ extension AppDelegate {
                     "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)))",
                     completionHandler: nil)
             }
+        case "petSaveKeys":
+            var failed: [String] = []
+            if let value = body["pixelLab"] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !MimoSecret.pixelLab.write(value) { failed.append("PixelLab") }
+            }
+            if let value = body["openAI"] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !MimoSecret.openAI.write(value) { failed.append("OpenAI") }
+            }
+            var keyState: [String: Any] = [
+                "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
+                "openAIConfigured": MimoSecret.openAI.isConfigured,
+            ]
+            if !failed.isEmpty {
+                keyState["failed"] = failed
+                keyState["error"] = voice("无法安全保存：\(failed.joined(separator: ", "))", "Could not save securely: \(failed.joined(separator: ", "))")
+            }
+            settingsCall("petKeysSaved", keyState)
+        case "petClearKey":
+            let provider = body["provider"] as? String == "openai" ? "OpenAI" : "PixelLab"
+            let cleared = provider == "OpenAI" ? MimoSecret.openAI.write("") : MimoSecret.pixelLab.write("")
+            var keyState: [String: Any] = [
+                "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
+                "openAIConfigured": MimoSecret.openAI.isConfigured,
+                "cleared": provider,
+            ]
+            if !cleared { keyState["error"] = voice("无法清除 \(provider)", "Could not clear \(provider)") }
+            settingsCall("petKeysSaved", keyState)
+        case "petCancel":
+            if let id = body["requestID"] as? String {
+                petGenerator.cancel(id)
+                if activePetGenerationID == id {
+                    activePetGenerationID = nil
+                    activePetGenerationFinishedRoutes.removeAll()
+                }
+            }
+        case "petGenerateBoth":
+            let requestID = (body["requestID"] as? String) ?? UUID().uuidString
+            guard let source = body["source"] as? String, source.hasPrefix("data:image/"),
+                  source.count < 8_000_000,
+                  let sourceData = PetGenerationCoordinator.dataFromDataURI(source),
+                  PetGenerationCoordinator.isSupportedImageData(sourceData) else {
+                for route in ["B", "C"] {
+                    settingsCall("petGenerationError", [
+                        "requestID": requestID, "route": route,
+                        "message": voice("参考图片无效", "Invalid reference image"),
+                    ])
+                }
+                return
+            }
+            let style = (body["style"] as? String).flatMap { value -> String? in
+                guard value.count < 2_000_000,
+                      let data = PetGenerationCoordinator.dataFromDataURI(value),
+                      PetGenerationCoordinator.isSupportedImageData(data) else { return nil }
+                return value
+            }
+            let personality = String((body["personality"] as? String ?? "quiet-curious").prefix(80))
+            let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
+            if let previous = activePetGenerationID { petGenerator.cancel(previous) }
+            activePetGenerationID = requestID
+            activePetGenerationFinishedRoutes.removeAll()
+            petGenerator.generateBoth(requestID: requestID, sourceDataURI: source,
+                                      styleDataURI: style, personality: personality,
+                                      likeness: likeness, progress: { [weak self] route, phase, detail in
+                guard let self, self.activePetGenerationID == requestID else { return }
+                var payload: [String: Any] = ["requestID": requestID, "route": route, "phase": phase]
+                if let detail { payload["detail"] = detail }
+                self.settingsCall("petGenerationProgress", payload)
+            }, completion: { [weak self] route, result in
+                guard let self, self.activePetGenerationID == requestID else { return }
+                switch result {
+                case .success(let images):
+                    self.settingsCall("petGenerationResult", [
+                        "requestID": requestID, "route": route, "images": images,
+                    ])
+                case .failure(let error):
+                    self.settingsCall("petGenerationError", [
+                        "requestID": requestID, "route": route,
+                        "message": error.localizedDescription,
+                    ])
+                }
+                self.activePetGenerationFinishedRoutes.insert(route)
+                if self.activePetGenerationFinishedRoutes.count == 2 {
+                    self.activePetGenerationID = nil
+                    self.activePetGenerationFinishedRoutes.removeAll()
+                }
+            })
         case "grant":
             grantAutomation()
         case "recheck":
@@ -280,8 +461,7 @@ extension AppDelegate {
             panel.directoryURL = GitWatcher.projectsDir()
             if panel.runModal() == .OK, let url = panel.url {
                 d.set(url.path, forKey: "projectsDir")
-                gitWatcher.mtimes = [:]
-                gitWatcher.scan(initial: true)
+                gitWatcher.resetAndScan()
             }
             pushSettingsState()
         case "retention":

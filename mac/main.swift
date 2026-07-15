@@ -402,6 +402,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var settingsWin: NSWindow?
     var settingsWeb: WKWebView?
     let gitWatcher = GitWatcher()
+    let petGenerator = PetGenerationCoordinator()
+    var activePetGenerationID: String?
+    var activePetGenerationFinishedRoutes = Set<String>()
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
@@ -415,11 +418,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         startHoverTracking()
         pruneOldLogs()
         gitWatcher.onCommit = { [weak self] repo in
-            self?.js("famProud('🎉 \(repo): commit shipped! +10 XP')")
+            let message = "🎉 \(repo): commit shipped! +10 XP"
+            self?.js("famProud(\(jsonStr(message)))")
         }
         gitWatcher.start()
-        if !UserDefaults.standard.bool(forKey: "onboarded1") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.showSettings() }
+        let onboardingComplete = UserDefaults.standard.bool(forKey: "onboarded1")
+        if !onboardingComplete {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.showSettings()
+            }
         }
         // NOTE: initial send happens in webView(_:didFinish:) — calling
         // famSetApp before the page loads silently drops the event
@@ -920,8 +927,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func js(_ script: String) {
         webView.evaluateJavaScript(script, completionHandler: nil)
     }
+
+    func isBundledWebResource(_ url: URL?) -> Bool {
+        guard let url, url.isFileURL, let root = Bundle.main.resourceURL?.standardizedFileURL.path else { return false }
+        let path = url.standardizedFileURL.path
+        return path == root || path.hasPrefix(root + "/")
+    }
+
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any] else { return }
+        guard message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.protocol == "file",
+              isBundledWebResource(message.webView?.url),
+              let body = message.body as? [String: Any] else { return }
         if message.name == "settings" { handleSettings(body); return }
         guard message.name == "bridge",
               let type = body["type"] as? String else { return }
@@ -999,9 +1016,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     // replay today's persisted history once the overlay page is ready,
     // then greet with whatever is frontmost right now
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if isBundledWebResource(url) { decisionHandler(.allow); return }
+        if navigationAction.navigationType == .linkActivated,
+           ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
+            NSWorkspace.shared.open(url)
+        }
+        decisionHandler(.cancel)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === settingsWeb { pushSettingsState(); return }
         js("famSetLanguage('\(voiceLanguage())')")
+        restoreCustomPetIfNeeded()
         js("famLoadHistory(\(readTodayLog()))")
         js("famLoadWeek(\(readWeekLog()))")
         if let front = NSWorkspace.shared.frontmostApplication { send(app: front) }

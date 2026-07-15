@@ -13,10 +13,26 @@ html,body{ height:100%; }
 body{
   font-family:-apple-system,'Inter',sans-serif; color:var(--ink);
   background:linear-gradient(165deg,#1d1838 0%,#191534 55%,#141d33 100%);
-  overflow-y:auto; padding:26px 30px 40px; -webkit-user-select:none;
+  overflow-y:auto; padding:22px 30px 40px; -webkit-user-select:none;
 }
 h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
-.tagline{ color:var(--dim); font-size:13px; margin:4px 0 20px; }
+.tagline{ color:var(--dim); font-size:13px; margin:4px 0 15px; }
+
+/* Settings is intentionally shallow: four obvious destinations, with
+   Language promoted out of the bottom of General. */
+.settings-tabs{ position:sticky; z-index:20; top:0; display:grid;
+  grid-template-columns:repeat(4,1fr); gap:5px; margin:0 -4px 14px; padding:8px 4px;
+  background:linear-gradient(180deg,#1d1838 70%,#1d183800); }
+.settings-tab{ display:flex; align-items:center; justify-content:center; gap:6px; min-width:0;
+  padding:8px 5px; border-radius:11px; border:1px solid var(--line); color:var(--dim);
+  background:#18132fba; font-size:11px; backdrop-filter:blur(12px); }
+.settings-tab:hover{ background:#2a234c; }
+.settings-tab.cur{ color:#17122d; border-color:#cabcf5; background:linear-gradient(120deg,#cabcf5,#a9e7d7);
+  box-shadow:0 8px 22px #0e0a2155; font-weight:700; }
+.settings-tab .tab-ico{ font-size:13px; }
+.tab-panel{ display:none; }
+.tab-panel.cur{ display:block; animation:panel-in .18s ease-out; }
+@keyframes panel-in{ from{opacity:.3;transform:translateY(3px)} to{opacity:1;transform:none} }
 
 .sec{ background:var(--card); border:1px solid var(--line); border-radius:16px;
   padding:16px 18px; margin-bottom:14px; }
@@ -35,36 +51,83 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .card .nm{ font-size:13px; font-weight:600; margin-top:6px; }
 .card .ds{ font-size:10.5px; color:var(--dim); margin-top:2px; }
 
-/* PROTOTYPE — Pet Atelier; session-only while we test whether image-derived
-   colour + a constrained house rig feels personal enough. */
+/* Mimo DNA — two real image-generation routes feeding one deterministic rig. */
 .proto-tag{ margin-left:auto; color:#15112b; background:#ffd479; border-radius:9px;
   padding:2px 7px; font-size:8px; font-weight:800; letter-spacing:.08em; }
 .petlab-intro{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-.pet-source{ width:58px; height:58px; border-radius:13px; border:1px dashed #cabcf555;
+.pet-source{ width:72px; height:72px; border-radius:15px; border:1px dashed #cabcf566;
   display:grid; place-items:center; color:var(--dim); font-size:22px; overflow:hidden; flex:none;
-  background:#17132f; }
-.pet-source img{ width:100%; height:100%; object-fit:cover; display:none; }
+  background:#17132f; cursor:pointer; position:relative; transition:.16s; }
+.pet-source:hover,.pet-source.drag{ border-color:var(--good); background:#1c2540; transform:translateY(-1px); }
+.pet-source img{ width:100%; height:100%; object-fit:contain; display:none; background:#fff8e8; }
+.pet-source small{ position:absolute; inset:auto 3px 3px; padding:2px 3px; border-radius:5px;
+  color:#fff; background:#15112bbd; font-size:7.5px; text-align:center; }
 .petlab-copy{ min-width:0; flex:1; }
 .petlab-copy b{ display:block; font-family:Georgia,serif; font-size:14px; margin-bottom:3px; }
 .petlab-copy span{ display:block; color:var(--dim); font-size:10.5px; line-height:1.4; }
 .petlab-actions{ display:flex; align-items:center; gap:8px; margin-top:7px; }
-.pet-name{ width:132px; color:var(--ink); background:#17132f; border:1px solid var(--line);
+.pet-name{ width:145px; color:var(--ink); background:#17132f; border:1px solid var(--line);
   border-radius:8px; padding:6px 8px; font:11px inherit; }
-.pet-swatches{ display:flex; gap:4px; margin-left:auto; }
-.pet-swatches i{ width:12px; height:12px; border-radius:4px; border:1px solid #ffffff24; }
-.pet-candidates{ display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
-.pet-option{ position:relative; min-width:0; padding:9px 7px 8px; text-align:center;
-  border:1px solid var(--line); border-radius:13px; background:#1a1635;
-  transition:transform .16s,border-color .16s,box-shadow .16s; }
-.pet-option:hover{ transform:translateY(-2px); border-color:#cabcf54d; }
-.pet-option.sel{ border-color:var(--good); box-shadow:0 0 18px #7df0cf24; }
-.pet-option svg{ display:block; width:86px; height:78px; margin:auto; overflow:visible; }
-.pet-option .nm{ font-size:11px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.pet-option .ds{ min-height:24px; margin:2px 0 7px; color:var(--dim); font-size:9px; line-height:1.3; }
-.pet-option button{ width:100%; padding:4px 5px; font-size:10px; }
+.pet-controls{ display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end;
+  padding:10px; margin:0 0 10px; border-radius:12px; background:#1a1635; border:1px solid var(--line); }
+.pet-control label{ display:block; color:var(--dim); font-size:8.5px; margin:0 0 5px; }
+.pet-control select{ width:100%; }
+.likeness-row{ display:flex; align-items:center; gap:6px; color:var(--dim); font-size:8px; }
+.likeness-row input{ width:100%; accent-color:#7df0cf; }
+.generate-both{ height:32px; padding:6px 12px; background:linear-gradient(120deg,#cabcf5,#7df0cf);
+  border:0; color:#15112b; font-size:11px; font-weight:750; }
+.generate-both:disabled{ opacity:.45; cursor:default; }
+.pet-routes{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.pet-route{ min-width:0; border:1px solid var(--line); border-radius:14px; padding:10px;
+  background:linear-gradient(160deg,#1c1738,#18142f); }
+.pet-route[data-route="B"]{ border-color:#7df0cf38; }
+.pet-route[data-route="C"]{ border-color:#e88fae38; }
+.pet-route-head{ display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+.route-letter{ width:21px; height:21px; display:grid; place-items:center; border-radius:7px;
+  background:#352b58; color:#fff; font:700 10px Georgia,serif; }
+.pet-route-head b{ font:600 12px Georgia,serif; }
+.pet-route-head small{ display:block; color:var(--dim); font:8px -apple-system,sans-serif; margin-top:1px; }
+.route-status{ margin-left:auto; max-width:72px; color:var(--dim); text-align:right; font-size:8px; line-height:1.25; }
+.route-status.busy{ color:var(--warn); }.route-status.ready{ color:var(--good); }.route-status.err{ color:var(--bad); }
+.route-empty{ min-height:116px; display:grid; place-items:center; text-align:center; color:var(--dim);
+  border:1px dashed var(--line); border-radius:11px; font-size:9px; line-height:1.5; padding:14px; }
+.route-empty .pulse{ width:25px; height:25px; margin:0 auto 7px; border:2px solid #ffffff16;
+  border-top-color:var(--warn); border-radius:50%; animation:route-spin .9s linear infinite; }
+@keyframes route-spin{to{transform:rotate(360deg)}}
+.candidate-strip{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:8px; }
+.candidate{ aspect-ratio:1; min-width:0; padding:3px; background:#fff8e8; border:1px solid transparent;
+  border-radius:9px; overflow:hidden; cursor:pointer; }
+.candidate:hover{ transform:translateY(-1px); }.candidate.sel{ border-color:var(--good); box-shadow:0 0 0 1px #7df0cf55; }
+.candidate img{ width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
+.evo-preview{ display:grid; grid-template-columns:repeat(3,1fr); gap:3px; padding:5px; border-radius:10px; background:#131029; }
+.evo-form{text-align:center;color:var(--dim);font-size:7px}.evo-form svg{display:block;width:54px;height:47px;max-width:100%;margin:auto;overflow:visible}
+.route-adopt{ width:100%; margin-top:7px; padding:6px; font-size:9.5px; }
+.state-chips{ display:flex; gap:3px; margin-top:6px; overflow:hidden; }
+.state-chips i{ font-style:normal; color:#8f89a7; background:#ffffff08; border-radius:5px; padding:3px 4px; font-size:7px; white-space:nowrap; }
 .petlab-state{ display:flex; align-items:center; gap:7px; min-height:18px; margin-top:9px;
   color:var(--dim); font-size:10px; }
 .petlab-state .dot{ width:6px; height:6px; border-radius:50%; background:#7df0cf; box-shadow:0 0 7px #7df0cf88; }
+.pet-privacy{ margin-top:8px; color:#938ca9; font-size:8.5px; line-height:1.45; }
+.api-setup{ margin-top:10px; border-top:1px dashed var(--line); padding-top:9px; }
+.api-setup summary{ color:var(--accent); font-size:9.5px; cursor:pointer; }
+.api-grid{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; }
+.api-field{ min-width:0; padding:7px; border-radius:9px; background:#17132f; }
+.api-field label{ display:flex; justify-content:space-between; color:var(--dim); font-size:8.5px; margin-bottom:5px; }
+.api-field label b{ color:var(--warn); font-weight:600; }.api-field label b.ok{ color:var(--good); }
+.api-field input{ width:100%; padding:5px 6px; color:var(--ink); background:#0f0c22; border:1px solid var(--line); border-radius:6px; font:9px ui-monospace,monospace; }
+.api-actions{ display:flex; gap:6px; margin-top:7px; }.api-actions button{ padding:5px 9px; font-size:9px; }
+
+.language-hero{ padding:24px 20px; }
+.language-lead{ color:var(--dim); font-size:12px; line-height:1.55; margin:-2px 0 16px; }
+.language-options{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.language-card{ position:relative; min-height:150px; display:flex; flex-direction:column; justify-content:center;
+  align-items:center; gap:7px; border:1px solid var(--line); border-radius:16px; background:#191531;
+  color:var(--ink); transition:.18s; }
+.language-card:hover{ transform:translateY(-2px); background:#211b40; }
+.language-card.sel{ border-color:var(--good); box-shadow:0 0 0 1px #7df0cf55,0 12px 30px #0c091b66; }
+.language-card.sel::after{ content:'✓'; position:absolute; right:10px; top:9px; width:20px; height:20px;
+  display:grid; place-items:center; border-radius:50%; color:#122a23; background:var(--good); font-size:11px; }
+.language-card .lang-glyph{ font:600 36px Georgia,'Songti SC',serif; }.language-card b{font-size:13px}.language-card small{color:var(--dim);font-size:9px}
 
 /* permission pill */
 .permrow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -117,7 +180,17 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 <body>
 
 <h1>🐾 Mimo <span style="font-size:.62em;color:var(--dim)">米墨</span></h1>
-<div class="tagline" data-zh="住在桌面角落，陪你一起成长。它记得你在做什么，而一切只留在这台 Mac 上。" data-en="A tiny familiar who grows with your attention and remembers your day. Everything stays on this Mac.">住在桌面角落，陪你一起成长。它记得你在做什么，而一切只留在这台 Mac 上。</div>
+<div class="tagline" data-zh="住在桌面角落，陪你一起成长。活动记录只留在这台 Mac；DIY 图片只在你点击生成时发送。" data-en="A tiny familiar who grows with your attention. Activity stays on this Mac; DIY images leave only when you choose Generate.">住在桌面角落，陪你一起成长。活动记录只留在这台 Mac；DIY 图片只在你点击生成时发送。</div>
+
+<nav class="settings-tabs" aria-label="Settings sections">
+  <button class="settings-tab cur" type="button" data-tab="pet" onclick="setSettingsTab('pet')"><span class="tab-ico">🐾</span><span data-zh="伴灵" data-en="Familiar">伴灵</span></button>
+  <button class="settings-tab" type="button" data-tab="growth" onclick="setSettingsTab('growth')"><span class="tab-ico">✦</span><span data-zh="成长" data-en="Growth">成长</span></button>
+  <button class="settings-tab" type="button" data-tab="general" onclick="setSettingsTab('general')"><span class="tab-ico">⚙</span><span data-zh="通用" data-en="General">通用</span></button>
+  <button class="settings-tab" type="button" data-tab="language" onclick="setSettingsTab('language')"><span class="tab-ico">文/A</span><span data-zh="语言" data-en="Language">语言</span></button>
+</nav>
+
+<main>
+<div class="tab-panel cur" data-panel="pet">
 
 <div class="sec">
   <h2><span class="ico">🐾</span><span data-zh="你的伴灵" data-en="Your familiar">你的伴灵</span></h2>
@@ -125,33 +198,51 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </div>
 
 <div class="sec" id="petLab">
-  <h2><span class="ico">✦</span><span data-zh="DIY 伴灵工坊" data-en="DIY Pet Atelier">DIY 伴灵工坊</span> <span class="proto-tag">PROTOTYPE</span></h2>
+  <h2><span class="ico">✦</span><span data-zh="Mimo DNA · DIY 伴灵" data-en="Mimo DNA · DIY familiar">Mimo DNA · DIY 伴灵</span> <span class="proto-tag">B + C</span></h2>
   <div class="petlab-intro">
-    <div class="pet-source"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"></div>
-    <div class="petlab-copy"><b data-zh="用一张图片，做出你的桌面伴灵" data-en="turn one image into a tiny familiar">用一张图片，做出你的桌面伴灵</b>
-      <span data-zh="颜色只在本地提取；米墨的像素骨架负责可爱、影子、情绪和成长瞬间。" data-en="Colour is sampled locally; Mimo's pixel rig supplies the cuteness, shadow, moods, and evolution moments.">颜色只在本地提取；米墨的像素骨架负责可爱、影子、情绪和成长瞬间。</span>
+    <div class="pet-source" id="petSourceDrop" onclick="send({type:'petUpload'})"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"><small data-zh="拖进来" data-en="drop here">拖进来</small></div>
+    <div class="petlab-copy"><b data-zh="丢进一张图，同时长出两种可能" data-en="Drop one image; grow two possibilities">丢进一张图，同时长出两种可能</b>
+      <span data-zh="B 保留原图身份，C 会先把它重新想象成伴灵。两边最后都编译成同一套 Mimo DNA。" data-en="B preserves the subject; C first reimagines it as a familiar. Both compile into the same Mimo DNA rig.">B 保留原图身份，C 会先把它重新想象成伴灵。两边最后都编译成同一套 Mimo DNA。</span>
       <div class="petlab-actions">
-        <button type="button" onclick="send({type:'petUpload'})" data-zh="上传图片…" data-en="Upload image…">上传图片…</button>
+        <button type="button" onclick="send({type:'petUpload'})" data-zh="选择图片…" data-en="Choose image…">选择图片…</button>
         <input class="pet-name" id="petName" value="我的小伴灵" maxlength="28"
           oninput="petLab.name=this.value || tx('我的小伴灵','My little familiar'); renderPetLab()">
-        <span class="pet-swatches" id="petSwatches"></span>
       </div>
     </div>
   </div>
-  <div class="pet-candidates" id="petCandidates"></div>
-  <div class="petlab-state" id="petLabState"><span class="dot"></span>
-    调色盘已就绪 · 上传图片试试看 · 本次运行有效
+
+  <div class="pet-controls">
+    <div class="pet-control"><label data-zh="它的气质" data-en="Personality">它的气质</label>
+      <select id="petPersonality"><option value="quiet-curious" data-zh="安静又好奇" data-en="quiet &amp; curious">安静又好奇</option><option value="brave-warm" data-zh="勇敢又温暖" data-en="brave &amp; warm">勇敢又温暖</option><option value="strange-playful" data-zh="古怪又顽皮" data-en="strange &amp; playful">古怪又顽皮</option></select></div>
+    <div class="pet-control"><label data-zh="更像谁？" data-en="What should it resemble?">更像谁？</label><div class="likeness-row"><span data-zh="伴灵" data-en="Mimo">伴灵</span><input id="petLikeness" type="range" min="0" max="100" value="58"><span data-zh="原图" data-en="photo">原图</span></div></div>
+    <button class="generate-both" id="petGenerate" type="button" onclick="generateBothPets()" data-zh="同时生成 B + C" data-en="Generate B + C">同时生成 B + C</button>
   </div>
+
+  <div class="pet-routes" id="petRoutes">
+    <article class="pet-route" data-route="B"><div id="petRouteB"></div></article>
+    <article class="pet-route" data-route="C"><div id="petRouteC"></div></article>
+  </div>
+  <div class="petlab-state" id="petLabState"><span class="dot"></span>
+    先丢进一张图片；B 和 C 会同时开始
+  </div>
+  <div class="pet-privacy" data-zh="隐私提示：点击生成后，这一张参考图片会发送给 PixelLab；C 路线也会发送给 OpenAI。原图不落盘，米墨只保存最终的像素 DNA。" data-en="Privacy: Generate sends this reference to PixelLab; route C also sends it to OpenAI. The source is not saved—Mimo keeps only the compiled pixel DNA.">隐私提示：点击生成后，这一张参考图片会发送给 PixelLab；C 路线也会发送给 OpenAI。原图不落盘，米墨只保存最终的像素 DNA。</div>
+  <details class="api-setup" id="apiSetup"><summary data-zh="API 连接 · Key 只存进这台 Mac 的 Keychain" data-en="API connections · keys stay in this Mac's Keychain">API 连接 · Key 只存进这台 Mac 的 Keychain</summary>
+    <div class="api-grid">
+      <div class="api-field"><label><span>PixelLab</span><b id="pixelKeyState">未设置</b></label><input id="pixelKey" type="password" autocomplete="off" placeholder="PixelLab token"></div>
+      <div class="api-field"><label><span>OpenAI</span><b id="openAIKeyState">未设置</b></label><input id="openAIKey" type="password" autocomplete="off" placeholder="OpenAI API key"></div>
+    </div>
+    <div class="api-actions"><button type="button" onclick="savePetKeys()" data-zh="安全保存" data-en="Save securely">安全保存</button><button type="button" onclick="clearPetKey('pixellab')" data-zh="清除 PixelLab" data-en="Clear PixelLab">清除 PixelLab</button><button type="button" onclick="clearPetKey('openai')" data-zh="清除 OpenAI" data-en="Clear OpenAI">清除 OpenAI</button></div>
+  </details>
+</div>
 </div>
 
-
+<div class="tab-panel" data-panel="growth">
 <div class="sec">
   <h2><span class="ico">📜</span><span data-zh="成长规则" data-en="Growth rules">成长规则</span></h2>
   <div class="chips" id="chips"></div>
   <div class="rules" id="rules"><div class="note">先使用一会儿 Mac；米墨遇见的 app 和网站会出现在这里。</div></div>
   <div class="note" data-zh="💪 蛋白质 · ⛓️ 铁 · 📐 蓝图 · 📖 魔法书 · 📝 碎片——都是成长留下的养分。🕳️ 是分心坑。" data-en="💪 protein · ⛓️ iron · 📐 blueprints · 📖 spellbooks · 📝 fragments — nourishment gathered while growing. 🕳️ is the distraction pit.">💪 蛋白质 · ⛓️ 铁 · 📐 蓝图 · 📖 魔法书 · 📝 碎片——都是成长留下的养分。🕳️ 是分心坑。</div>
 </div>
-
 <div class="sec">
   <h2><span class="ico">🔑</span><span data-zh="权限" data-en="Access">权限</span></h2>
   <div class="permrow">
@@ -161,6 +252,9 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
   </div>
   <div class="note" data-zh="只在本地读取当前标签页的<b>地址</b>，让米墨分得清 arXiv 和 YouTube Shorts。未授权时，浏览器会记作日常。信息不会离开你的 Mac。" data-en="Reads only the active tab's <b>address</b>, locally, so Mimo can tell arXiv from YouTube Shorts. Without it, browsers count as everyday time. Nothing ever leaves your Mac.">只在本地读取当前标签页的<b>地址</b>，让米墨分得清 arXiv 和 YouTube Shorts。未授权时，浏览器会记作日常。信息不会离开你的 Mac。</div>
 </div>
+</div>
+
+<div class="tab-panel" data-panel="general">
 
 <div class="sec">
   <h2><span class="ico">⚙️</span><span data-zh="通用" data-en="General">通用</span></h2>
@@ -175,10 +269,6 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
     <label class="toggle"><input type="checkbox" id="loginTog" onchange="send({type:'login', on:this.checked})"><i></i></label></div>
   <div class="row"><span class="grow" data-zh="庆祝这些项目里的 commit" data-en="Celebrate commits in">庆祝这些项目里的 commit</span>
     <button id="projBtn" onclick="send({type:'projects'})">选择…</button></div>
-  <div class="row"><span class="grow" data-zh="界面语言" data-en="Language">界面语言</span>
-    <select id="langSel" onchange="changeLanguage(this.value)">
-      <option value="zh">中文</option><option value="en">English</option>
-    </select></div>
 </div>
 
 <div class="sec">
@@ -209,10 +299,38 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </div>
 
 <div class="footer"><button class="primary" onclick="send({type:'done'})" data-zh="开始吧 ✦" data-en="Let's go ✦">开始吧 ✦</button></div>
+</div>
+
+<div class="tab-panel" data-panel="language">
+  <div class="sec language-hero">
+    <h2><span class="ico">文/A</span><span data-zh="界面与米墨的语言" data-en="Mimo's language">界面与米墨的语言</span></h2>
+    <div class="language-lead" data-zh="这一项会同时改变设置、今日手记、菜单、状态提示和导出文案。" data-en="This changes Settings, today's journal, menus, status messages, and export copy together.">这一项会同时改变设置、今日手记、菜单、状态提示和导出文案。</div>
+    <div class="language-options" role="radiogroup">
+      <button class="language-card" type="button" data-language="zh" role="radio" onclick="changeLanguage('zh')"><span class="lang-glyph">米墨</span><b>中文</b><small>简体中文</small></button>
+      <button class="language-card" type="button" data-language="en" role="radio" onclick="changeLanguage('en')"><span class="lang-glyph">Mimo</span><b>English</b><small>English</small></button>
+    </div>
+  </div>
+</div>
+</main>
 
 <script>
 let LANG = 'zh';
+let activeSettingsTab = 'pet';
 const tx = (zh, en) => LANG === 'zh' ? zh : en;
+function setSettingsTab(tab){
+  const next = ['pet','growth','general','language'].includes(tab) ? tab : 'pet';
+  const changed = activeSettingsTab !== next;
+  activeSettingsTab = next;
+  document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('cur', el.dataset.tab === activeSettingsTab));
+  document.querySelectorAll('[data-panel]').forEach(el => el.classList.toggle('cur', el.dataset.panel === activeSettingsTab));
+  if(changed){ document.body.scrollTop = 0; document.documentElement.scrollTop = 0; }
+}
+function syncLanguageChoices(){
+  document.querySelectorAll('[data-language]').forEach(el => {
+    const selected = el.dataset.language === LANG;
+    el.classList.toggle('sel', selected); el.setAttribute('aria-checked', selected ? 'true' : 'false');
+  });
+}
 function applyLanguage(){
   document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
   document.title = LANG === 'zh' ? 'Mimo 米墨 — 设置' : 'Mimo — Settings';
@@ -224,9 +342,7 @@ function applyLanguage(){
     input.value = tx('我的小伴灵', 'My little familiar');
     petLab.name = input.value;
   }
-  const petState = document.getElementById('petLabState');
-  if (petState && typeof petLab !== 'undefined' && petLab.picked < 0) petState.innerHTML =
-    `<span class="dot"></span>${tx('调色盘已就绪 · 上传图片试试看 · 本次运行有效','sample palette ready · upload an image to make it yours · session only')}`;
+  syncLanguageChoices();
 }
 function changeLanguage(lang){
   LANG = lang === 'en' ? 'en' : 'zh';
@@ -277,70 +393,8 @@ function miniSVG(m){
       depth += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${shade(m.PAL[ch])}"/>`;
     }
   });
-  const px = list => list.map(([x,y,ch]) => `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${m.PAL[ch]}"/>`).join('');
-  return `<svg viewBox="${m.vb}"><g transform="translate(0.55,0.55)" opacity="0.55">${depth}</g><g>${body}</g>${px(m.EYES)}${px(m.MOUTH)}</svg>`;
-}
-
-const PET_TEMPLATES = [
-  { key:'round', label:'round & cozy', labelZh:'圆滚滚', desc:'soft silhouette · sleepy little feet', descZh:'柔软轮廓 · 困困的小脚',
-    BASE:['...P........P...','..LPP......PPL..','.PPPPPPPPPPPPPP.','PPPPPPPPPPPPPPPP',
-      'PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP','PPPLLLLLLLLLLPPP',
-      'PPPPLLLLLLLLPPPP','.PPPPAALLAAPPPP.','.PPPPPPPPPPPPPP.','..PPPPPPPPPPPP..',
-      '...PPPPPPPPPP...','...PP..PP..PP...','....PP....PP....'],
-    face:{lx:4,rx:10,y:5,mx:7,my:8} },
-  { key:'adventure', label:'tiny adventurer', labelZh:'小小冒险家', desc:'bright ears · built-in little scarf', descZh:'亮亮的耳朵 · 自带小围巾',
-    BASE:['..P..........P..','.LPP........PPL.','.PPPP......PPPP.','PPPPPPPPPPPPPPPP',
-      'PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP','PPLLLLLLLLLLLLPP',
-      'PPPLLLLLLLLLLPPP','PPPAAAAAAAAAAPPP','...PPPPPPPPPP...', '....PPPPPPPP....',
-      '....PP....PP....','...PPP....PPP...','...PP......PP...'],
-    face:{lx:4,rx:10,y:5,mx:7,my:8} },
-  { key:'strange', label:'strange little thing', labelZh:'古怪小东西', desc:'one antenna · curious blob energy', descZh:'一根天线 · 好奇的果冻感',
-    BASE:['......A.........','.....AAA........','......P.........','...PPPPPPPP.....',
-      '..PPLLLLLLPP....','.PPLLLLLLLLLPP..','PPLLLLLLLLLLLPP.','PPLLLLLLLLLLLPPP',
-      'PPLLLLLLLLLLLPP.','.PPLLLLLLLLLPP..','..PPPAALLAPPP...','...PPPPPPPP.....',
-      '....PP..PP......','...PPP..PPP.....','....PP..PP......'],
-    face:{lx:4,rx:10,y:6,mx:7,my:9} }
-];
-
-const petLab = { name:'我的小伴灵', palette:['#d68b68','#f1c7a7','#76c8b0'], picked:-1 };
-
-function mixHex(a, b, t){
-  const av = parseInt(a.slice(1),16), bv = parseInt(b.slice(1),16);
-  const c = shift => Math.round(((av >> shift) & 255) * (1-t) + ((bv >> shift) & 255) * t);
-  return '#' + ((c(16)<<16)|(c(8)<<8)|c(0)).toString(16).padStart(6,'0');
-}
-
-function petSpec(template){
-  const [primary, secondary, accent] = petLab.palette;
-  const pal = { P:primary, L:mixHex(secondary,'#ffffff',.26), A:accent,
-    D:mixHex(primary,'#171326',.62), K:'#241a20', W:'#ffffff', M:mixHex(primary,'#171326',.72) };
-  const f = template.face;
-  const eyes = [[f.lx,f.y,'K'],[f.lx+1,f.y,'K'],[f.lx,f.y+1,'K'],[f.lx+1,f.y+1,'K'],[f.lx,f.y,'W'],
-    [f.rx,f.y,'K'],[f.rx+1,f.y,'K'],[f.rx,f.y+1,'K'],[f.rx+1,f.y+1,'K'],[f.rx,f.y,'W']];
-  return { name:petLab.name, variant:template.key, PAL:pal, BASE:template.BASE, face:f,
-    EYES:eyes, MOUTH:[[f.mx-1,f.my,'M'],[f.mx+1,f.my,'M']], vb:'-1 -2 20 20' };
-}
-
-function renderPetLab(){
-  const specs = PET_TEMPLATES.map(petSpec);
-  document.getElementById('petCandidates').innerHTML = specs.map((spec, i) => `
-    <div class="pet-option ${petLab.picked === i ? 'sel' : ''}">
-      ${miniSVG(spec)}<div class="nm">${LANG === 'zh' ? PET_TEMPLATES[i].labelZh : PET_TEMPLATES[i].label}</div>
-      <div class="ds">${LANG === 'zh' ? PET_TEMPLATES[i].descZh : PET_TEMPLATES[i].desc}</div>
-      <button type="button" onclick="usePetCandidate(${i})">${petLab.picked === i ? tx('已住进桌面 ✦','on your desktop ✦') : tx('试试这个','try this one')}</button>
-    </div>`).join('');
-  document.getElementById('petSwatches').innerHTML = petLab.palette.map(c => `<i style="background:${c}"></i>`).join('');
-}
-
-function usePetCandidate(i){
-  petLab.picked = i;
-  const spec = petSpec(PET_TEMPLATES[i]);
-  send({type:'petPrototype',spec});
-  renderPetLab();
-  const label = LANG === 'zh' ? PET_TEMPLATES[i].labelZh : PET_TEMPLATES[i].label;
-  document.getElementById('petLabState').innerHTML = `<span class="dot"></span>${LANG === 'zh'
-    ? `${label} 已住进桌面 · 会成长、睡觉、分心、骄傲，也会升级`
-    : `${label} is live · inherits growth, sleep, distraction, proud, and level-up states`}`;
+  const px = list => (list||[]).map(([x,y,ch]) => `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${m.PAL[ch]}"/>`).join('');
+  return `<svg viewBox="${m.vb||'-1 -2 22 22'}"><g transform="translate(0.55,0.55)" opacity="0.55">${depth}</g><g>${body}</g>${px(m.EYES)}${px(m.MOUTH)}</svg>`;
 }
 
 function rgbHex(r,g,b){ return '#' + ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0'); }
@@ -349,40 +403,213 @@ function colourDistance(a,b){
   return Math.hypot((x>>16&255)-(y>>16&255),(x>>8&255)-(y>>8&255),(x&255)-(y&255));
 }
 
-function samplePetPalette(img){
-  const canvas=document.createElement('canvas'), size=36; canvas.width=size; canvas.height=size;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  const crop=Math.min(img.naturalWidth,img.naturalHeight);
-  ctx.drawImage(img,(img.naturalWidth-crop)/2,(img.naturalHeight-crop)/2,crop,crop,0,0,size,size);
-  const px=ctx.getImageData(0,0,size,size).data, bins=new Map();
-  for(let y=3;y<size-3;y++) for(let x=3;x<size-3;x++){
-    const i=(y*size+x)*4, alpha=px[i+3]; if(alpha<170) continue;
-    const r=px[i],g=px[i+1],b=px[i+2], hi=Math.max(r,g,b),lo=Math.min(r,g,b);
-    if(hi>245&&lo>238) continue;
-    const q=v=>Math.min(255,Math.round(v/32)*32), key=rgbHex(q(r),q(g),q(b));
-    const centre=1+Math.max(0,1-Math.hypot(x-size/2,y-size/2)/(size*.55));
-    bins.set(key,(bins.get(key)||0)+centre);
-  }
-  const sorted=[...bins.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]), out=[];
-  for(const c of sorted){ if(out.every(x=>colourDistance(x,c)>62)) out.push(c); if(out.length===3) break; }
-  while(out.length<3) out.push(['#d68b68','#f1c7a7','#76c8b0'][out.length]);
-  const saturation=c=>{const n=parseInt(c.slice(1),16),v=[n>>16&255,n>>8&255,n&255];return Math.max(...v)-Math.min(...v)};
-  const accent=[...out].filter(c=>c!==out[0]).sort((a,b)=>saturation(b)-saturation(a))[0] || out[1];
-  return [out[0],out.find(c=>c!==out[0]&&c!==accent)||out[1],accent];
+const freshRoute = () => ({status:'idle',phase:'',error:'',candidates:[],selected:0});
+const petLab = { name:'我的小伴灵', source:null, sourceName:'', requestID:null,
+  routes:{B:freshRoute(),C:freshRoute()} };
+const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+function routeCopy(route){
+  return route === 'B'
+    ? {title:'PixelLab-first', sub:tx('保留身份 · 直接变成像素伴灵','identity-first · direct pixel familiar')}
+    : {title:'Concept → PixelLab', sub:tx('先重新想象 · 再收进像素骨架','reimagine first · then compile')};
+}
+function routeStatus(route){
+  const r=petLab.routes[route];
+  if(r.status==='error') return {cls:'err',text:tx('失败','failed')};
+  if(r.status==='ready') return {cls:'ready',text:tx(`${r.candidates.length} 个可选`,`pick from ${r.candidates.length}`)};
+  if(r.status==='busy') return {cls:'busy',text:r.phase==='concept'?tx('正在重新想象…','reimagining…'):r.phase==='compile'?tx('正在编译 DNA…','compiling DNA…'):tx('正在画像素…','drawing pixels…')};
+  return {cls:'',text:tx('等待图片','waiting')};
+}
+function renderRoute(route){
+  const r=petLab.routes[route], copy=routeCopy(route), st=routeStatus(route), selected=r.candidates[r.selected];
+  let body='';
+  if(r.status==='busy') body=`<div class="route-empty"><div><div class="pulse"></div>${st.text}</div></div>`;
+  else if(r.status==='error') body=`<div class="route-empty">${esc(r.error)}<br><small>${tx('另一条路线仍可继续','the other route can still finish')}</small></div>`;
+  else if(selected){
+    const forms=selected.spec.EVOLUTION_BASES || [selected.spec.BASE];
+    body=`<div class="candidate-strip">${r.candidates.map((c,i)=>`<div class="candidate ${i===r.selected?'sel':''}" onclick="selectPetCandidate('${route}',${i})"><img src="${c.image}" alt="candidate ${i+1}"></div>`).join('')}</div>
+      <div class="evo-preview">${forms.slice(0,3).map((base,i)=>`<div class="evo-form">${miniSVG({...selected.spec,BASE:base})}<span>${[tx('初生','seed'),tx('绽放','bloom'),tx('发光','radiant')][i]}</span></div>`).join('')}</div>
+      <div class="state-chips"><i>${tx('成长','growth')}</i><i>${tx('睡觉','sleep')}</i><i>${tx('分心','distracted')}</i><i>${tx('升级','level-up')}</i></div>
+      <button class="route-adopt" type="button" onclick="usePetCandidate('${route}')">${tx('让这个住进桌面 ✦','Bring this one home ✦')}</button>`;
+  } else body=`<div class="route-empty">${route==='B'?tx('更像你丢进来的那张图','closer to the uploaded subject'):tx('更有角色感和意外性','more characterful and surprising')}</div>`;
+  document.getElementById(`petRoute${route}`).innerHTML=`<div class="pet-route-head"><span class="route-letter">${route}</span><div><b>${copy.title}</b><small>${copy.sub}</small></div><span class="route-status ${st.cls}">${st.text}</span></div>${body}`;
+}
+function renderKeyState(){
+  const pixel=document.getElementById('pixelKeyState'), openai=document.getElementById('openAIKeyState');
+  if(!pixel||!openai)return;
+  pixel.textContent=S.pixelLabConfigured?tx('已连接','connected'):tx('未设置','not set'); pixel.className=S.pixelLabConfigured?'ok':'';
+  openai.textContent=S.openAIConfigured?tx('已连接','connected'):tx('未设置','not set'); openai.className=S.openAIConfigured?'ok':'';
+}
+function renderPetLab(){
+  renderRoute('B'); renderRoute('C'); renderKeyState();
+  const busy=['B','C'].some(k=>petLab.routes[k].status==='busy');
+  const generate=document.getElementById('petGenerate');
+  if(generate){ generate.disabled=busy; generate.textContent=busy?tx('正在生成…','Generating…'):tx('同时生成 B + C','Generate B + C'); }
+  const state=document.getElementById('petLabState');
+  if(!petLab.source) state.innerHTML=`<span class="dot"></span>${tx('先丢进一张图片；B 和 C 会同时开始','Drop an image first; B and C will start together')}`;
+  else if(busy) state.innerHTML=`<span class="dot"></span>${tx('两条路线独立进行；先完成的会先出现','Both routes run independently; the first result appears first')}`;
+  else if(['B','C'].some(k=>petLab.routes[k].status==='ready')) state.innerHTML=`<span class="dot"></span>${tx('比较轮廓与三段成长，然后选一只带回桌面','Compare silhouettes and evolution, then bring one home')}`;
+  else state.innerHTML=`<span class="dot"></span>${tx('图片已就绪 · 同时生成两条路线','Reference ready · generate both routes')}`;
 }
 
-function loadPetImageData(url, sourceName){
-  const img=new Image();
-  img.onload=()=>{
-    petLab.palette=samplePetPalette(img); petLab.picked=-1;
-    const thumb=document.getElementById('petSourceImg'); thumb.src=url; thumb.style.display='block';
-    document.getElementById('petSourceGlyph').style.display='none';
-    const guessed=(sourceName||'').replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();
-    if(guessed){ petLab.name=guessed.slice(0,28); document.getElementById('petName').value=petLab.name; }
-    renderPetLab();
-    document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${tx('已在本地提取调色盘 · 选择一种模样','palette sampled locally · choose one interpretation')}`;
-  };
-  img.src=url;
+function selectPetCandidate(route,index){ petLab.routes[route].selected=index; renderPetLab(); }
+function usePetCandidate(route){
+  const r=petLab.routes[route], candidate=r.candidates[r.selected]; if(!candidate)return;
+  candidate.spec.name=petLab.name || tx('我的小伴灵','My little familiar');
+  send({type:'petPrototype',spec:candidate.spec});
+  S.customPet=candidate.spec;S.character='prototype';renderCards();
+  document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${esc(tx(`${candidate.spec.name} 已住进桌面 · 三段成长与全部状态已接上`,`${candidate.spec.name} is home · all states and three evolution forms are connected`))}`;
+}
+function savePetKeys(){
+  send({type:'petSaveKeys',pixelLab:document.getElementById('pixelKey').value,openAI:document.getElementById('openAIKey').value});
+}
+function clearPetKey(provider){ send({type:'petClearKey',provider}); }
+function petKeysSaved(state){
+  S.pixelLabConfigured=!!state.pixelLabConfigured; S.openAIConfigured=!!state.openAIConfigured;
+  const failed=new Set(state.failed||[]);
+  if(state.cleared==='PixelLab')document.getElementById('pixelKey').value='';
+  else if(state.cleared==='OpenAI')document.getElementById('openAIKey').value='';
+  else {
+    if(!failed.has('PixelLab'))document.getElementById('pixelKey').value='';
+    if(!failed.has('OpenAI'))document.getElementById('openAIKey').value='';
+  }
+  renderKeyState();
+  if(state.error){
+    document.getElementById('apiSetup').open=true;
+    document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${esc(state.error)}`;
+  }
+}
+function generateBothPets(){
+  if(!petLab.source){ document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${tx('请先丢进一张图片','Drop an image first')}`; return; }
+  if(['B','C'].some(k=>petLab.routes[k].status==='busy'))return;
+  if(!S.pixelLabConfigured||!S.openAIConfigured){
+    document.getElementById('apiSetup').open=true;
+    document.getElementById('petLabState').innerHTML=`<span class="dot"></span>${tx('先连接 PixelLab 和 OpenAI，才能同时跑 B + C','Connect PixelLab and OpenAI to run B + C together')}`; return;
+  }
+  if(petLab.requestID) send({type:'petCancel',requestID:petLab.requestID});
+  petLab.requestID=(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`);
+  petLab.routes.B={...freshRoute(),status:'busy',phase:'pixel'};
+  petLab.routes.C={...freshRoute(),status:'busy',phase:'concept'}; renderPetLab();
+  send({type:'petGenerateBoth',requestID:petLab.requestID,source:petLab.source,style:mimoStyleDataURI(),
+    name:petLab.name,personality:document.getElementById('petPersonality').value,
+    likeness:+document.getElementById('petLikeness').value/100});
+}
+function petGenerationProgress(event){
+  if(event.requestID!==petLab.requestID||!petLab.routes[event.route])return;
+  Object.assign(petLab.routes[event.route],{status:'busy',phase:event.phase,error:''}); renderPetLab();
+}
+function finishPetRequestIfDone(){
+  if(['B','C'].every(route=>['ready','error'].includes(petLab.routes[route].status)))petLab.requestID=null;
+}
+async function petGenerationResult(event){
+  if(event.requestID!==petLab.requestID||!petLab.routes[event.route])return;
+  const r=petLab.routes[event.route]; r.status='busy'; r.phase='compile'; renderPetLab();
+  try{
+    const settled=await Promise.allSettled((event.images||[]).slice(0,3).map(async(image,index)=>({image,spec:await compilePetImage(image,event.route,index)})));
+    const candidates=settled.filter(item=>item.status==='fulfilled').map(item=>item.value);
+    if(!candidates.length)throw new Error(tx('没有可编译的像素轮廓','No usable pixel silhouette returned'));
+    if(event.requestID!==petLab.requestID)return;
+    Object.assign(r,{status:'ready',phase:'',candidates,selected:0,error:''});
+  }catch(error){ Object.assign(r,{status:'error',error:error.message||String(error),candidates:[]}); }
+  finishPetRequestIfDone();
+  renderPetLab();
+}
+function petGenerationError(event){
+  if(event.requestID&&event.requestID!==petLab.requestID)return;
+  const r=petLab.routes[event.route]||petLab.routes.B; Object.assign(r,{status:'error',error:event.message||tx('生成失败','Generation failed'),candidates:[]}); finishPetRequestIfDone();renderPetLab();
+}
+
+function imageFromURL(url){ return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error(tx('图片无法读取','Could not read image')));img.src=url}) }
+function nearestColour(hex, palette){ return Object.entries(palette).sort((a,b)=>colourDistance(hex,a[1])-colourDistance(hex,b[1]))[0][0]; }
+function luminance(hex){const n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=n&255;return .2126*r+.7152*g+.0722*b}
+function saturation(hex){const n=parseInt(hex.slice(1),16),v=[n>>16&255,n>>8&255,n&255];return Math.max(...v)-Math.min(...v)}
+function boundsForGrid(grid){
+  let minX=99,minY=99,maxX=-1,maxY=-1;grid.forEach((row,y)=>row.forEach((v,x)=>{if(v!=='.'){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)}}));
+  return maxX<0?null:{minX,minY,maxX,maxY,w:maxX-minX+1,h:maxY-minY+1};
+}
+function evolutionForms(base,route){
+  const seed=base.map(r=>r.split('')), bloom=seed.map(r=>[...r]);
+  const b=boundsForGrid(bloom); if(!b)return [base,base,base];
+  const put=(grid,x,y,ch,empty=true)=>{if(x>=0&&x<20&&y>=0&&y<18&&(!empty||grid[y][x]==='.'))grid[y][x]=ch};
+  const clamp=(v,a,z)=>Math.max(a,Math.min(z,v));
+  const cx=Math.round((b.minX+b.maxX)/2), ear=Math.max(2,Math.round(b.w*.24));
+  const left=clamp(cx-ear,1,18),earRight=clamp(cx+ear,1,18),topY=b.minY,midY=b.minY+Math.round(b.h*.55);
+
+  // Bloom changes the silhouette: two soft ear/sprout tips, side tufts, and wider feet.
+  put(bloom,left,topY-1,'A'); put(bloom,earRight,topY-1,'A');
+  put(bloom,left+(left<cx?1:-1),topY-2,'L'); put(bloom,earRight+(earRight>cx?-1:1),topY-2,'L');
+  put(bloom,b.minX-1,midY,'A'); put(bloom,b.maxX+1,midY,'A');
+  const bottomCells=[];for(let x=b.minX;x<=b.maxX;x++)if(bloom[b.maxY][x]!=='.')bottomCells.push(x);
+  if(bottomCells.length){put(bloom,bottomCells[0],b.maxY+1,'D');put(bloom,bottomCells[bottomCells.length-1],b.maxY+1,'D')}
+
+  const radiant=bloom.map(r=>[...r]);
+  // Radiant adds a crest plus wing/tail gestures, so level 4 reads as a new form even at desktop size.
+  put(radiant,cx,topY-1,'A'); put(radiant,cx,topY-2,'L');
+  if(route==='C'){put(radiant,cx+1,topY-3,'A');put(radiant,cx+2,topY-2,'L')}
+  else {put(radiant,left-1,topY-2,'A');put(radiant,earRight+1,topY-2,'A')}
+  put(radiant,b.minX-1,midY-1,'L'); put(radiant,b.minX-2,midY,'A');
+  put(radiant,b.maxX+1,midY-1,'L'); put(radiant,b.maxX+2,midY,'A');
+  const tailY=Math.min(17,b.minY+Math.round(b.h*.67));
+  let tailRight=-1;for(let x=19;x>=0;x--)if(radiant[tailY][x]!=='.'){tailRight=x;break}
+  if(tailRight>=0){put(radiant,tailRight+1,tailY,'A');put(radiant,tailRight+2,tailY-1,'L');if(route==='C')put(radiant,tailRight+2,tailY-2,'A')}
+  return [seed,bloom,radiant].map(g=>g.map(r=>r.join('')));
+}
+async function compilePetImage(url,route,index){
+  const img=await imageFromURL(url), source=document.createElement('canvas'); source.width=img.naturalWidth;source.height=img.naturalHeight;
+  const sctx=source.getContext('2d',{willReadFrequently:true});sctx.drawImage(img,0,0);const src=sctx.getImageData(0,0,source.width,source.height).data;
+  let minX=source.width,minY=source.height,maxX=-1,maxY=-1,count=0;
+  for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){const a=src[(y*source.width+x)*4+3];if(a>36){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);count++}}
+  if(maxX<0)throw new Error(tx('没有找到透明像素轮廓','No transparent silhouette found'));
+  const W=20,H=18,bw=maxX-minX+1,bh=maxY-minY+1,scale=Math.min(17/bw,14/bh),dw=Math.max(1,Math.round(bw*scale)),dh=Math.max(1,Math.round(bh*scale));
+  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=false;
+  const dx=Math.floor((W-dw)/2),dy=1+Math.floor((14-dh)/2);ctx.drawImage(source,minX,minY,bw,bh,dx,dy,dw,dh);
+  const px=ctx.getImageData(0,0,W,H).data,bins=new Map(),raw=Array.from({length:H},()=>Array(W).fill(null));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4,a=px[i+3];if(a<45)continue;const q=v=>Math.max(0,Math.min(255,Math.round(v/24)*24)),hex=rgbHex(q(px[i]),q(px[i+1]),q(px[i+2]));raw[y][x]=hex;bins.set(hex,(bins.get(hex)||0)+1)}
+  const ranked=[...bins.entries()].sort((a,b)=>b[1]-a[1]),chosen=[];
+  for(const [hex] of ranked){if(chosen.every(c=>colourDistance(c,hex)>34))chosen.push(hex);if(chosen.length===4)break}
+  ['#d68b68','#f1c7a7','#76c8b0','#4f3534'].forEach(c=>{if(chosen.length<4)chosen.push(c)});
+  const dark=[...chosen].sort((a,b)=>luminance(a)-luminance(b))[0], light=[...chosen].sort((a,b)=>luminance(b)-luminance(a))[0];
+  const middle=chosen.filter(c=>c!==dark&&c!==light),primary=middle[0]||chosen[0],accent=[...middle].sort((a,b)=>saturation(b)-saturation(a))[0]||chosen[1];
+  const PAL={P:primary,L:light,A:accent,D:dark,K:'#241a20',W:'#ffffff',M:'#5b3b3b',Q:'#2fd6bd',E:'#aef4e6',S:'#ffd76b',G:'#eef3ff',V:'#7d88c9'};
+  const bodyPal={P:PAL.P,L:PAL.L,A:PAL.A,D:PAL.D},grid=raw.map(row=>row.map(hex=>hex?nearestColour(hex,bodyPal):'.'));
+  const copy=grid.map(r=>[...r]);
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++)if(copy[y][x]!=='.'){
+    let n=0;for(const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]])if(copy[y+oy][x+ox]!=='.')n++;if(n===0)grid[y][x]='.';
+  }
+  const b=boundsForGrid(grid);if(!b)throw new Error(tx('像素轮廓太小','Pixel silhouette is too small'));
+  const clamp=(v,a,z)=>Math.max(a,Math.min(z,v)),fy=clamp(b.minY+Math.round(b.h*.35),2,11),lx=clamp(b.minX+Math.round(b.w*.24),1,14),rx=clamp(b.minX+Math.round(b.w*.64),lx+4,17),mx=Math.round((lx+rx)/2),my=clamp(fy+3,5,14);
+  const fill='P';
+  for(const [cx,cy,w,h] of [[lx,fy,2,2],[rx,fy,2,2],[mx-1,my-1,3,3]])for(let yy=cy-1;yy<cy+h;yy++)for(let xx=cx-1;xx<cx+w+1;xx++)if(grid[yy]?.[xx]&&grid[yy][xx]!=='.')grid[yy][xx]=fill;
+  const face={lx,rx,y:fy,mx,my},EYES=[[lx,fy,'K'],[lx+1,fy,'K'],[lx,fy+1,'K'],[lx+1,fy+1,'K'],[lx,fy,'W'],[rx,fy,'K'],[rx+1,fy,'K'],[rx,fy+1,'K'],[rx+1,fy+1,'K'],[rx,fy,'W']],MOUTH=[[mx-1,my,'M'],[mx+1,my,'M']];
+  const BASE=grid.map(r=>r.join('')),EVOLUTION_BASES=evolutionForms(BASE,route);
+  return {schemaVersion:1,name:petLab.name||tx('我的小伴灵','My little familiar'),variant:`generated-${route.toLowerCase()}-${index+1}`,route,PAL,BASE,EVOLUTION_BASES,face,EYES,MOUTH,vb:'-1 -2 22 22'};
+}
+
+function mimoStyleDataURI(){
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=64;const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+  function draw(m,ox,oy,scale){
+    m.BASE.forEach((row,y)=>[...row].forEach((ch,x)=>{if(m.PAL[ch]){ctx.fillStyle=m.PAL[ch];ctx.fillRect(ox+x*scale,oy+y*scale,scale,scale)}}));
+    [...m.EYES,...m.MOUTH].forEach(([x,y,ch])=>{ctx.fillStyle=m.PAL[ch];ctx.fillRect(ox+x*scale,oy+y*scale,scale,scale)});
+  }
+  draw(MINI.nat,2,7,3);draw(MINI.clawd,69,12,3);return canvas.toDataURL('image/png');
+}
+function loadPetImageData(url,sourceName){
+  if(petLab.requestID)send({type:'petCancel',requestID:petLab.requestID});
+  petLab.requestID=null;
+  const img=new Image();img.onload=()=>{
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;const ctx=canvas.getContext('2d');
+    const scale=Math.min(256/img.naturalWidth,256/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale;
+    ctx.drawImage(img,(256-w)/2,(256-h)/2,w,h);
+    petLab.source=canvas.toDataURL('image/png');petLab.sourceName=sourceName||'';petLab.routes={B:freshRoute(),C:freshRoute()};
+    const thumb=document.getElementById('petSourceImg');thumb.src=petLab.source;thumb.style.display='block';document.getElementById('petSourceGlyph').style.display='none';
+    const guessed=(sourceName||'').replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();if(guessed){petLab.name=guessed.slice(0,28);document.getElementById('petName').value=petLab.name}renderPetLab();
+  };img.src=url;
+}
+function installPetDrop(){
+  const drop=document.getElementById('petSourceDrop');if(!drop)return;
+  ['dragenter','dragover'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag')}));
+  ['dragleave','drop'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('drag')}));
+  drop.addEventListener('drop',e=>{const file=[...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith('image/'));if(!file)return;const reader=new FileReader();reader.onload=()=>loadPetImageData(reader.result,file.name);reader.readAsDataURL(file)});
 }
 
 const kinds = () => [['code',tx('💪 成长 · 编程','💪 growth · code')],['term',tx('⛓️ 成长 · 终端','⛓️ growth · terminal')],
@@ -398,9 +625,11 @@ function send(msg){
 let S = { character: 'lulu' };
 
 function renderCards(){
-  document.getElementById('cards').innerHTML = Object.entries(MINI).map(([id, m]) => `
+  const entries=Object.entries(MINI);
+  if(S.customPet) entries.push(['prototype',{...S.customPet,name:S.customPet.name||tx('我的伴灵','My familiar'),desc:'Mimo DNA',descZh:'你的 Mimo DNA'}]);
+  document.getElementById('cards').innerHTML = entries.map(([id, m]) => `
     <div class="card ${S.character === id ? 'sel' : ''}" onclick="pick('${id}')">
-      ${miniSVG(m)}<div class="nm">${m.name}</div><div class="ds">${LANG === 'zh' ? m.descZh : m.desc}</div>
+      ${miniSVG(m)}<div class="nm">${esc(m.name)}</div><div class="ds">${esc(LANG === 'zh' ? m.descZh : m.desc)}</div>
     </div>`).join('');
 }
 function pick(id){ S.character = id; renderCards(); send({ type: 'pick', id }); }
@@ -445,9 +674,9 @@ function renderRules(){
 function initSettings(state){
   S = state;
   LANG = state.language === 'en' ? 'en' : 'zh';
-  document.getElementById('langSel').value = LANG;
   applyLanguage();
   renderCards();
+  renderPetLab();
   renderChips();
   renderRules();
   const pill = document.getElementById('permPill');
@@ -459,10 +688,12 @@ function initSettings(state){
   document.getElementById('loginTog').checked = !!state.login;
   document.getElementById('stats').textContent = state.stats || '';
   document.getElementById('projBtn').textContent = (state.projects || tx('选择','choose')) + '…';
+  setSettingsTab(activeSettingsTab);
 }
 applyLanguage();
 renderCards();
 renderPetLab();
+installPetDrop();
 </script>
 </body>
 </html>

@@ -885,11 +885,17 @@ const MASCOTS = {
 };
 MASCOTS.lulu.CFG.focused = MASCOTS.lulu.CFG.focusedA;  // headphones version (design decision)
 
-/* PROTOTYPE — session-only Pet Atelier output. The settings page supplies one
-   canonical pixel body + face anchors; the existing state rig supplies every
-   expression, animation, shadow, focus aura, and level-up moment. */
+/* Mimo DNA output. The compiler supplies identity silhouettes + face anchors;
+   the house rig supplies expressions, motion, shadow, focus, and level-ups. */
 function prototypeMascotPack(spec){
   const f = spec.face;
+  const forms = Array.isArray(spec.EVOLUTION_BASES) ? spec.EVOLUTION_BASES : [spec.BASE];
+  const occupied=[];
+  forms.forEach(rows=>rows.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch!=='.')occupied.push([x,y])})));
+  const xs=occupied.map(p=>p[0]),ys=occupied.map(p=>p[1]);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const spanX=maxX-minX+1,spanY=maxY-minY+1,cx=(minX+maxX+1)/2,cy=(minY+maxY+1)/2;
+  const pawY=Math.min(maxY-1,f.my+3),pawGap=Math.max(2,spanX*.22);
   const eye = (x, y, ink = 'K', glint = true) => [
     [x,y,ink],[x+1,y,ink],[x,y+1,ink],[x+1,y+1,ink],...(glint ? [[x,y,'W']] : [])
   ];
@@ -918,15 +924,20 @@ function prototypeMascotPack(spec){
   };
   const p = spec.PAL;
   return {
-    name:spec.name || 'My little familiar', viewBox:'-1 -2 20 20', BASE:spec.BASE,
-    shadow:{cx:7.5,cy:15.7,rx:6,fill:p.D,op:.27}, poseOrigin:'7.5px 10px', pawColor:p.P,
-    orb:{x:16,y:1}, zzz:{fill:p.A,pts:[[14.5,5.5],[16,3.8],[17.5,2]]},
-    ring:{cx:8,cy:8,r:8.7},
+    name:spec.name || 'My little familiar', viewBox:'-1 -2 22 22', BASE:spec.BASE,
+    EVOLUTION_BASES:forms,
+    shadow:{cx,cy:maxY+1.15,rx:Math.max(3.5,spanX*.4),fill:p.D,op:.27},
+    aura:{cx,cy,rx:Math.max(5.5,spanX*.58),ry:Math.max(5.5,spanY*.55)},
+    poseOrigin:`${cx}px ${cy}px`, pawColor:p.P,
+    paws:[[cx-pawGap,pawY],[cx+pawGap-2,pawY]],
+    orb:{x:Math.min(20,maxX+1),y:Math.max(-1,minY-1)},
+    zzz:{fill:p.A,pts:[[maxX-.5,minY+3.5],[maxX+1,minY+1.8],[maxX+2.5,minY]]},
+    ring:{cx,cy,r:Math.max(spanX,spanY)*.58},
     sparks:['M0,4 h.7 v-.7 h.7 v.7 h.7 v.7 h-.7 v.7 h-.7 v-.7 h-.7 Z',
       'M17,10 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z',
       'M3,0 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z'],
-    bubbles:[[.5,7,.8],[-.8,8.6,.6],[1.4,5.6,.5]],
-    motes:[[-.6,6.2,.7,p.A],[18.2,6.8,.6,'#b9a8ff'],[.4,13.2,.5,p.L]],
+    bubbles:[[minX-1,cy-.8,.8],[minX-2,cy+.8,.6],[minX-.2,cy-2,.5]],
+    motes:[[minX-1.5,cy-2,.7,p.A],[maxX+1.3,cy-1.4,.6,'#b9a8ff'],[minX-.5,maxY-.8,.5,p.L]],
     PAL:{...p,Q:'#2fd6bd',E:'#aef4e6',S:'#ffd76b',G:'#eef3ff',V:'#7d88c9'},
     EYES:eyes, MOUTHS:mouths,
     CFG:{
@@ -965,19 +976,28 @@ const Mascot = (() => {
     });
     return { body, depth };
   };
+  const rowsForLevel = (pack, level) => {
+    const forms = pack.EVOLUTION_BASES;
+    if (!Array.isArray(forms) || !forms.length) return pack.BASE;
+    const index = level >= 4 ? 2 : level >= 2 ? 1 : 0;
+    return forms[Math.min(index, forms.length - 1)] || pack.BASE;
+  };
 
   let pack = null, refs = null, current = null, walking = false;
 
   function mount(holder, id){
     pack = MASCOTS[id] || MASCOTS.lulu;
-    const full = bodyFor(pack, pack.BASE);
-    const walkRows = pack.walk ? bodyFor(pack, pack.BASE.slice(0, pack.walk.rows)) : null;
+    const aura=pack.aura || {cx:8,cy:8,rx:9,ry:8};
+    const paws=pack.paws || [[3,11],[9,11]];
+    const levelRows = rowsForLevel(pack, +(document.body.dataset.famLevel || 1));
+    const full = bodyFor(pack, levelRows);
+    const walkRows = pack.walk ? bodyFor(pack, levelRows.slice(0, pack.walk.rows)) : null;
     holder.innerHTML = `
     <div class="ffp-wrap" id="ffpWrap">
       <svg viewBox="${pack.viewBox}" width="100%" height="100%" style="display:block;overflow:visible">
         <defs><filter id="psoft-ffp" x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="1.4"/></filter></defs>
-        <ellipse id="ffpAura" cx="8" cy="8" rx="9" ry="8" fill="#ffc964" opacity="0" filter="url(#psoft-ffp)"/>
+        <ellipse id="ffpAura" cx="${aura.cx}" cy="${aura.cy}" rx="${aura.rx}" ry="${aura.ry}" fill="#ffc964" opacity="0" filter="url(#psoft-ffp)"/>
         <ellipse cx="${pack.shadow.cx}" cy="${pack.shadow.cy}" rx="${pack.shadow.rx}" ry="0.8" fill="${pack.shadow.fill}" opacity="${pack.shadow.op}" filter="url(#psoft-ffp)"/>
         <g id="ffpPose" style="transform:none;transform-origin:${pack.poseOrigin};transition:transform .5s ease">
           <g id="ffpDepth" transform="translate(0.55,0.55)" opacity="0.55">${full.depth}</g>
@@ -986,9 +1006,9 @@ const Mascot = (() => {
           <g id="ffpMouth"></g>
           <g id="ffpGear"></g>
           <g id="ffpPawL" opacity="0" style="animation:ffp-typeA .22s linear infinite">
-            <rect x="3" y="11" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
+            <rect x="${paws[0][0]}" y="${paws[0][1]}" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
           <g id="ffpPawR" opacity="0" style="animation:ffp-typeB .22s linear infinite">
-            <rect x="9" y="11" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
+            <rect x="${paws[1][0]}" y="${paws[1][1]}" width="2.05" height="1.05" fill="${pack.pawColor}"/></g>
           ${pack.walk ? `<g id="ffpWalk" opacity="0">${pack.walk.block}</g>` : ''}
         </g>
         <g id="ffpExtras" style="animation:ffp-twinkle 1.6s ease-in-out infinite"></g>
@@ -1031,6 +1051,17 @@ const Mascot = (() => {
     setState('idle');
   }
 
+  function setEvolution(level){
+    if (!refs || !pack) return;
+    const rows = rowsForLevel(pack, level);
+    refs._full = bodyFor(pack, rows);
+    refs._walkRows = pack.walk ? bodyFor(pack, rows.slice(0, pack.walk.rows)) : null;
+    const c = pack.CFG[current] || pack.CFG.idle;
+    const src = c.walk && refs._walkRows ? refs._walkRows : refs._full;
+    refs.ffpBody.innerHTML = src.body;
+    refs.ffpDepth.innerHTML = src.depth;
+  }
+
   function setState(s){
     if (!refs || !pack) return;
     if (s === current) return;
@@ -1066,7 +1097,7 @@ const Mascot = (() => {
   }
 
   return {
-    mount, setState,
+    mount, setState, setEvolution,
     has: (s) => !!(pack && pack.CFG[s]),
     id: () => pack ? Object.keys(MASCOTS).find(k => MASCOTS[k] === pack) : null,
   };
@@ -1203,6 +1234,7 @@ const Fam = {
     const holder = document.getElementById('familiar');
     [...holder.classList].filter(c => c.startsWith('fam-lv')).forEach(c => holder.classList.remove(c));
     holder.classList.add('fam-lv' + this.level);
+    Mascot.setEvolution(this.level);
   },
 
   levelUp(){
@@ -1313,11 +1345,16 @@ function famSetApp(appName, kind, detail, url, canon){
 }
 
 function famSetCharacter(id){ Fam.setCharacter(id); toast(MASCOTS[Fam.char].name); }
-function famSetPrototypePet(spec){
+function famRegisterPrototypePet(spec, select = false){
   MASCOTS.prototype = prototypeMascotPack(spec);
-  Fam.setCharacter('prototype', false);
-  toast(tx(`${MASCOTS.prototype.name} 住进桌面了 ✦`, `${MASCOTS.prototype.name} joined you ✦`));
-  Fam.sparkle(9);
+  if (select) Fam.setCharacter('prototype', false);
+}
+function famSetPrototypePet(spec, celebrate = true){
+  famRegisterPrototypePet(spec, true);
+  if (celebrate) {
+    toast(tx(`${MASCOTS.prototype.name} 住进桌面了 ✦`, `${MASCOTS.prototype.name} joined you ✦`));
+    Fam.sparkle(9);
+  }
 }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
 

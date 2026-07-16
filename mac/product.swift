@@ -6,6 +6,12 @@ import WebKit
 import ServiceManagement
 import UniformTypeIdentifiers
 
+struct PendingCharacterSheetDraft {
+    let pngData: Data
+    let temperamentID: String
+    let createdAt: Date
+}
+
 // ── data retention & privacy eraser ─────────────────────────
 
 func pruneOldLogs() {
@@ -35,8 +41,16 @@ func eraseSince(_ ts: Double) {
 }
 
 func eraseAllHistory() {
-    try? FileManager.default.removeItem(at: logDir)
-    try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+    guard let entries = try? FileManager.default.contentsOfDirectory(
+        at: logDir, includingPropertiesForKeys: [.isDirectoryKey]) else { return }
+    for entry in entries {
+        let name = entry.lastPathComponent
+        if name.hasPrefix("activity-") && entry.pathExtension == "jsonl" {
+            try? FileManager.default.removeItem(at: entry)
+        } else if name == "exports" {
+            try? FileManager.default.removeItem(at: entry)
+        }
+    }
 }
 
 func historyStats() -> String {
@@ -77,11 +91,12 @@ func appIconDataURI(_ bundleId: String) -> String? {
 
 func petReferenceDataURI(_ url: URL) -> String? {
     guard let source = NSImage(contentsOf: url), source.size.width > 0, source.size.height > 0 else { return nil }
-    let scale = min(256 / source.size.width, 256 / source.size.height)
+    let canvasSide: CGFloat = 768
+    let scale = min(canvasSide / source.size.width, canvasSide / source.size.height)
     let fitted = NSSize(width: source.size.width * scale, height: source.size.height * scale)
-    let destination = NSRect(x: (256 - fitted.width) / 2, y: (256 - fitted.height) / 2,
+    let destination = NSRect(x: (canvasSide - fitted.width) / 2, y: (canvasSide - fitted.height) / 2,
                              width: fitted.width, height: fitted.height)
-    let image = NSImage(size: NSSize(width: 256, height: 256))
+    let image = NSImage(size: NSSize(width: canvasSide, height: canvasSide))
     image.lockFocus()
     NSGraphicsContext.current?.imageInterpolation = .high
     source.draw(in: destination, from: NSRect(origin: .zero, size: source.size),
@@ -232,11 +247,26 @@ extension AppDelegate {
     }
 
     func restoreCustomPetIfNeeded() {
-        guard let spec = storedCustomPetSpec(),
-              let data = try? JSONSerialization.data(withJSONObject: spec),
-              let json = String(data: data, encoding: .utf8) else { return }
-        let select = UserDefaults.standard.string(forKey: "character") == "prototype"
-        js("famRegisterPrototypePet(\(json), \(select ? "true" : "false"))")
+        if let spec = storedCustomPetSpec(),
+           let data = try? JSONSerialization.data(withJSONObject: spec),
+           let json = String(data: data, encoding: .utf8) {
+            js("famRegisterPrototypePet(\(json), false)")
+        }
+        let customPets = (try? customPetStore.listRuntimeSpecs()) ?? []
+        for spec in customPets {
+            guard let data = try? JSONSerialization.data(withJSONObject: spec),
+                  let json = String(data: data, encoding: .utf8) else { continue }
+            js("famRegisterCustomPet(\(json), false)")
+        }
+        let builtins: Set<String> = ["lulu", "clawd", "nat"]
+        let customIDs = Set(customPets.compactMap { $0["characterID"] as? String })
+        let requested = UserDefaults.standard.string(forKey: "character") ?? "lulu"
+        let valid = builtins.contains(requested)
+            || (requested == "prototype" && storedCustomPetSpec() != nil)
+            || customIDs.contains(requested)
+        let selected = valid ? requested : "lulu"
+        if selected != requested { UserDefaults.standard.set(selected, forKey: "character") }
+        js("famSetCharacter(\(jsonStr(selected)))")
     }
 
     @objc func showSettings() {
@@ -248,6 +278,8 @@ extension AppDelegate {
         }
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "settings")
+        cfg.setURLSchemeHandler(CustomPetAssetSchemeHandler(store: customPetStore),
+                                forURLScheme: CustomPetStore.scheme)
         let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 560, height: 780), configuration: cfg)
         web.navigationDelegate = self
         if let dir = Bundle.main.resourceURL {
@@ -303,6 +335,7 @@ extension AppDelegate {
             "openAIConfigured": MimoSecret.openAI.isConfigured,
         ]
         if let customPet = storedCustomPetSpec() { state["customPet"] = customPet }
+        state["customPets"] = (try? customPetStore.listRuntimeSpecs()) ?? []
         guard let data = try? JSONSerialization.data(withJSONObject: state),
               let json = String(data: data, encoding: .utf8) else { return }
         settingsWeb?.evaluateJavaScript("initSettings(\(json))", completionHandler: nil)
@@ -313,8 +346,14 @@ extension AppDelegate {
         switch body["type"] as? String ?? "" {
         case "pick":
             if let id = body["id"] as? String {
-                js("famSetCharacter('\(id)')")
-                d.set(id, forKey: "character")
+                let builtins: Set<String> = ["lulu", "clawd", "nat"]
+                let allowed = builtins.contains(id)
+                    || (id == "prototype" && storedCustomPetSpec() != nil)
+                    || (try? customPetStore.runtimeSpec(characterID: id)) != nil
+                if allowed {
+                    js("famSetCharacter(\(jsonStr(id)))")
+                    d.set(id, forKey: "character")
+                }
             }
         case "petPrototype":
             if let spec = body["spec"] as? [String: Any],
@@ -371,62 +410,138 @@ extension AppDelegate {
         case "petCancel":
             if let id = body["requestID"] as? String {
                 petGenerator.cancel(id)
+                pendingCharacterSheets.removeValue(forKey: id)
                 if activePetGenerationID == id {
                     activePetGenerationID = nil
-                    activePetGenerationFinishedRoutes.removeAll()
                 }
             }
-        case "petGenerateBoth":
+        case "petGenerateSheet":
             let requestID = (body["requestID"] as? String) ?? UUID().uuidString
             guard let source = body["source"] as? String, source.hasPrefix("data:image/"),
-                  source.count < 8_000_000,
+                  source.count < 16_000_000,
                   let sourceData = PetGenerationCoordinator.dataFromDataURI(source),
+                  sourceData.count <= 12 * 1024 * 1024,
                   PetGenerationCoordinator.isSupportedImageData(sourceData) else {
-                for route in ["B", "C"] {
-                    settingsCall("petGenerationError", [
-                        "requestID": requestID, "route": route,
-                        "message": voice("参考图片无效", "Invalid reference image"),
-                    ])
-                }
+                settingsCall("petSheetError", [
+                    "requestID": requestID,
+                    "message": voice("参考图片无效", "Invalid reference image"),
+                ])
                 return
             }
-            let style = (body["style"] as? String).flatMap { value -> String? in
-                guard value.count < 2_000_000,
-                      let data = PetGenerationCoordinator.dataFromDataURI(value),
-                      PetGenerationCoordinator.isSupportedImageData(data) else { return nil }
-                return value
-            }
-            let personality = String((body["personality"] as? String ?? "quiet-curious").prefix(80))
+            let temperamentID = body["temperamentID"] as? String
+            let profile = CustomPetTemperaments.profile(for: temperamentID)
             let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
-            if let previous = activePetGenerationID { petGenerator.cancel(previous) }
+            if let previous = activePetGenerationID {
+                petGenerator.cancel(previous)
+                pendingCharacterSheets.removeValue(forKey: previous)
+            }
+            pendingCharacterSheets = pendingCharacterSheets.filter {
+                Date().timeIntervalSince($0.value.createdAt) < 15 * 60
+            }
             activePetGenerationID = requestID
-            activePetGenerationFinishedRoutes.removeAll()
-            petGenerator.generateBoth(requestID: requestID, sourceDataURI: source,
-                                      styleDataURI: style, personality: personality,
-                                      likeness: likeness, progress: { [weak self] route, phase, detail in
+            petGenerator.generateCharacterSheet(requestID: requestID, sourceDataURI: source,
+                                                personalityVisual: profile.promptFragment,
+                                                likeness: likeness, progress: { [weak self] phase, detail in
                 guard let self, self.activePetGenerationID == requestID else { return }
-                var payload: [String: Any] = ["requestID": requestID, "route": route, "phase": phase]
+                var payload: [String: Any] = ["requestID": requestID, "phase": phase]
                 if let detail { payload["detail"] = detail }
-                self.settingsCall("petGenerationProgress", payload)
-            }, completion: { [weak self] route, result in
+                self.settingsCall("petSheetProgress", payload)
+            }, completion: { [weak self] result in
                 guard let self, self.activePetGenerationID == requestID else { return }
                 switch result {
-                case .success(let images):
-                    self.settingsCall("petGenerationResult", [
-                        "requestID": requestID, "route": route, "images": images,
-                    ])
+                case .success(let rawSheet):
+                    self.settingsCall("petSheetProgress", ["requestID": requestID, "phase": "extracting"])
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        let processed = Result { try CharacterSheetProcessor.process(pngData: rawSheet) }
+                        DispatchQueue.main.async {
+                            guard let self, self.activePetGenerationID == requestID else { return }
+                            switch processed {
+                            case .success(let sheet):
+                                self.pendingCharacterSheets[requestID] = PendingCharacterSheetDraft(
+                                    pngData: sheet.pngData, temperamentID: profile.id, createdAt: Date())
+                                self.settingsCall("petSheetResult", [
+                                    "requestID": requestID, "draftID": requestID,
+                                    "sheet": PetGenerationCoordinator.dataURI(sheet.pngData),
+                                ])
+                            case .failure(let error):
+                                self.settingsCall("petSheetError", [
+                                    "requestID": requestID, "message": error.localizedDescription,
+                                ])
+                            }
+                            self.activePetGenerationID = nil
+                        }
+                    }
                 case .failure(let error):
-                    self.settingsCall("petGenerationError", [
-                        "requestID": requestID, "route": route,
-                        "message": error.localizedDescription,
+                    self.settingsCall("petSheetError", [
+                        "requestID": requestID, "message": error.localizedDescription,
                     ])
-                }
-                self.activePetGenerationFinishedRoutes.insert(route)
-                if self.activePetGenerationFinishedRoutes.count == 2 {
                     self.activePetGenerationID = nil
-                    self.activePetGenerationFinishedRoutes.removeAll()
                 }
             })
+        case "petInstallRaster":
+            guard let draftID = body["draftID"] as? String,
+                  let draft = pendingCharacterSheets[draftID] else {
+                settingsCall("petSheetError", [
+                    "requestID": body["draftID"] as? String ?? "",
+                    "message": voice("这张预览已过期，请重新生成", "This preview expired; generate it again"),
+                ])
+                return
+            }
+            let requestedName = (body["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = requestedName.isEmpty ? voice("我的小伴灵", "My little familiar") : String(requestedName.prefix(60))
+            let profile = CustomPetTemperaments.profile(for: draft.temperamentID)
+            do {
+                let spec = try customPetStore.install(pngData: draft.pngData, name: name,
+                                                      temperamentID: profile.id, accent: profile.accent)
+                pendingCharacterSheets.removeValue(forKey: draftID)
+                guard let characterID = spec["characterID"] as? String,
+                      JSONSerialization.isValidJSONObject(spec),
+                      let data = try? JSONSerialization.data(withJSONObject: spec),
+                      let json = String(data: data, encoding: .utf8) else {
+                    throw CustomPetStoreError.corruptManifest
+                }
+                d.set(characterID, forKey: "character")
+                js("famSetCustomPet(\(json))")
+                settingsCall("customPetAdopted", ["spec": spec])
+                pushSettingsState()
+                revealOverlay()
+            } catch {
+                settingsCall("petSheetError", ["requestID": draftID, "message": error.localizedDescription])
+            }
+        case "petDelete":
+            guard let characterID = body["characterID"] as? String else { return }
+            let runtime = try? customPetStore.runtimeSpec(characterID: characterID)
+            let legacy = characterID == "prototype" ? storedCustomPetSpec() : nil
+            guard let name = (runtime?["name"] as? String) ?? (legacy?["name"] as? String) else {
+                settingsCall("petDeleteFailed", ["message": voice("找不到这个 DIY 角色", "This DIY familiar could not be found")])
+                return
+            }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = voice("让「\(name)」离开桌面？", "Remove “\(name)” from Mimo?")
+            alert.informativeText = voice(
+                "这会删除它的三段形态。成长等级、活动记录和 API Key 会保留。此操作不能撤销。",
+                "Its three forms will be deleted. Growth level, activity history, and API keys stay. This can’t be undone."
+            )
+            alert.addButton(withTitle: voice("删除角色", "Delete familiar"))
+            alert.addButton(withTitle: voice("取消", "Cancel"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            do {
+                if characterID == "prototype" {
+                    d.removeObject(forKey: "customPetSpec")
+                    js("famUnregisterPrototypePet()")
+                } else {
+                    try customPetStore.delete(characterID: characterID)
+                    js("famUnregisterCustomPet(\(jsonStr(characterID)))")
+                }
+                if d.string(forKey: "character") == characterID {
+                    d.set("lulu", forKey: "character")
+                    js("famSetCharacter('lulu')")
+                }
+                pushSettingsState()
+            } catch {
+                settingsCall("petDeleteFailed", ["message": error.localizedDescription])
+            }
         case "grant":
             grantAutomation()
         case "recheck":

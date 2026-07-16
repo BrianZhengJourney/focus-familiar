@@ -403,8 +403,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var settingsWeb: WKWebView?
     let gitWatcher = GitWatcher()
     let petGenerator = PetGenerationCoordinator()
+    let customPetStore = CustomPetStore(root: logDir)
     var activePetGenerationID: String?
-    var activePetGenerationFinishedRoutes = Set<String>()
+    var pendingCharacterSheets: [String: PendingCharacterSheetDraft] = [:]
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
@@ -483,6 +484,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "bridge")
+        cfg.setURLSchemeHandler(CustomPetAssetSchemeHandler(store: customPetStore),
+                                forURLScheme: CustomPetStore.scheme)
         webView = OverlayWebView(frame: NSRect(origin: .zero, size: size), configuration: cfg)
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
@@ -706,7 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     // — actions —
     @objc func pickCharacter(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
-        js("famSetCharacter('\(id)')")
+        js("famSetCharacter(\(jsonStr(id)))")
         UserDefaults.standard.set(id, forKey: "character")
     }
     @objc func toggleContextMenu() { showContext() }

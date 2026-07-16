@@ -1,4 +1,4 @@
-import Foundation
+import Cocoa
 
 func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
     if !condition() {
@@ -37,6 +37,34 @@ struct PetGenerationTests {
                "PNG signatures should be accepted")
         expect(!PetGenerationCoordinator.isSupportedImageData(Data("not an image".utf8)),
                "non-image provider payloads should be rejected")
-        print("pet generation parser tests passed")
+
+        let prompt = PetGenerationCoordinator.characterSheetPrompt(
+            personalityVisual: "a quiet observant silhouette", likeness: 0.7)
+        expect(prompt.contains("LEFT — SEED") && prompt.contains("CENTER — BLOOM") && prompt.contains("RIGHT — RADIANT"),
+               "prompt must lock the three evolution stages and order")
+        expect(prompt.contains("#F1ECE2"), "prompt must request the extraction matte")
+        expect(prompt.contains("No gradient") && prompt.contains("cast shadow"),
+               "prompt must exclude effects that Mimo adds locally")
+
+        let request = PetGenerationCoordinator.characterSheetRequest(
+            imageData: Data([1, 2, 3]), personalityVisual: "a quiet observant silhouette",
+            likeness: 0.58, apiKey: "test-key", boundary: "mimo-test-boundary")
+        let multipart = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+        for field in ["gpt-image-2", "1536x1024", "medium", "opaque", "name=\"n\"\r\n\r\n1"] {
+            expect(multipart.contains(field), "multipart request missing \(field)")
+        }
+        expect(!multipart.contains("input_fidelity"), "GPT Image 2 must omit input_fidelity")
+        expect(request.url?.absoluteString == "https://api.openai.com/v1/images/edits",
+               "character sheet must use the OpenAI edits endpoint")
+        expect(!multipart.lowercased().contains("pixellab"), "character sheet must not call PixelLab")
+
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 3,
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB,
+                                   bytesPerRow: 0, bitsPerPixel: 0)!
+        let png = rep.representation(using: .png, properties: [:])!
+        let size = PetGenerationCoordinator.pngPixelSize(png)
+        expect(size?.0 == 4 && size?.1 == 3, "PNG dimensions should be decoded")
+        print("pet generation tests passed")
     }
 }

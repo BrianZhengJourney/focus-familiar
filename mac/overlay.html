@@ -47,6 +47,7 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 @keyframes ffp-pop {0%{transform:translateY(0) scale(1)}30%{transform:translateY(-24px) scale(1.12)}55%{transform:translateY(0) scale(1.1,.86)}75%{transform:translateY(-9px) scale(1.04)}100%{transform:translateY(0) scale(1)}}
 @keyframes ffp-sleepbob {0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(3px) scale(1.06,.93)}}
 @keyframes ffp-proudhop {0%,100%{transform:translateY(0) rotate(0deg)}30%{transform:translateY(-13px) rotate(-4deg)}50%{transform:translateY(-8px) rotate(4deg)}70%{transform:translateY(-11px) rotate(0deg)}}
+@keyframes ffp-wobble {0%,100%{transform:translateY(0) rotate(-2deg)}35%{transform:translateY(-5px) rotate(3deg)}70%{transform:translateY(-2px) rotate(-4deg)}}
 @keyframes ffp-blink {0%,91%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
 @keyframes ffp-orb {0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes ffp-zzz {0%{opacity:0;transform:translate(0,0)}25%{opacity:1}100%{opacity:0;transform:translate(2.5px,-4.5px)}}
@@ -954,6 +955,47 @@ function prototypeMascotPack(spec){
   };
 }
 
+/* v2 raster packs keep the model's polished character art. Mimo supplies all
+   motion, shadow, aura, state filters, and level transitions around one local
+   three-frame sheet instead of crushing it back into a 20×18 grid. */
+function rasterMascotPack(spec){
+  const accent=/^#[0-9a-f]{6}$/i.test(spec.accent||'')?spec.accent:'#7df0cf';
+  const motion=spec.motionProfile||spec.temperamentID||'quiet-curious';
+  const idleAnim={
+    'calm-breathe':'ffp-sleepbob 5.4s ease-in-out infinite','gentle-cozy':'ffp-sleepbob 5.4s ease-in-out infinite',
+    'curious-peek':'ffp-bob 4.1s ease-in-out infinite','quiet-curious':'ffp-bob 4.1s ease-in-out infinite',
+    'playful-bounce':'ffp-bob 2.35s ease-in-out infinite','bright-playful':'ffp-bob 2.35s ease-in-out infinite',
+    'proud-hop':'ffp-bob 3.2s ease-in-out infinite','brave-loyal':'ffp-bob 3.2s ease-in-out infinite',
+    'dreamy-float':'ffp-levitate 6.4s ease-in-out infinite','dreamy-mysterious':'ffp-levitate 6.4s ease-in-out infinite',
+    'whimsical-wobble':'ffp-wobble 3.1s ease-in-out infinite','odd-whimsical':'ffp-wobble 3.1s ease-in-out infinite'
+  }[motion]||'ffp-bob 3.6s ease-in-out infinite';
+  const proudAnim=['bright-playful','playful-bounce'].includes(motion)?'ffp-proudhop 1.25s ease-in-out infinite':
+    ['dreamy-mysterious','dreamy-float'].includes(motion)?'ffp-levitate 4.4s ease-in-out infinite':
+    ['odd-whimsical','whimsical-wobble'].includes(motion)?'ffp-wobble 1.8s ease-in-out infinite':'ffp-proudhop 1.7s ease-in-out infinite';
+  return {
+    name:spec.name||'My familiar',viewBox:'-1 -2 24 25',RASTER_SHEET:spec.assetURL,
+    shadow:{cx:11,cy:21.4,rx:5.4,fill:'#241b35',op:.25},
+    aura:{cx:11,cy:10.5,rx:9.2,ry:10},poseOrigin:'11px 16px',pawColor:accent,paws:[[6,18],[14,18]],
+    orb:{x:20.5,y:1},zzz:{fill:accent,pts:[[18,8],[20,5.5],[21.5,3]]},ring:{cx:11,cy:10.5,r:10.2},
+    sparks:['M0,4 h.7 v-.7 h.7 v.7 h.7 v.7 h-.7 v.7 h-.7 v-.7 h-.7 Z',
+      'M20,11 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z',
+      'M4,0 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z'],
+    bubbles:[[2,10,.8],[1,12,.6],[3,8,.5]],motes:[[2,6,.7,accent],[20,7,.6,'#b9a8ff'],[5,19,.5,'#fff0c4']],
+    PAL:{A:accent,L:accent,P:accent,D:'#241b35',K:'#241b35',W:'#ffffff',M:'#6f4d68'},EYES:{},MOUTHS:{},
+    CFG:{
+      idle:{anim:idleAnim,filter:'drop-shadow(0 5px 7px rgba(28,18,48,.24))',op:1,orb:accent,eye:'',mouth:'',aura:.08,auraColor:accent,motes:0},
+      focused:{anim:'ffp-bob 2.7s ease-in-out infinite',filter:`drop-shadow(0 5px 11px ${accent}55)`,op:1,orb:accent,eye:'',mouth:'',aura:.18,auraColor:accent,motes:0},
+      deepWork:{anim:'ffp-levitate 5.5s ease-in-out infinite',filter:`drop-shadow(0 0 16px ${accent}88)`,op:1,orb:'#b9a8ff',eye:'',mouth:'',aura:.34,auraColor:accent,motes:1},
+      dizzy:{anim:'ffp-dizzy 1.1s linear infinite',filter:'saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0},
+      poisoned:{anim:'ffp-queasy 2.1s ease-in-out infinite',filter:'saturate(.58) hue-rotate(45deg) brightness(.92)',op:1,orb:'#8ee07a',eye:'',mouth:'',aura:.26,auraColor:'#7cb85c',motes:0,bubbles:1},
+      ghost:{anim:'ffp-float 3.8s ease-in-out infinite',filter:'saturate(.25) hue-rotate(175deg) brightness(1.12)',op:.7,orb:'#dfe9ff',eye:'',mouth:'',aura:.25,auraColor:'#7fa8ff',motes:1},
+      levelUp:{anim:'ffp-pop 1.3s ease-in-out infinite',filter:`drop-shadow(0 0 15px ${accent})`,op:1,orb:'#ffe07a',eye:'',mouth:'',aura:.25,auraColor:'#ffb02e',motes:0,ring:1,spark:1},
+      sleeping:{pose:'rotate(82deg) translate(0px,2px)',anim:'ffp-sleepbob 4.8s ease-in-out infinite',filter:'brightness(.9) saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0,zzz:1},
+      proud:{anim:proudAnim,filter:`drop-shadow(0 5px 13px ${accent}66)`,op:1,orb:'#ffe28a',eye:'',mouth:'',aura:.12,auraColor:accent,motes:1,spark:1}
+    }
+  };
+}
+
 /* generic renderer: one persistent DOM, fed by the active mascot's pack */
 const Mascot = (() => {
   const shade = (hex) => {
@@ -982,6 +1024,13 @@ const Mascot = (() => {
     const index = level >= 4 ? 2 : level >= 2 ? 1 : 0;
     return forms[Math.min(index, forms.length - 1)] || pack.BASE;
   };
+  const artForLevel = (pack, level) => {
+    if (pack.RASTER_SHEET) {
+      const frame=level>=4?2:level>=2?1:0;
+      return {body:`<g clip-path="url(#ffpRasterClip)"><image href="${esc(pack.RASTER_SHEET)}" x="${-22*frame}" y="0" width="66" height="22" preserveAspectRatio="none" style="image-rendering:auto"/></g>`,depth:''};
+    }
+    return bodyFor(pack,rowsForLevel(pack,level));
+  };
 
   let pack = null, refs = null, current = null, walking = false;
 
@@ -989,14 +1038,15 @@ const Mascot = (() => {
     pack = MASCOTS[id] || MASCOTS.lulu;
     const aura=pack.aura || {cx:8,cy:8,rx:9,ry:8};
     const paws=pack.paws || [[3,11],[9,11]];
-    const levelRows = rowsForLevel(pack, +(document.body.dataset.famLevel || 1));
-    const full = bodyFor(pack, levelRows);
-    const walkRows = pack.walk ? bodyFor(pack, levelRows.slice(0, pack.walk.rows)) : null;
+    const level=+(document.body.dataset.famLevel||1);
+    const levelRows=pack.RASTER_SHEET?null:rowsForLevel(pack,level);
+    const full=artForLevel(pack,level);
+    const walkRows=pack.walk&&levelRows?bodyFor(pack,levelRows.slice(0,pack.walk.rows)):null;
     holder.innerHTML = `
     <div class="ffp-wrap" id="ffpWrap">
       <svg viewBox="${pack.viewBox}" width="100%" height="100%" style="display:block;overflow:visible">
         <defs><filter id="psoft-ffp" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="1.4"/></filter></defs>
+          <feGaussianBlur stdDeviation="1.4"/></filter><clipPath id="ffpRasterClip"><rect x="0" y="0" width="22" height="22"/></clipPath></defs>
         <ellipse id="ffpAura" cx="${aura.cx}" cy="${aura.cy}" rx="${aura.rx}" ry="${aura.ry}" fill="#ffc964" opacity="0" filter="url(#psoft-ffp)"/>
         <ellipse cx="${pack.shadow.cx}" cy="${pack.shadow.cy}" rx="${pack.shadow.rx}" ry="0.8" fill="${pack.shadow.fill}" opacity="${pack.shadow.op}" filter="url(#psoft-ffp)"/>
         <g id="ffpPose" style="transform:none;transform-origin:${pack.poseOrigin};transition:transform .5s ease">
@@ -1053,9 +1103,9 @@ const Mascot = (() => {
 
   function setEvolution(level){
     if (!refs || !pack) return;
-    const rows = rowsForLevel(pack, level);
-    refs._full = bodyFor(pack, rows);
-    refs._walkRows = pack.walk ? bodyFor(pack, rows.slice(0, pack.walk.rows)) : null;
+    const rows=pack.RASTER_SHEET?null:rowsForLevel(pack,level);
+    refs._full=artForLevel(pack,level);
+    refs._walkRows=pack.walk&&rows?bodyFor(pack,rows.slice(0,pack.walk.rows)):null;
     const c = pack.CFG[current] || pack.CFG.idle;
     const src = c.walk && refs._walkRows ? refs._walkRows : refs._full;
     refs.ffpBody.innerHTML = src.body;
@@ -1355,6 +1405,30 @@ function famSetPrototypePet(spec, celebrate = true){
     toast(tx(`${MASCOTS.prototype.name} 住进桌面了 ✦`, `${MASCOTS.prototype.name} joined you ✦`));
     Fam.sparkle(9);
   }
+}
+function famUnregisterPrototypePet(){
+  if(Fam.char==='prototype')Fam.setCharacter('lulu');
+  delete MASCOTS.prototype;
+  if(localStorage.getItem('ff-char')==='prototype')localStorage.setItem('ff-char','lulu');
+}
+function famRegisterCustomPet(spec, select=false){
+  const id=spec.characterID||(`custom:${spec.id||''}`);
+  if(!/^custom:[0-9a-f-]{36}$/i.test(id)||!spec.assetURL)return;
+  MASCOTS[id]=rasterMascotPack(spec);
+  if(select)Fam.setCharacter(id,false);
+}
+function famSetCustomPet(spec,celebrate=true){
+  famRegisterCustomPet(spec,true);
+  if(celebrate){
+    toast(tx(`${spec.name||'新伴灵'} 住进桌面了 ✦`,`${spec.name||'Your new familiar'} joined you ✦`));
+    Fam.sparkle(9);
+  }
+}
+function famUnregisterCustomPet(id){
+  if(!/^custom:[0-9a-f-]{36}$/i.test(id))return;
+  if(Fam.char===id)Fam.setCharacter('lulu');
+  delete MASCOTS[id];
+  if(localStorage.getItem('ff-char')===id)localStorage.setItem('ff-char','lulu');
 }
 function famPause(p){ Fam.paused = p; Fam.setState(p ? 'idle' : Fam.state); }
 

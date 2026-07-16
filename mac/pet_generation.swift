@@ -84,8 +84,8 @@ enum PetGenerationError: LocalizedError {
 }
 
 final class PetGenerationCoordinator {
-    typealias Progress = (_ route: String, _ phase: String, _ detail: String?) -> Void
-    typealias Completion = (_ route: String, _ result: Result<[String], Error>) -> Void
+    typealias SheetProgress = (_ phase: String, _ detail: String?) -> Void
+    typealias SheetCompletion = (Result<Data, Error>) -> Void
 
     private let session: URLSession
     private let callbackQueue = DispatchQueue.main
@@ -113,59 +113,50 @@ final class PetGenerationCoordinator {
         }
     }
 
-    func generateBoth(requestID: String, sourceDataURI: String, styleDataURI: String?,
-                      personality: String, likeness: Double,
-                      progress: @escaping Progress, completion: @escaping Completion) {
+    func generateCharacterSheet(requestID: String, sourceDataURI: String,
+                                personalityVisual: String, likeness: Double,
+                                progress: @escaping SheetProgress,
+                                completion: @escaping SheetCompletion) {
         lock.lock(); cancelled.remove(requestID); lock.unlock()
-        guard let pixelKey = MimoSecret.pixelLab.read() else {
-            finish(completion, route: "B", result: .failure(PetGenerationError.missingKey("PixelLab")))
-            finish(completion, route: "C", result: .failure(PetGenerationError.missingKey("PixelLab")))
-            return
-        }
-
-        emit(progress, route: "B", phase: "pixel", detail: nil)
-        generatePixelLab(referenceImages: [(sourceDataURI, 256, 256,
-                                            "Preserve the subject's recognizable silhouette, colors, and distinguishing features")],
-                         styleDataURI: styleDataURI, personality: personality,
-                         likeness: likeness, apiKey: pixelKey, requestID: requestID) { [weak self] result in
-            guard let self, !self.isCancelled(requestID) else { return }
-            self.finish(completion, route: "B", result: result)
-        }
-
         guard let openAIKey = MimoSecret.openAI.read() else {
-            finish(completion, route: "C", result: .failure(PetGenerationError.missingKey("OpenAI")))
+            finishSheet(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
             return
         }
-        emit(progress, route: "C", phase: "concept", detail: nil)
-        generateConcept(sourceDataURI: sourceDataURI, personality: personality,
-                        likeness: likeness, apiKey: openAIKey, requestID: requestID) { [weak self] concept in
-            guard let self, !self.isCancelled(requestID) else { return }
-            switch concept {
-            case .failure(let error):
-                self.finish(completion, route: "C", result: .failure(error))
-            case .success(let conceptDataURI):
-                self.emit(progress, route: "C", phase: "pixel", detail: nil)
-                self.generatePixelLab(referenceImages: [
-                    (conceptDataURI, 1024, 1024, "Use this as the primary character concept and silhouette"),
-                    (sourceDataURI, 256, 256, "Preserve the original subject's recognizable identity and colors"),
-                ], styleDataURI: styleDataURI, personality: personality,
-                   likeness: max(0.25, likeness - 0.12), apiKey: pixelKey,
-                   requestID: requestID) { [weak self] result in
-                    guard let self, !self.isCancelled(requestID) else { return }
-                    self.finish(completion, route: "C", result: result)
+        guard let imageData = Self.dataFromDataURI(sourceDataURI),
+              Self.isSupportedImageData(imageData), imageData.count <= 12 * 1024 * 1024 else {
+            finishSheet(completion, result: .failure(PetGenerationError.invalidImage)); return
+        }
+        emitSheet(progress, phase: "generating", detail: "medium · 1536×1024")
+        let request = Self.characterSheetRequest(imageData: imageData,
+                                                 personalityVisual: personalityVisual,
+                                                 likeness: likeness,
+                                                 apiKey: openAIKey)
+        performJSON(request, provider: "OpenAI", requestID: requestID) { result in
+            guard !self.isCancelled(requestID) else { return }
+            switch result {
+            case .failure(let error): self.finishSheet(completion, result: .failure(error))
+            case .success(let json):
+                guard let images = Self.imageStrings(in: json), let first = images.first else {
+                    self.finishSheet(completion, result: .failure(PetGenerationError.invalidResponse("OpenAI"))); return
+                }
+                self.resolveImage(first, requestID: requestID) { resolved in
+                    guard !self.isCancelled(requestID) else { return }
+                    let checked = resolved.flatMap { data -> Result<Data, Error> in
+                        guard let size = Self.pngPixelSize(data), size.0 == 1536, size.1 == 1024 else {
+                            return .failure(PetGenerationError.invalidResponse("OpenAI character sheet"))
+                        }
+                        return .success(data)
+                    }
+                    self.finishSheet(completion, result: checked)
                 }
             }
         }
     }
 
-    private func generateConcept(sourceDataURI: String, personality: String, likeness: Double,
-                                 apiKey: String, requestID: String,
-                                 completion: @escaping (Result<String, Error>) -> Void) {
-        guard let imageData = Self.dataFromDataURI(sourceDataURI),
-              let url = URL(string: "https://api.openai.com/v1/images/edits") else {
-            completion(.failure(PetGenerationError.invalidImage)); return
-        }
-        let boundary = "mimo-\(UUID().uuidString)"
+    static func characterSheetRequest(imageData: Data, personalityVisual: String,
+                                      likeness: Double, apiKey: String,
+                                      boundary: String = "mimo-\(UUID().uuidString)") -> URLRequest {
+        let url = URL(string: "https://api.openai.com/v1/images/edits")!
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.appendUTF8("--\(boundary)\r\n")
@@ -173,155 +164,65 @@ final class PetGenerationCoordinator {
             body.appendUTF8("\(value)\r\n")
         }
         field("model", "gpt-image-2")
-        field("size", "1024x1024")
-        field("quality", "low")
+        field("size", "1536x1024")
+        field("quality", "medium")
         field("output_format", "png")
+        field("background", "opaque")
         field("n", "1")
-        let likenessCopy = likeness >= 0.66 ? "Stay very faithful to the subject." :
-            likeness >= 0.4 ? "Balance likeness with a charming reinterpretation." :
-            "Freely reinterpret the subject while keeping one or two unmistakable traits."
-        field("prompt", """
-        Reimagine the main subject as one tiny Mimo desktop familiar. \(likenessCopy)
-        Personality: \(personality). Make a compact, warm, playful full-body character with a bold readable silhouette,
-        expressive face, and one signature feature derived from the reference. Front-facing, centered, isolated on a plain
-        neutral background. No text, scenery, border, extra characters, UI, or cast shadow. This is clean concept art that
-        will be converted to strict pixel art in a second step.
-        """)
+        field("prompt", characterSheetPrompt(personalityVisual: personalityVisual, likeness: likeness))
         body.appendUTF8("--\(boundary)\r\n")
         body.appendUTF8("Content-Disposition: form-data; name=\"image[]\"; filename=\"reference.png\"\r\n")
         body.appendUTF8("Content-Type: image/png\r\n\r\n")
         body.append(imageData)
         body.appendUTF8("\r\n--\(boundary)--\r\n")
 
-        var request = URLRequest(url: url, timeoutInterval: 180)
+        var request = URLRequest(url: url, timeoutInterval: 240)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
         request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
-        performJSON(request, provider: "OpenAI", requestID: requestID) { result in
-            switch result {
-            case .failure(let error): completion(.failure(error))
-            case .success(let json):
-                guard let images = Self.imageStrings(in: json), let first = images.first else {
-                    completion(.failure(PetGenerationError.invalidResponse("OpenAI"))); return
-                }
-                self.resolveImage(first, requestID: requestID) { resolved in
-                    completion(resolved.map { Self.dataURI($0) })
-                }
-            }
-        }
+        request.httpBody = body
+        return request
     }
 
-    private func generatePixelLab(referenceImages: [(String, Int, Int, String)], styleDataURI: String?,
-                                  personality: String, likeness: Double, apiKey: String,
-                                  requestID: String, completion: @escaping (Result<[String], Error>) -> Void) {
-        guard let url = URL(string: "https://api.pixellab.ai/v2/generate-image-v2") else {
-            completion(.failure(PetGenerationError.invalidResponse("PixelLab"))); return
-        }
-        let likenessCopy = likeness >= 0.66 ? "Closely preserve the reference subject." :
-            likeness >= 0.4 ? "Preserve the reference identity while simplifying it." :
-            "Use the reference as inspiration and prioritize a delightful character."
-        var payload: [String: Any] = [
-            "description": """
-            One single Mimo desktop familiar, front-facing full body, true handcrafted pixel art. \(likenessCopy)
-            Personality: \(personality). Compact cute proportions, bold distinctive silhouette, 6–8 coherent colors,
-            readable face, tiny feet, selective one-pixel outline, subtle pixel shading. Centered with generous transparent
-            padding. No text, scenery, floor, frame, UI, props, duplicate character, or non-pixel brushwork.
-            """,
-            "image_size": ["width": 96, "height": 96],
-            "no_background": true,
-            "reference_images": referenceImages.map { item in
-                ["image": ["type": "base64", "base64": item.0, "format": "png"],
-                 "size": ["width": item.1, "height": item.2],
-                 "usage_description": item.3]
-            },
-        ]
-        if let styleDataURI, !styleDataURI.isEmpty {
-            payload["style_image"] = [
-                "image": ["type": "base64", "base64": styleDataURI, "format": "png"],
-                "size": ["width": 128, "height": 64],
-                "usage_description": "Match the warm low-resolution sprite language, pixel scale, outline, and shading of Nat and Clawd",
-            ]
-            payload["style_options"] = ["color_palette": false, "outline": true, "detail": true, "shading": true]
-        }
-        guard JSONSerialization.isValidJSONObject(payload),
-              let data = try? JSONSerialization.data(withJSONObject: payload) else {
-            completion(.failure(PetGenerationError.invalidImage)); return
-        }
-        var request = URLRequest(url: url, timeoutInterval: 45)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = data
-        performJSON(request, provider: "PixelLab", requestID: requestID) { result in
-            switch result {
-            case .failure(let error): completion(.failure(error))
-            case .success(let json):
-                guard let jobID = json["background_job_id"] as? String else {
-                    completion(.failure(PetGenerationError.invalidResponse("PixelLab"))); return
-                }
-                self.pollPixelLab(jobID: jobID, apiKey: apiKey, attempt: 0,
-                                  requestID: requestID, completion: completion)
-            }
-        }
-    }
+    static func characterSheetPrompt(personalityVisual: String, likeness: Double) -> String {
+        let likenessCopy = likeness >= 0.66
+            ? "Preserve the subject's identity, facial or marking structure, primary colors, outfit colors, and signature feature very closely."
+            : likeness >= 0.4
+                ? "Preserve the subject's face or markings, primary colors, and one signature feature while simplifying it into a familiar."
+                : "Freely reinterpret the subject, but retain two unmistakable visual traits and its primary color family."
+        return """
+        PRODUCTION ASSET — MIMO DESKTOP FAMILIAR CHARACTER SHEET
 
-    private func pollPixelLab(jobID: String, apiKey: String, attempt: Int, requestID: String,
-                              completion: @escaping (Result<[String], Error>) -> Void) {
-        guard !isCancelled(requestID) else { return }
-        guard attempt < 45 else { completion(.failure(PetGenerationError.timedOut)); return }
-        guard let url = URL(string: "https://api.pixellab.ai/v2/background-jobs/\(jobID)") else {
-            completion(.failure(PetGenerationError.invalidResponse("PixelLab"))); return
-        }
-        var request = URLRequest(url: url, timeoutInterval: 30)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        performJSON(request, provider: "PixelLab", requestID: requestID) { result in
-            guard !self.isCancelled(requestID) else { return }
-            switch result {
-            case .failure(let error): completion(.failure(error))
-            case .success(let json):
-                let status = (json["status"] as? String ?? "").lowercased()
-                if status == "failed" {
-                    completion(.failure(PetGenerationError.provider(Self.providerMessage(json) ?? "PixelLab generation failed")))
-                } else if status == "completed" {
-                    let raw = json["last_response"] ?? json
-                    guard let imageValues = Self.imageStrings(in: raw), !imageValues.isEmpty else {
-                        completion(.failure(PetGenerationError.invalidResponse("PixelLab"))); return
-                    }
-                    self.resolveImages(Array(imageValues.prefix(4)), requestID: requestID, completion: completion)
-                } else {
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 5) {
-                        self.pollPixelLab(jobID: jobID, apiKey: apiKey, attempt: attempt + 1,
-                                          requestID: requestID, completion: completion)
-                    }
-                }
-            }
-        }
-    }
+        REFERENCE
+        Image 1 is the identity and color reference for the main subject, not a pose or layout template.
+        Likeness: \(likenessCopy)
+        Temperament: \(personalityVisual)
 
-    private func resolveImages(_ values: [String], requestID: String,
-                               completion: @escaping (Result<[String], Error>) -> Void) {
-        let group = DispatchGroup()
-        let resultLock = NSLock()
-        var resolved: [Int: String] = [:]
-        var firstError: Error?
-        for (index, value) in values.enumerated() {
-            group.enter()
-            resolveImage(value, requestID: requestID) { result in
-                resultLock.lock()
-                switch result {
-                case .success(let data): resolved[index] = Self.dataURI(data)
-                case .failure(let error): if firstError == nil { firstError = error }
-                }
-                resultLock.unlock(); group.leave()
-            }
-        }
-        group.notify(queue: .global(qos: .userInitiated)) {
-            let ordered = resolved.keys.sorted().compactMap { resolved[$0] }
-            if !ordered.isEmpty { completion(.success(ordered)) }
-            else { completion(.failure(firstError ?? PetGenerationError.invalidResponse("PixelLab"))) }
-        }
+        PURPOSE AND STYLE
+        Create one original tiny desktop familiar that remains charming and readable at roughly 96–160 px tall on macOS.
+        Use premium handcrafted pixel-inspired sprite art: cute chibi proportions, large expressive head, tiny full body,
+        crisp stepped edges, restrained dark-cocoa outline, a coherent 10–14 color palette, warm selective shading, and a
+        strong readable silhouette. Avoid photorealism, 3D rendering, painterly brushwork, smooth vector art, or emoji style.
+
+        LAYOUT
+        One 1536×1024 landscape sheet with exactly three isolated full-body versions arranged LEFT, CENTER, RIGHT—one in
+        each equal third. Front-facing neutral standing pose, eyes open, feet fully visible, same horizontal center and same
+        ground baseline in every panel. Keep generous clear margin. No dividers and no labels.
+
+        EVOLUTION
+        LEFT — SEED: youngest and smallest form; round, simple silhouette; fewest details.
+        CENTER — BLOOM: unmistakably the same individual; slightly taller and more confident; signature feature grows.
+        RIGHT — RADIANT: unmistakably the same individual; clearest evolved silhouette with a crest, ear, leaf, tail, wing,
+        or luminous body-marking flourish; powerful but still tiny and cute.
+        Lock the same face, species, hairstyle or markings, primary palette, outfit colors, and signature trait across all
+        three. Evolve silhouette and internal markings—never create three different people, species, poses, or outfits.
+
+        EXTRACTION MATTE
+        Use one flat opaque warm matte background, exact color #F1ECE2, across the whole canvas. No gradient, texture,
+        floor, cast shadow, halo, external glow, particles, props, scenery, frame, UI, text, logo, watermark, extra
+        characters, or cropped limbs. Convey Radiant energy only through silhouette and body markings; Mimo adds effects.
+        """
     }
 
     private func resolveImage(_ value: String, requestID: String,
@@ -369,11 +270,10 @@ final class PetGenerationCoordinator {
             guard 200..<300 ~= http.statusCode else {
                 let retryable = http.statusCode == 429
                     || (request.httpMethod != "POST" && 500...599 ~= http.statusCode)
-                let retryLimit = provider == "PixelLab" && http.statusCode == 429 ? 6 : 2
+                let retryLimit = 2
                 if attempt < retryLimit && retryable {
                     let headerDelay = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 2
-                    let baseDelay = provider == "PixelLab" && http.statusCode == 429 ? max(4, headerDelay) : headerDelay
-                    let delay = min(12, max(1, baseDelay * pow(2, Double(attempt))))
+                    let delay = min(12, max(1, headerDelay * pow(2, Double(attempt))))
                     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
                         self.performJSON(request, provider: provider, requestID: requestID,
                                          attempt: attempt + 1, completion: completion)
@@ -391,12 +291,12 @@ final class PetGenerationCoordinator {
         track(task, token: token, requestID: requestID); task.resume()
     }
 
-    private func emit(_ callback: @escaping Progress, route: String, phase: String, detail: String?) {
-        callbackQueue.async { callback(route, phase, detail) }
+    private func emitSheet(_ callback: @escaping SheetProgress, phase: String, detail: String?) {
+        callbackQueue.async { callback(phase, detail) }
     }
 
-    private func finish(_ callback: @escaping Completion, route: String, result: Result<[String], Error>) {
-        callbackQueue.async { callback(route, result) }
+    private func finishSheet(_ callback: @escaping SheetCompletion, result: Result<Data, Error>) {
+        callbackQueue.async { callback(result) }
     }
 
     private func isCancelled(_ requestID: String) -> Bool {
@@ -431,6 +331,13 @@ final class PetGenerationCoordinator {
 
     static func dataURI(_ data: Data) -> String { "data:image/png;base64," + data.base64EncodedString() }
 
+    static func pngPixelSize(_ data: Data) -> (Int, Int)? {
+        guard isSupportedImageData(data),
+              let rep = NSBitmapImageRep(data: data),
+              rep.pixelsWide > 0, rep.pixelsHigh > 0 else { return nil }
+        return (rep.pixelsWide, rep.pixelsHigh)
+    }
+
     static func isSupportedImageData(_ data: Data) -> Bool {
         let bytes = [UInt8](data.prefix(12))
         let png: [UInt8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -444,8 +351,8 @@ final class PetGenerationCoordinator {
         return false
     }
 
-    // PixelLab intentionally types background-job last_response as opaque JSON.
-    // Walk it defensively, preferring embedded base64 before storage URLs.
+    // Provider responses vary between embedded base64 and storage URLs. Walk
+    // defensively, preferring embedded image data so private assets stay local.
     static func imageStrings(in value: Any) -> [String]? {
         var embedded: [String] = [], urls: [String] = []
         func visit(_ node: Any, key: String? = nil) {

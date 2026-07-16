@@ -58,30 +58,74 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
   background:#14102bcf; font-size:11px; opacity:.68; }
 .card:hover .card-delete,.card-delete:focus{ opacity:1; color:#ffd4df; border-color:#e88fae55; }
 .card .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; font-weight:600; margin-top:5px; }
-.card .ds{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:8.5px; color:var(--dim); margin-top:2px; }
+.card .ds{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; color:var(--dim); margin-top:2px; }
 
-/* Mimo Studio — one generated sheet, normalized into three local forms. */
+/* Mimo Studio — a visible three-step path: sketch, choose, evolve. */
 .proto-tag{ margin-left:auto; color:#15112b; background:#ffd479; border-radius:9px;
-  padding:2px 7px; font-size:8px; font-weight:800; letter-spacing:.08em; }
+  padding:2px 7px; font-size:9.5px; font-weight:800; letter-spacing:.08em; }
 .petlab-intro{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-.pet-source{ width:72px; height:72px; border-radius:15px; border:1px dashed #cabcf566;
+.pet-source{ width:72px; height:72px; padding:0; border-radius:15px; border:1px dashed #cabcf566;
   display:grid; place-items:center; color:var(--dim); font-size:22px; overflow:hidden; flex:none;
   background:#17132f; cursor:pointer; position:relative; transition:.16s; }
 .pet-source:hover,.pet-source.drag{ border-color:var(--good); background:#1c2540; transform:translateY(-1px); }
 .pet-source img{ width:100%; height:100%; object-fit:contain; display:none; background:#fff8e8; }
 .pet-source small{ position:absolute; inset:auto 3px 3px; padding:2px 3px; border-radius:5px;
-  color:#fff; background:#15112bbd; font-size:7.5px; text-align:center; }
+  color:#fff; background:#15112bbd; font-size:10px; text-align:center; }
 .petlab-copy{ min-width:0; flex:1; }
 .petlab-copy b{ display:block; font-family:Georgia,serif; font-size:14px; margin-bottom:3px; }
 .petlab-copy span{ display:block; color:var(--dim); font-size:10.5px; line-height:1.4; }
 .petlab-actions{ display:flex; align-items:center; gap:8px; margin-top:7px; }
 .pet-name{ width:145px; color:var(--ink); background:#17132f; border:1px solid var(--line);
   border-radius:8px; padding:6px 8px; font:11px inherit; }
+.reference-set{ padding:9px; margin:-3px 0 11px; border:1px solid #cabcf528; border-radius:13px;
+  background:linear-gradient(145deg,#1c1738,#17142f); transition:border-color .16s,background .16s; }
+.reference-set.drag{ border-color:var(--good); background:linear-gradient(145deg,#202041,#18253b);
+  box-shadow:0 0 0 1px #7df0cf22 inset; }
+.reference-set-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:7px; }
+.reference-set-head b{ color:var(--accent); font-size:10.5px; }.reference-set-head span{ color:#8f88a5; font-size:9.5px; }
+.reference-tray{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+.reference-card{ position:relative; min-width:0; padding:4px; border:1px solid var(--line); border-radius:11px;
+  color:var(--dim); background:#14112a; overflow:hidden; }
+.reference-card.primary{ border-color:#7df0cf88; box-shadow:0 0 0 1px #7df0cf1e,0 7px 14px #0e0b2066; }
+.reference-image-button{ position:relative; display:block; width:100%; padding:0; overflow:hidden; border:0;
+  border-radius:8px; background:#eee6d8; text-align:left; }
+.reference-image-button img{ display:block; width:100%; aspect-ratio:1; object-fit:contain; background:#0f0c22; }
+.reference-role{ position:absolute; left:4px; top:4px; max-width:calc(100% - 8px); padding:2px 5px;
+  border-radius:6px; color:#eeeaf8; background:#15112bcc; font-size:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.reference-card.primary .reference-role{ color:#142820; background:#7df0cfe8; font-weight:750; }
+.reference-badges{ display:flex; gap:3px; min-height:17px; margin-top:4px; overflow:hidden; }
+.reference-badge{ min-width:0; padding:2px 4px; border-radius:5px; color:#9b94ad; background:#ffffff08;
+  font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.reference-badge.pending{ color:#d2bb83; background:#ffd4790d; }
+.reference-tools{ display:flex; align-items:center; gap:2px; margin-top:3px; }
+.reference-tools button{ flex:1; min-width:0; padding:3px 2px; border:0; border-radius:5px; color:#9992ac;
+  min-height:26px; background:#ffffff07; font-size:11px; line-height:1; }
+.reference-tools button:hover{ color:var(--ink); background:#ffffff10; }.reference-tools button:disabled{ opacity:.25; cursor:default; }
+.reference-remove:hover{ color:#ffc4d6!important; background:#e88fae10!important; }
+.reference-add{ min-height:112px; padding:8px; display:grid; place-items:center; align-content:center; gap:5px;
+  border:1px dashed #cabcf544; border-radius:11px; color:#9d96b3; background:#17132f; text-align:center; }
+.reference-add:hover{ color:var(--good); border-color:#7df0cf77; background:#1a2039; }
+.reference-add b{ font-size:17px; line-height:1; }.reference-add span{ font-size:8.5px; line-height:1.25; }
+.reference-note{ margin-top:7px; color:#8f88a5; font-size:9px; line-height:1.4; }
+.reference-note strong{ color:#b9b1ca; font-weight:600; }
+.reference-status{ min-height:0; margin-top:4px; color:var(--warn); font-size:8.5px; }
+.studio-steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin:0 0 10px; }
+.studio-step{ position:relative; min-width:0; min-height:43px; padding:7px 7px 7px 28px;
+  color:#77718d; border:1px solid var(--line); border-radius:10px; background:#17132f; }
+.studio-step::before{ content:attr(data-step); position:absolute; left:8px; top:8px; width:14px; height:14px;
+  display:grid; place-items:center; border-radius:50%; color:#9891ad; background:#ffffff0b;
+  font:700 7.5px ui-monospace,monospace; }
+.studio-step b{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10.5px; }
+.studio-step small{ display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:#817a96; font-size:9.5px; }
+.studio-step.cur{ color:var(--ink); border-color:#cabcf566; background:linear-gradient(135deg,#292248,#1d2740); }
+.studio-step.cur::before{ color:#152820; background:var(--good); box-shadow:0 0 9px #7df0cf55; }
+.studio-step.done{ color:#b6afca; }.studio-step.done::before{ content:'✓'; color:#152820; background:#75cdb5; }
 .pet-controls{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
-  padding:10px; margin:0 0 10px; border-radius:12px; background:#1a1635; border:1px solid var(--line); }
-.pet-control label{ display:block; color:var(--dim); font-size:8.5px; margin:0 0 5px; }
+  padding:9px 10px; margin:0 0 8px; border-radius:12px; background:#1a1635; border:1px solid var(--line); }
+.pet-control label{ display:block; color:var(--dim); font-size:10px; margin:0 0 5px; }
 .pet-control select{ width:100%; }
-.likeness-row{ display:flex; align-items:center; gap:6px; color:var(--dim); font-size:8px; }
+.likeness-row{ display:flex; align-items:center; gap:6px; color:var(--dim); font-size:9.5px; }
 .likeness-row input{ width:100%; accent-color:#7df0cf; }
 .generate-both{ height:32px; padding:6px 12px; background:linear-gradient(120deg,#cabcf5,#7df0cf);
   border:0; color:#15112b; font-size:11px; font-weight:750; }
@@ -96,40 +140,110 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
   background:linear-gradient(135deg,#262048,#1b2c40); box-shadow:0 0 0 1px #7df0cf22; }
 .temperament-tile .temperament-ico{ flex:none; width:25px; height:25px; display:grid; place-items:center;
   border-radius:8px; background:#ffffff0a; font-size:14px; }
-.temperament-tile b{ display:block; font-size:9.5px; }.temperament-tile small{ display:block; margin-top:2px; font-size:7.5px; line-height:1.25; color:#89839f; }
+.temperament-tile b{ display:block; font-size:11px; }.temperament-tile small{ display:block; margin-top:2px; font-size:9.5px; line-height:1.25; color:#9992ad; }
+.final-controls{ display:none; padding:9px 10px; margin:0 0 9px; border:1px solid #cabcf533;
+  border-radius:12px; background:linear-gradient(145deg,#211a3e,#17162f); }
+.final-controls.show{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
+.final-choice{ min-width:0; }
 .quality-label{ display:flex; justify-content:space-between; align-items:baseline; margin:1px 1px 6px;
-  color:var(--dim); font-size:8px; }
-.quality-label b{ color:var(--accent); font-size:9px; font-weight:600; }
-.quality-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
+  color:var(--dim); font-size:9.5px; }
+.quality-label b{ color:var(--accent); font-size:10.5px; font-weight:600; }
+.quality-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:6px; }
 .quality-tile{ min-width:0; padding:7px 8px; display:flex; align-items:center; justify-content:space-between;
   gap:6px; text-align:left; color:var(--dim); background:#17132f; border:1px solid var(--line); border-radius:10px; }
 .quality-tile:hover{ background:#201a3f; }.quality-tile.sel{ color:var(--ink); border-color:#ffd47988;
   background:linear-gradient(135deg,#302448,#293143); box-shadow:0 0 0 1px #ffd4791e; }
 .quality-tile:disabled{ opacity:.48; cursor:default; }
-.quality-tile b{ font-size:9.5px; letter-spacing:.04em; }.quality-tile small{ display:block; margin-top:2px;
-  color:#918aa7; font-size:7.5px; white-space:nowrap; }.quality-price{ color:var(--warn); font:600 8px ui-monospace,monospace; }
-.sheet-result{ min-height:190px; padding:11px; border:1px solid #7df0cf32; border-radius:15px;
+.quality-tile b{ font-size:11px; letter-spacing:.04em; }.quality-tile small{ display:block; margin-top:2px;
+  color:#918aa7; font-size:9.5px; white-space:nowrap; }.quality-price{ color:var(--warn); font:600 9.5px ui-monospace,monospace; }
+.sheet-result{ min-height:184px; padding:11px; border:1px solid #7df0cf32; border-radius:15px;
   background:linear-gradient(155deg,#1c1738,#15122c); }
 .sheet-result-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.sheet-result-head b{ font:600 12px Georgia,serif; }.sheet-meta{ color:var(--good); font-size:8px; }
-.sheet-empty{ min-height:145px; display:grid; place-items:center; text-align:center; color:var(--dim);
+.sheet-result-head b{ font:600 12px Georgia,serif; }.sheet-meta{ color:var(--good); font-size:9.5px; }
+.sheet-empty{ min-height:139px; display:grid; place-items:center; text-align:center; color:var(--dim);
   border:1px dashed var(--line); border-radius:11px; font-size:9.5px; line-height:1.55; padding:16px; }
+.candidate-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.candidate{ position:relative; min-width:0; padding:4px; color:var(--dim); border:1px solid var(--line);
+  border-radius:12px; background:#17132f; text-align:center; transition:.15s; }
+.candidate:hover{ transform:translateY(-1px); background:#211b40; }
+.candidate.sel{ color:var(--ink); border-color:var(--good); box-shadow:0 0 0 1px #7df0cf44,0 8px 18px #0c091c66; }
+.candidate img{ display:block; width:100%; aspect-ratio:1; object-fit:contain; border-radius:8px;
+  background:radial-gradient(circle at 50% 65%,#fffaf0,#eee4cf); }
+.candidate span{ display:block; padding:4px 2px 2px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; font-size:8px; }
+.candidate.sel::after{ content:'✓'; position:absolute; right:7px; top:7px; width:16px; height:16px;
+  display:grid; place-items:center; border-radius:50%; color:#122a23; background:var(--good); font-size:8px; }
 .sheet-stages{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
-.sheet-stage{ min-width:0; text-align:center; color:var(--dim); font-size:8px; }
+.sheet-stage{ position:relative; min-width:0; text-align:center; color:var(--dim); font-size:9.5px; }
 .sheet-frame{ aspect-ratio:1; margin-bottom:4px; overflow:hidden; border-radius:11px;
   background:radial-gradient(circle at 50% 65%,#fffaf0,#eee4cf); border:1px solid #ffffff18; }
 .sheet-frame img{ display:block; height:100%; width:300%; max-width:none; image-rendering:auto; }
 .sheet-frame.s1 img{ transform:translateX(-33.3333%); }.sheet-frame.s2 img{ transform:translateX(-66.6666%); }
+.sheet-frame img.single{ width:100%; object-fit:contain; transform:none; }
+.stage-tools{ display:flex; align-items:center; justify-content:center; gap:3px; margin-top:3px; }
+.stage-redo{ padding:3px 6px; color:#aaa4bf; border-color:#ffffff12; border-radius:6px;
+  background:#ffffff08; font-size:9.5px; }
+.stage-redo:hover{ color:var(--ink); }.stage-redo:disabled{ opacity:.38; cursor:default; }
+.stage-cost{ color:#8a849d; font:9px ui-monospace,monospace; }
+.stage-busy::after{ content:''; position:absolute; left:50%; top:38%; width:18px; height:18px;
+  margin:-9px; border:2px solid #ffffff20; border-top-color:var(--warn); border-radius:50%;
+  animation:route-spin .8s linear infinite; }
 .sheet-actions{ display:flex; gap:7px; margin-top:9px; }.sheet-actions button{ flex:1; }
 .sheet-adopt{ color:#15112b; border:0; background:linear-gradient(120deg,#cabcf5,#7df0cf); font-weight:750; }
+.preserved-result{ margin-top:10px; padding-top:9px; border-top:1px dashed #ffd47930; }
+.preserved-result > b{ display:block; margin-bottom:7px; color:var(--warn); font:600 10.5px Georgia,serif; }
+.form-quality{ display:block; margin-top:2px; color:#77718e; font:8px ui-monospace,monospace; }
 .sheet-meta.err{ color:var(--bad); }
+.studio-progress{ position:relative; min-height:139px; display:grid; grid-template-columns:minmax(0,1fr) auto;
+  align-items:center; gap:12px; padding:13px; overflow:hidden; border:1px dashed #ffffff14; border-radius:11px; }
+.studio-progress.has-preview{ grid-template-columns:minmax(0,1fr) 92px; }
+.progress-copy b{ display:block; color:var(--ink); font-size:10.5px; margin-bottom:5px; }
+.progress-copy p{ color:var(--dim); font-size:10.5px; line-height:1.5; }
+.progress-time{ margin-top:8px; color:var(--warn); font:600 10px ui-monospace,monospace; }
+.progress-actions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.progress-actions button{ padding:4px 7px; font-size:10px; }
+.progress-background{ color:var(--good); border-color:#7df0cf33; background:#7df0cf0b; }
+.progress-cancel{ color:#9992ad; border-color:#ffffff12; background:#ffffff06; }
+.partial-preview{ width:92px; height:92px; object-fit:contain; border-radius:10px;
+  background:#f5edde; border:1px solid #ffffff1c; }
+.reference-review{ display:grid; gap:10px; }
+.reference-review-preview{ display:block; width:100%; max-height:330px; object-fit:contain; border-radius:12px;
+  background:#f1ece2; border:1px solid #7df0cf44; }
+.reference-review-copy{ color:var(--dim); font-size:10.5px; line-height:1.5; }
+.reference-review-copy strong{ display:block; color:var(--ink); margin-bottom:3px; font:600 12px Georgia,serif; }
+.reference-review-meta{ display:flex; flex-wrap:wrap; gap:5px; }
+.reference-review-actions{ display:grid; grid-template-columns:1fr auto; gap:7px; }
+.reference-confirm{ color:#15112b; border:0; background:linear-gradient(120deg,#cabcf5,#7df0cf); font-weight:750; }
+.phase-track{ display:flex; gap:4px; margin-top:8px; }.phase-track i{ width:18px; height:3px;
+  border-radius:3px; background:#ffffff12; }.phase-track i.on{ background:var(--good); box-shadow:0 0 6px #7df0cf55; }
+.diagnostics{ display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; }
+.diag{ padding:3px 6px; color:#918aa7; border:1px solid #ffffff10; border-radius:7px;
+  background:#ffffff06; font:9.5px ui-monospace,monospace; }
+.diag.good{ color:var(--good); }.diag.warn{ color:var(--warn); }
+.warning-list{ margin-top:7px; padding:6px 8px; color:#c7b98e; border-left:2px solid #ffd47977;
+  background:#ffd47908; border-radius:0 7px 7px 0; font-size:10px; line-height:1.45; }
+.generation-details{ margin-top:7px; color:#8f88a3; font-size:9.5px; }
+.generation-details summary{ cursor:pointer; color:#aaa3ba; }.generation-details div{ margin-top:5px; line-height:1.55; }
+.studio-error{ padding:11px; color:var(--dim); border:1px solid #e88fae33; border-radius:10px;
+  background:#e88fae08; font-size:10.5px; line-height:1.5; }
+.studio-error b{ display:block; color:var(--bad); font-size:10px; margin-bottom:4px; }
+.studio-error.local{ border-color:#ffd47942; background:#ffd47908; }.studio-error.local b{ color:var(--warn); }
+.error-actions{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }.error-actions button{ padding:5px 8px; font-size:10px; }
+.recovery-row{ display:grid; grid-template-columns:64px 1fr; align-items:center; gap:8px; margin-top:8px;
+  padding:6px; border:1px solid #ffd47922; border-radius:9px; background:#0e0c20aa; }
+.recovery-preview{ width:64px; height:64px; object-fit:contain; border-radius:7px; background:#f2ece2; }
+.recovery-copy{ color:#aaa2be; font-size:10px; line-height:1.45; }.recovery-copy strong{ display:block;
+  color:var(--good); margin-bottom:2px; font-size:10.5px; }
 .sheet-empty .pulse{ width:25px; height:25px; margin:0 auto 7px; border:2px solid #ffffff16;
   border-top-color:var(--warn); border-radius:50%; animation:route-spin .9s linear infinite; }
 @keyframes route-spin{to{transform:rotate(360deg)}}
 .petlab-state{ display:flex; align-items:center; gap:7px; min-height:18px; margin-top:9px;
   color:var(--dim); font-size:10px; }
 .petlab-state .dot{ width:6px; height:6px; border-radius:50%; background:#7df0cf; box-shadow:0 0 7px #7df0cf88; }
-.pet-privacy{ margin-top:8px; color:#938ca9; font-size:8.5px; line-height:1.45; }
+.pet-privacy{ margin-top:8px; color:#938ca9; font-size:10px; line-height:1.45; }
+.recovery-archive{ display:none; align-items:center; justify-content:space-between; gap:8px; margin-top:8px;
+  padding:7px 8px; border:1px solid #ffd47924; border-radius:8px; color:#a59db6; font-size:10px; }
+.recovery-archive.show{ display:flex; }.recovery-archive button{ padding:4px 7px; font-size:10px; }
 .api-setup{ margin-top:10px; border-top:1px dashed var(--line); padding-top:9px; }
 .api-setup summary{ color:var(--accent); font-size:9.5px; cursor:pointer; }
 .api-grid{ display:grid; grid-template-columns:1fr; gap:7px; margin-top:8px; }
@@ -220,39 +334,55 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </div>
 
 <div class="sec" id="petLab">
-  <h2><span class="ico">✦</span><span data-zh="Mimo Studio · DIY 伴灵" data-en="Mimo Studio · DIY familiar">Mimo Studio · DIY 伴灵</span> <span class="proto-tag" id="qualityTag">MEDIUM</span></h2>
+  <h2><span class="ico">✦</span><span data-zh="Mimo Studio · DIY 伴灵" data-en="Mimo Studio · DIY familiar">Mimo Studio · DIY 伴灵</span> <span class="proto-tag">3 STEPS</span></h2>
   <div class="petlab-intro">
-    <div class="pet-source" id="petSourceDrop" onclick="send({type:'petUpload'})"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"><small data-zh="拖进来" data-en="drop here">拖进来</small></div>
-    <div class="petlab-copy"><b data-zh="一张图，长成三段真正的角色形态" data-en="One image, three real character forms">一张图，长成三段真正的角色形态</b>
-      <span data-zh="OpenAI 会一次画出初生、绽放、发光；米墨在本地去背景并接上桌面动作，不再压成抽象小方格。" data-en="OpenAI draws Seed, Bloom, and Radiant in one sheet. Mimo removes the matte locally and adds desktop motion—no tiny-grid crush.">OpenAI 会一次画出初生、绽放、发光；米墨在本地去背景并接上桌面动作，不再压成抽象小方格。</span>
+    <button type="button" class="pet-source" id="petSourceDrop" data-pet-upload onclick="requestPetReference()" data-aria-zh="添加伴灵参考图片" data-aria-en="Add a familiar reference image"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt=""><small data-zh="添加图片" data-en="add image">添加图片</small></button>
+    <div class="petlab-copy"><b data-zh="先认出它，再让同一个角色长大" data-en="Find the character first, then let it grow">先认出它，再让同一个角色长大</b>
+      <span data-zh="先用 Low 画 3 个轻量草稿；选定主角后，再生成初生、绽放、发光。每一步都看得见，也能只重画不满意的一段。" data-en="Start with 3 lightweight Low drafts. Pick one master, then create Seed, Bloom, and Radiant. Every step stays visible, and any one form can be redrawn.">先用 Low 画 3 个轻量草稿；选定主角后，再生成初生、绽放、发光。每一步都看得见，也能只重画不满意的一段。</span>
       <div class="petlab-actions">
-        <button type="button" onclick="send({type:'petUpload'})" data-zh="选择图片…" data-en="Choose image…">选择图片…</button>
+        <button type="button" data-pet-upload onclick="requestPetReference()" data-zh="添加参考图…" data-en="Add references…">添加参考图…</button>
         <input class="pet-name" id="petName" value="我的小伴灵" maxlength="28"
+          data-aria-zh="伴灵名字" data-aria-en="Familiar name"
           oninput="petLab.name=this.value || tx('我的小伴灵','My little familiar'); renderPetLab()">
       </div>
     </div>
   </div>
 
+  <section class="reference-set" id="petReferenceSet" aria-labelledby="petReferenceTitle">
+    <div class="reference-set-head"><b id="petReferenceTitle" data-zh="主角参考集" data-en="Subject reference set">主角参考集</b><span id="petReferenceCount">0 / 8</span></div>
+    <div class="reference-tray" id="petReferenceTray" role="list"></div>
+    <p class="reference-note" id="petReferenceNote" data-zh="可以放截图、拼图和不同角度。点缩略图设为<strong>主参考</strong>，把它作为寻找主角的首要线索；其他图片补充脸、发型、体型和穿搭。米墨会在本机尽量隔离检测到的文字、按钮与背景，并让你确认身份板后才发送。" data-en="Screenshots, collages, and different angles are welcome. Click a thumbnail to make it the <strong>primary</strong> clue for finding the subject; supporting images add face, hair, build, and outfit cues. Mimo locally isolates detected text, controls, and backgrounds where possible, then asks you to confirm the identity board before sending.">可以放截图、拼图和不同角度。点缩略图设为<strong>主参考</strong>，把它作为寻找主角的首要线索；其他图片补充脸、发型、体型和穿搭。米墨会在本机尽量隔离检测到的文字、按钮与背景，并让你确认身份板后才发送。</p>
+    <div class="reference-status" id="petReferenceStatus" aria-live="polite"></div>
+  </section>
+
   <div class="temperament-label"><b data-zh="它是什么气质？" data-en="What is its temperament?">它是什么气质？</b><span data-zh="改变轮廓、表情和动作" data-en="shapes silhouette, expression &amp; motion">改变轮廓、表情和动作</span></div>
-  <div class="temperament-grid" id="temperamentGrid"></div>
-  <div class="quality-label"><b data-zh="生成精度" data-en="Render quality">生成精度</b><span data-zh="输出估价 · 输入另计" data-en="output estimate · input extra">输出估价 · 输入另计</span></div>
-  <div class="quality-grid" id="qualityGrid" role="radiogroup" aria-label="生成精度"></div>
+  <div class="temperament-grid" id="temperamentGrid" role="radiogroup" data-aria-zh="伴灵气质" data-aria-en="Familiar temperament"></div>
+
+  <div class="studio-steps" id="studioSteps" role="list" aria-label="Mimo Studio progress"></div>
   <div class="pet-controls">
-    <div class="pet-control"><label data-zh="更像谁？" data-en="What should it resemble?">更像谁？</label><div class="likeness-row"><span data-zh="伴灵" data-en="Mimo">伴灵</span><input id="petLikeness" type="range" min="0" max="100" value="58" onchange="invalidatePetDraft()"><span data-zh="原图" data-en="photo">原图</span></div></div>
-    <button class="generate-both" id="petGenerate" type="button" onclick="generateCharacterSheet()" data-zh="生成三段成长" data-en="Generate 3 forms">生成三段成长</button>
+    <div class="pet-control"><label for="petLikeness" data-zh="更像谁？" data-en="What should it resemble?">更像谁？</label><div class="likeness-row"><span data-zh="伴灵" data-en="Mimo">伴灵</span><input id="petLikeness" type="range" min="0" max="100" value="58" data-aria-zh="主角与主参考的相似程度" data-aria-en="Likeness to the primary reference" onchange="invalidatePetDraft()"><span data-zh="主参考" data-en="primary">主参考</span></div></div>
+    <button class="generate-both" id="petGenerate" type="button" onclick="generateCandidates()" data-zh="画 3 个 Low 草稿" data-en="Make 3 Low drafts">画 3 个 Low 草稿</button>
+  </div>
+  <div class="final-controls" id="finalControls">
+    <div class="final-choice">
+      <div class="quality-label"><b data-zh="下一次生成精度" data-en="Next generation quality">下一次生成精度</b><span data-zh="整套或单段 · 输入另计" data-en="full sheet or one form · input extra">整套或单段 · 输入另计</span></div>
+      <div class="quality-grid" id="qualityGrid" role="radiogroup" data-aria-zh="下一次生成精度" data-aria-en="Next generation quality"></div>
+    </div>
+    <button class="generate-both" id="petEvolutionGenerate" type="button" onclick="generateEvolution()" data-zh="让这个角色成长" data-en="Evolve this character">让这个角色成长</button>
   </div>
 
-  <div class="sheet-result" id="petSheetResult"></div>
-  <div class="petlab-state" id="petLabState"><span class="dot"></span>
-    先丢进一张图片，再生成一套三段成长
+  <div class="sheet-result" id="petSheetResult" aria-live="polite"></div>
+  <div class="petlab-state" id="petLabState" aria-live="polite"><span class="dot"></span>
+    先添加一组参考图，再生成一套三段成长
   </div>
-  <div class="pet-privacy" data-zh="隐私提示：只有点击生成后，参考图片才会发送给 OpenAI。原图与完整输出不保存；米墨只在本机保存你带回桌面的透明三段角色图。" data-en="Privacy: your reference goes to OpenAI only after Generate. Mimo does not keep the source or raw output—only the transparent three-form asset you bring home stays on this Mac.">隐私提示：只有点击生成后，参考图片才会发送给 OpenAI。原图与完整输出不保存；米墨只在本机保存你带回桌面的透明三段角色图。</div>
+  <div class="pet-privacy" data-zh="费用与隐私：主角、拼图与文字分析都在这台 Mac 上完成。你会先看到并确认身份板；确认后，OpenAI 收到 1 张本机整理的身份板和米墨内置风格板，不会收到整组原截图。检测到的文字、UI 与背景会尽量隔离，未能可靠分析时不会发送。原始上传图不会写入恢复缓存。" data-en="Cost & privacy: subject, collage, and text analysis runs on this Mac. You see and confirm the identity board first. After confirmation, OpenAI receives one locally prepared identity board plus Mimo's internal style board—not the full screenshot set. Detected text, UI, and backgrounds are isolated where possible; nothing is sent when analysis is unreliable. Original uploads never enter the recovery cache.">费用与隐私：主角、拼图与文字分析都在这台 Mac 上完成。你会先看到并确认身份板；确认后，OpenAI 收到 1 张本机整理的身份板和米墨内置风格板，不会收到整组原截图。检测到的文字、UI 与背景会尽量隔离，未能可靠分析时不会发送。原始上传图不会写入恢复缓存。</div>
+  <div class="recovery-archive" id="generationRecoveryArchive"><span id="generationRecoveryText"></span><button type="button" onclick="send({type:'petRevealGenerationDrafts'})" data-zh="在 Finder 查看" data-en="Show in Finder">在 Finder 查看</button></div>
   <details class="api-setup" id="apiSetup"><summary data-zh="API 连接 · Key 只存进这台 Mac 的 Keychain" data-en="API connections · keys stay in this Mac's Keychain">API 连接 · Key 只存进这台 Mac 的 Keychain</summary>
     <div class="api-grid">
       <div class="api-field"><label><span>OpenAI</span><b id="openAIKeyState">未设置</b></label><input id="openAIKey" type="password" autocomplete="off" placeholder="OpenAI API key"></div>
     </div>
     <div class="api-actions"><button type="button" onclick="savePetKeys()" data-zh="安全保存" data-en="Save securely">安全保存</button><button type="button" onclick="clearPetKey('openai')" data-zh="清除 OpenAI" data-en="Clear OpenAI">清除 OpenAI</button></div>
-    <div class="note" data-zh="GPT Image 2 · 1536×1024 · Low / Medium / High · 每次生成一张三阶段 sheet。" data-en="GPT Image 2 · 1536×1024 · Low / Medium / High · one three-stage sheet per generation.">GPT Image 2 · 1536×1024 · Low / Medium / High · 每次生成一张三阶段 sheet。</div>
+    <div class="note" data-zh="GPT Image 2 · Low 草稿 → Medium / High 成长图。等待时间主要来自 OpenAI 生成；本机去背景通常只占很短一段。" data-en="GPT Image 2 · Low drafts → Medium / High evolution. Most waiting is image generation at OpenAI; local matte removal is normally brief.">GPT Image 2 · Low 草稿 → Medium / High 成长图。等待时间主要来自 OpenAI 生成；本机去背景通常只占很短一段。</div>
   </details>
 </div>
 </div>
@@ -358,6 +488,9 @@ function applyLanguage(){
   document.querySelectorAll('[data-zh][data-en]').forEach(el => {
     el.innerHTML = LANG === 'zh' ? el.dataset.zh : el.dataset.en;
   });
+  document.querySelectorAll('[data-aria-zh][data-aria-en]').forEach(el => {
+    el.setAttribute('aria-label', LANG === 'zh' ? el.dataset.ariaZh : el.dataset.ariaEn);
+  });
   const input = document.getElementById('petName');
   if (input && (input.value === '我的小伴灵' || input.value === 'My little familiar')) {
     input.value = tx('我的小伴灵', 'My little familiar');
@@ -428,116 +561,606 @@ const TEMPERAMENTS=[
   {id:'odd-whimsical',ico:'⌁',zh:'古怪可爱',en:'Odd & whimsical',subZh:'偏斜 · 轻轻摇摆',subEn:'offbeat · wobbles'}
 ];
 const IMAGE_QUALITIES=[
-  {id:'low',name:'Low',zh:'快速草图',en:'fast draft',cost:'$0.005'},
-  {id:'medium',name:'Medium',zh:'推荐平衡',en:'recommended',cost:'$0.041'},
-  {id:'high',name:'High',zh:'最终精修',en:'final detail',cost:'$0.165'}
+  {id:'medium',name:'Medium',zh:'推荐平衡',en:'recommended',cost:'$0.045',stageCost:'$0.057'},
+  {id:'high',name:'High',zh:'最终精修',en:'final detail',cost:'$0.169',stageCost:'$0.215'}
 ];
-const petLab={name:'我的小伴灵',source:null,sourceName:'',requestID:null,draftID:null,
-  temperamentID:'quiet-curious',quality:'medium',status:'idle',phase:'',error:'',sheet:null,adoptedName:''};
+const STUDIO_STAGES=[
+  {zh:'3 个草稿',en:'3 drafts',subZh:'Low · 约 $0.010',subEn:'Low · about $0.010'},
+  {zh:'选定主角',en:'Pick a master',subZh:'锁住身份与气质',subEn:'lock identity & mood'},
+  {zh:'三段成长',en:'3-form evolution',subZh:'Medium / High',subEn:'Medium / High'}
+];
+const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],primaryReferenceID:null,requestID:null,draftID:null,
+  candidateDraftID:null,candidates:[],candidateIndex:null,temperamentID:'quiet-curious',quality:'medium',
+  sheetQuality:null,stageQualities:[null,null,null],preservedResult:false,
+  status:'idle',operation:null,phase:'',phaseMessage:'',error:'',errorKind:'',errorCode:'',outputRetained:false,
+  sheet:null,stageImages:[null,null,null],stageBusyIndex:null,providerSeconds:null,localSeconds:null,
+  warnings:[],partialImage:null,providerCompleted:false,rawPreview:null,recoveryDraftID:null,
+  recoveryRequestID:null,recoveryUntil:null,canRetryLocally:false,resetTo:null,localRetry:false,
+  model:null,size:null,partialImages:null,referenceCount:null,styleBoardUsed:null,usage:null,providerDetail:null,
+  startedAt:null,finishedElapsed:null,cancelArmedUntil:0,adoptedName:'',referenceNoticeZh:'',referenceNoticeEn:'',
+  importing:0,referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,
+  referenceAmbiguous:false,referenceReviewMessageZh:'',referenceReviewMessageEn:''};
+
+const studioBusy=()=>petLab.status==='busy'||petLab.status==='installing';
+const referencesImporting=()=>Math.max(0,+petLab.importing||0)>0;
+const elapsedSeconds=()=>petLab.startedAt?((petLab.finishedElapsed??((Date.now()-petLab.startedAt)/1000))):0;
+function durationText(value){
+  if(value===null||value===undefined||!Number.isFinite(+value))return null;
+  const seconds=Math.max(0,+value);return seconds<10?`${seconds.toFixed(1)}s`:`${Math.round(seconds)}s`;
+}
+function recoveryDate(value){
+  if(value===null||value===undefined)return null;let parsed;
+  if(typeof value==='number'||/^\d+(\.\d+)?$/.test(String(value))){let epoch=+value;if(epoch>0&&epoch<1e12)epoch*=1000;parsed=new Date(epoch)}else parsed=new Date(value);
+  return Number.isNaN(parsed.getTime())?null:parsed;
+}
+function operationCost(operation=petLab.operation){
+  if(petLab.localRetry)return '$0';
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
+  return operation==='candidates'?'~$0.010':operation==='stage'?`~${quality.stageCost}`:`~${quality.cost}`;
+}
+function currentStudioStep(){
+  if(petLab.operation==='evolution'||petLab.operation==='stage'||petLab.status==='adopted')return 2;
+  if(petLab.candidates.length||petLab.candidateIndex!==null)return 1;
+  if(petLab.sheet)return 2;
+  return 0;
+}
+function renderStudioSteps(){
+  const box=document.getElementById('studioSteps');if(!box)return;const current=currentStudioStep();
+  box.innerHTML=STUDIO_STAGES.map((s,i)=>`<div role="listitem" data-step="${i+1}" class="studio-step ${i<current?'done':i===current?'cur':''}"><b>${esc(LANG==='zh'?s.zh:s.en)}</b><small>${esc(LANG==='zh'?s.subZh:s.subEn)}</small></div>`).join('');
+}
+
+const MAX_PET_REFERENCES=8;
+function requestPetReference(){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;
+  if(petLab.references.length>=MAX_PET_REFERENCES){
+    setupStudioError(tx('最多可以添加 8 张参考图。','You can add up to 8 reference images.'));return;
+  }
+  send({type:'petUpload'});
+}
+function syncPrimaryReference(){
+  if(!Array.isArray(petLab.references))petLab.references=[];
+  let primary=petLab.references.find(ref=>ref.id===petLab.primaryReferenceID);
+  if(!primary)primary=petLab.references[0]||null;
+  petLab.primaryReferenceID=primary?.id||null;
+  petLab.source=primary?.source||null;petLab.sourceName=primary?.name||'';
+}
+function referenceBadges(ref,isPrimary){
+  const analysis=ref.analysis||{};
+  if(analysis.status==='ready'){
+    const supplied=LANG==='zh'?analysis.badgesZh:analysis.badgesEn;
+    if(Array.isArray(supplied)&&supplied.length)return supplied.slice(0,2).map(label=>({label:String(label),pending:false}));
+  }
+  return [
+    {label:isPrimary?tx('主角 · 待分析','subject · pending'):tx('辅助参考','supporting ref'),pending:true},
+    {label:tx('文字/UI · 待隔离','text/UI · isolate'),pending:true},
+  ];
+}
+function renderReferenceSet(){
+  syncPrimaryReference();
+  const tray=document.getElementById('petReferenceTray'),count=document.getElementById('petReferenceCount'),status=document.getElementById('petReferenceStatus');if(!tray||!count)return;
+  const refs=petLab.references,busy=studioBusy()||petLab.status==='review'||referencesImporting();count.textContent=`${refs.length} / ${MAX_PET_REFERENCES}`;
+  const cards=refs.map((ref,index)=>{
+    const primary=ref.id===petLab.primaryReferenceID,badges=referenceBadges(ref,primary);
+    const name=ref.name||tx(`参考图 ${index+1}`,`Reference ${index+1}`);
+    return `<div class="reference-card ${primary?'primary':''}" role="listitem" data-reference-id="${esc(ref.id)}">
+      <button type="button" class="reference-image-button" aria-pressed="${primary}" ${busy?'disabled':''} onclick="setPrimaryReference('${esc(ref.id)}')" aria-label="${esc(primary?tx(`${name}，当前主参考`,`${name}, current primary reference`):tx(`设 ${name} 为主参考`,`Make ${name} the primary reference`))}">
+        <img src="${esc(ref.source)}" alt="${esc(name)}"><span class="reference-role">${primary?tx('★ 主参考','★ primary'):tx(`#${index+1} 辅助`,`#${index+1} support`)}</span>
+      </button>
+      <div class="reference-badges" aria-label="${esc(tx('分析状态','Analysis status'))}">${badges.map(b=>`<span class="reference-badge ${b.pending?'pending':''}">${esc(b.label)}</span>`).join('')}</div>
+      <div class="reference-tools">
+        <button type="button" ${busy||index===0?'disabled':''} onclick="movePetReference('${esc(ref.id)}',-1)" aria-label="${esc(tx(`将 ${name} 向前移动`,`Move ${name} earlier`))}">←</button>
+        <button type="button" ${busy||index===refs.length-1?'disabled':''} onclick="movePetReference('${esc(ref.id)}',1)" aria-label="${esc(tx(`将 ${name} 向后移动`,`Move ${name} later`))}">→</button>
+        <button type="button" class="reference-remove" ${busy?'disabled':''} onclick="removePetReference('${esc(ref.id)}')" aria-label="${esc(tx(`移除 ${name}`,`Remove ${name}`))}">×</button>
+      </div>
+    </div>`;
+  });
+  if(refs.length<MAX_PET_REFERENCES)cards.push(`<div role="listitem"><button type="button" class="reference-add" data-pet-upload ${busy?'disabled':''} onclick="requestPetReference()" aria-label="${esc(tx('添加参考图片','Add a reference image'))}"><b>＋</b><span>${tx('添加图片','add image')}<br>${refs.length}/${MAX_PET_REFERENCES}</span></button></div>`);
+  tray.innerHTML=cards.join('');
+  const hero=document.getElementById('petSourceImg'),glyph=document.getElementById('petSourceGlyph');
+  if(hero){hero.src=petLab.source||'';hero.alt=petLab.source?tx('当前主参考','Current primary reference'):'';hero.style.display=petLab.source?'block':'none'}
+  if(glyph)glyph.style.display=petLab.source?'none':'';
+  if(status)status.textContent=LANG==='zh'?petLab.referenceNoticeZh:petLab.referenceNoticeEn;
+}
+function referenceSetChanged(){
+  syncPrimaryReference();
+  petLab.references.forEach(ref=>{ref.analysis={status:'pending'}});
+  petLab.referenceNoticeZh=petLab.references.length?`已在本机准备 ${petLab.references.length} 张参考图；点击生成前不会发送。`:'参考集已清空；请添加至少一张图片。';
+  petLab.referenceNoticeEn=petLab.references.length?`${petLab.references.length} reference${petLab.references.length===1?' is':'s are'} ready locally; nothing is sent before Generate.`:'Reference set cleared; add at least one image.';
+  invalidatePetDraft();
+}
+function setPrimaryReference(id){
+  if(studioBusy()||petLab.status==='review'||referencesImporting()||id===petLab.primaryReferenceID||!petLab.references.some(ref=>ref.id===id))return;
+  petLab.primaryReferenceID=id;referenceSetChanged();
+}
+function movePetReference(id,direction){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;const index=petLab.references.findIndex(ref=>ref.id===id),next=index+direction;
+  if(index<0||next<0||next>=petLab.references.length)return;
+  [petLab.references[index],petLab.references[next]]=[petLab.references[next],petLab.references[index]];referenceSetChanged();
+}
+function removePetReference(id){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;const before=petLab.references.length;
+  petLab.references=petLab.references.filter(ref=>ref.id!==id);if(petLab.references.length===before)return;
+  if(petLab.primaryReferenceID===id)petLab.primaryReferenceID=petLab.references[0]?.id||null;referenceSetChanged();
+}
+// Future native analysis can replace the honest pending badges without changing
+// reference order: {references:[{id,status:'ready',badgesZh:[...],badgesEn:[...]}]}.
+function petReferenceAnalysis(event){
+  const updates=Array.isArray(event?.references)?event.references:[];
+  updates.forEach(update=>{const ref=petLab.references.find(item=>item.id===update.id);if(ref)ref.analysis={...ref.analysis,...update}});
+  renderReferenceSet();
+}
+// Bridge contract. Nothing in this object leaves the web view until Generate.
+// `source` remains the primary data URI for older native builds.
+function buildReferenceBridgePayload(){
+  syncPrimaryReference();
+  return {referenceSetVersion:1,primaryReferenceID:petLab.primaryReferenceID,
+    references:petLab.references.map((ref,order)=>({id:ref.id,source:ref.source,name:ref.name||'',
+      role:ref.id===petLab.primaryReferenceID?'primary':'supporting',order,width:ref.width,height:ref.height}))};
+}
 
 function renderTemperaments(){
-  const grid=document.getElementById('temperamentGrid');if(!grid)return;
-  grid.innerHTML=TEMPERAMENTS.map(t=>`<button type="button" class="temperament-tile ${petLab.temperamentID===t.id?'sel':''}" onclick="selectTemperament('${t.id}')"><span class="temperament-ico">${t.ico}</span><span><b>${esc(LANG==='zh'?t.zh:t.en)}</b><small>${esc(LANG==='zh'?t.subZh:t.subEn)}</small></span></button>`).join('');
+  const grid=document.getElementById('temperamentGrid');if(!grid)return;const busy=studioBusy()||petLab.status==='review'||referencesImporting();
+  grid.setAttribute('aria-label',tx('伴灵气质','Familiar temperament'));
+  grid.innerHTML=TEMPERAMENTS.map(t=>`<button type="button" role="radio" aria-checked="${petLab.temperamentID===t.id}" class="temperament-tile ${petLab.temperamentID===t.id?'sel':''}" ${busy?'disabled':''} onclick="selectTemperament('${t.id}')"><span class="temperament-ico">${t.ico}</span><span><b>${esc(LANG==='zh'?t.zh:t.en)}</b><small>${esc(LANG==='zh'?t.subZh:t.subEn)}</small></span></button>`).join('');
 }
 function invalidatePetDraft(){
-  if(petLab.requestID)send({type:'petCancel',requestID:petLab.requestID});
-  petLab.requestID=null;petLab.draftID=null;petLab.sheet=null;petLab.error='';petLab.status='idle';petLab.phase='';petLab.adoptedName='';renderPetLab();
+  if(studioBusy())return;
+  const keep=!!petLab.draftID&&!!petLab.sheet;
+  const accepted=keep?{draftID:petLab.draftID,sheet:petLab.sheet,sheetQuality:petLab.sheetQuality,
+    stageImages:[...petLab.stageImages],stageQualities:[...petLab.stageQualities]}:null;
+  Object.assign(petLab,{requestID:null,draftID:accepted?.draftID||null,candidateDraftID:null,candidates:[],candidateIndex:null,
+    sheet:accepted?.sheet||null,sheetQuality:accepted?.sheetQuality||null,
+    stageImages:accepted?.stageImages||[null,null,null],stageQualities:accepted?.stageQualities||[null,null,null],
+    preservedResult:keep,stageBusyIndex:null,error:'',errorKind:'',errorCode:'',outputRetained:false,
+    status:keep?'ready':'idle',operation:null,phase:'',phaseMessage:'',warnings:[],partialImage:null,providerSeconds:null,
+    localSeconds:null,providerCompleted:false,rawPreview:null,recoveryDraftID:null,recoveryRequestID:null,
+    recoveryUntil:null,canRetryLocally:false,resetTo:null,localRetry:false,
+    model:null,size:null,partialImages:null,referenceCount:null,styleBoardUsed:null,usage:null,providerDetail:null,
+    startedAt:null,finishedElapsed:null,adoptedName:''});renderPetLab();
 }
-function selectTemperament(id){if(TEMPERAMENTS.some(t=>t.id===id)&&id!==petLab.temperamentID){invalidatePetDraft();petLab.temperamentID=id;renderTemperaments()}}
+function selectTemperament(id){if(!studioBusy()&&petLab.status!=='review'&&!referencesImporting()&&TEMPERAMENTS.some(t=>t.id===id)&&id!==petLab.temperamentID){invalidatePetDraft();petLab.temperamentID=id;renderPetLab()}}
 function renderImageQualities(){
   const grid=document.getElementById('qualityGrid');if(!grid)return;
-  const busy=['busy','installing'].includes(petLab.status);
-  grid.setAttribute('aria-label',tx('生成精度','Render quality'));
+  const busy=studioBusy();
+  grid.setAttribute('aria-label',tx('下一次生成精度','Next generation quality'));
   grid.innerHTML=IMAGE_QUALITIES.map(q=>`<button type="button" role="radio" class="quality-tile ${petLab.quality===q.id?'sel':''}" aria-checked="${petLab.quality===q.id}" ${busy?'disabled':''} onclick="selectImageQuality('${q.id}')"><span><b>${q.name}</b><small>${esc(LANG==='zh'?q.zh:q.en)}</small></span><span class="quality-price">${q.cost}</span></button>`).join('');
-  const tag=document.getElementById('qualityTag');if(tag)tag.textContent=petLab.quality.toUpperCase();
 }
 function selectImageQuality(id){
-  if(!IMAGE_QUALITIES.some(q=>q.id===id)||id===petLab.quality||['busy','installing'].includes(petLab.status))return;
-  petLab.quality=id;invalidatePetDraft();send({type:'petQuality',quality:id});
+  if(!IMAGE_QUALITIES.some(q=>q.id===id)||id===petLab.quality||studioBusy())return;
+  petLab.quality=id;
+  send({type:'petQuality',quality:id});renderPetLab();
 }
 function renderKeyState(){
   const openai=document.getElementById('openAIKeyState');if(!openai)return;
   openai.textContent=S.openAIConfigured?tx('已连接','connected'):tx('未设置','not set');openai.className=S.openAIConfigured?'ok':'';
 }
-function sheetStages(sheet){
-  return `<div class="sheet-stages">${[0,1,2].map((i)=>`<div class="sheet-stage"><div class="sheet-frame s${i}"><img src="${sheet}" alt="${['seed','bloom','radiant'][i]}"></div><span>${[tx('初生','Seed'),tx('绽放','Bloom'),tx('发光','Radiant')][i]}</span></div>`).join('')}</div>`;
+function candidateImage(candidate){return typeof candidate==='string'?candidate:(candidate?.image||candidate?.url||candidate?.preview||candidate?.dataURI||'')}
+function diagnosticsHTML(){
+  const items=[];const provider=durationText(petLab.providerSeconds),local=durationText(petLab.localSeconds),total=durationText(elapsedSeconds());
+  if(provider)items.push(`<span class="diag good">OpenAI ${provider}</span>`);
+  if(local)items.push(`<span class="diag">${tx('本机','local')} ${local}</span>`);
+  if(total)items.push(`<span class="diag">${tx('总计','total')} ${total}</span>`);
+  const warnings=(petLab.warnings||[]).filter(Boolean);
+  const details=[];
+  if(petLab.model)details.push(`${petLab.model}${petLab.size?` · ${petLab.size}`:''}`);
+  if(Number.isFinite(petLab.referenceCount))details.push(tx(`${petLab.referenceCount} 张参考图`,`${petLab.referenceCount} references`));
+  if(Number.isFinite(petLab.partialImages))details.push(tx(`${petLab.partialImages} 张付费流式预览`,`${petLab.partialImages} billed partial`));
+  if(petLab.styleBoardUsed!==null)details.push(petLab.styleBoardUsed?tx('米墨风格板已使用','Mimo style board used'):tx('米墨风格板未载入','Mimo style board unavailable'));
+  const usage=petLab.usage||{};if(Number.isFinite(+usage.totalTokens))details.push(`${tx('总 tokens','total tokens')} ${usage.totalTokens}`);
+  if(Number.isFinite(+usage.inputTokens)||Number.isFinite(+usage.outputTokens))details.push(`in ${usage.inputTokens??'—'} · out ${usage.outputTokens??'—'}`);
+  if(petLab.providerDetail)details.push(`${tx('服务原始信息','provider detail')}: ${petLab.providerDetail}`);
+  const disclosure=details.length?`<details class="generation-details"><summary>${tx('生成详情','Generation details')}</summary><div>${details.map(esc).join('<br>')}</div></details>`:'';
+  return `${items.length?`<div class="diagnostics">${items.join('')}</div>`:''}${warnings.length?`<div class="warning-list">${warnings.map(w=>`⚠ ${esc(typeof w==='string'?w:(LANG==='zh'?(w.zh||w.message):(w.en||w.message)))}`).join('<br>')}</div>`:''}${disclosure}`;
+}
+function sheetStages(sheet,allowRedo=true){
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
+  return `<div class="sheet-stages">${[0,1,2].map(i=>{
+    const override=petLab.stageImages[i],source=override||sheet;
+    const img=override?`<img class="single" src="${esc(source)}" alt="${['Seed','Bloom','Radiant'][i]}">`:`<img src="${esc(source)}" alt="${['Seed','Bloom','Radiant'][i]}">`;
+    const busy=petLab.status==='busy'&&petLab.operation==='stage'&&petLab.stageBusyIndex===i;
+    const currentQuality=petLab.stageQualities[i]||(!petLab.sheetQuality||petLab.sheetQuality==='mixed'?null:petLab.sheetQuality);
+    return `<div class="sheet-stage ${busy?'stage-busy':''}"><div class="sheet-frame s${i}">${img}</div><span>${[tx('初生','Seed'),tx('绽放','Bloom'),tx('发光','Radiant')][i]}</span>${currentQuality?`<span class="form-quality">${esc(currentQuality.toUpperCase())}</span>`:''}${allowRedo?`<div class="stage-tools"><button type="button" class="stage-redo" ${studioBusy()?'disabled':''} onclick="regenerateStage(${i})" aria-label="${esc(tx(`用 ${quality.name} 只重画${['初生','绽放','发光'][i]}`,`Redraw ${['Seed','Bloom','Radiant'][i]} only at ${quality.name}`))}">${tx(`只重画 · ${quality.name}`,`redraw · ${quality.name}`)}</button><span class="stage-cost">${quality.stageCost}+</span></div>`:''}</div>`;
+  }).join('')}</div>`;
+}
+function phaseInfo(){
+  const phase=(petLab.phase||'queued').toLowerCase(),local=/local|analyz|extract|process|normal|validate|matte|pack/.test(phase);
+  const known={queued:[tx('正在排队','Waiting for a slot'),tx('请求已准备好，等待开始。','The request is ready and waiting to start.')],analyzing:[tx('米墨正在本机找主角','Mimo is finding the subject locally'),tx('正在拆开拼图、识别人物与多角度，并隔离检测到的字幕、按钮、边框和物品格；这一步不会调用 API。','Splitting collages, finding people and useful angles, and isolating detected captions, controls, borders, and object-only cells. No API call happens in this step.')],connecting:[tx('正在连接 OpenAI','Connecting to OpenAI'),tx('只发送你确认过的身份板、角色设定与米墨风格板。','Sending only the identity board you confirmed, the character brief, and Mimo style board.')],uploading:[tx('正在发送身份板','Sending identity board'),tx('原始截图不会一起发送。','Original screenshots are not sent with it.')],generating:[tx('OpenAI 正在画','OpenAI is drawing'),tx('这是等待时间最长的一段；复杂图片可能接近两分钟，服务繁忙时也可能更久。关掉设置会继续。','This is usually the longest phase; complex images can approach two minutes and service load can make it longer. Closing Settings will not stop it.')],partial:[tx('第一张预览到了','First preview arrived'),tx('OpenAI 仍在完成最终图；这张预览已经包含在按钮估价里。','OpenAI is still finishing the final image; this partial is included in the button estimate.')],processing:[tx('米墨正在本机处理','Mimo is processing locally'),tx('OpenAI 已经完成。这里不会再次调用 API；正在去背景、检查边缘并对齐。','OpenAI has finished. No new API call; removing matte, checking edges, and aligning.')],downloading:[tx('正在接收图片','Receiving the image'),tx('生成已完成，正在把结果带回这台 Mac。','Generation finished; bringing the result back to this Mac.')],extracting:[tx('米墨正在本机去背景','Mimo is cleaning it locally'),tx('OpenAI 已经完成。只在这台 Mac 上重新去背景与检查边缘。','OpenAI has finished. Only matte removal and edge checks are rerunning on this Mac.')],validating:[tx('正在做最后检查','Running final checks'),tx('确认三段角色完整、透明且没有被裁掉。','Checking that every form is complete, transparent, and unclipped.') ]};
+  const fallback=local?[tx('米墨正在本机处理','Mimo is processing locally'),tx('这一段不会产生新的 API 费用。','This phase does not add API cost.')]:[tx('OpenAI 正在生成','OpenAI is generating'),tx('实际时间取决于服务负载与生成复杂度。','Timing varies with provider load and image complexity.')];
+  const copy=known[phase]||fallback;if(petLab.phaseMessage)copy[1]=petLab.phaseMessage;
+  const post=/extract|process|normal|validate|matte|pack/.test(phase);
+  const step=post?2:/connecting|uploading|generating|partial|downloading/.test(phase)?1:0;
+  return {title:copy[0],detail:copy[1],step,local,phase};
+}
+function progressHTML(){
+  const info=phaseInfo(),partial=petLab.partialImage;
+  const cancelTitle=tx('明确取消请求；如果 OpenAI 已经开始生成，仍可能产生费用，而且最终结果可能无法取回。','Explicitly cancel the request; if OpenAI already started, cost may still be incurred and the final result may not be recoverable.');
+  const cancelArmed=Date.now()<(petLab.cancelArmedUntil||0);
+  const cancel=info.local&&info.phase!=='analyzing'?'':`<button type="button" class="progress-cancel" title="${esc(cancelTitle)}" onclick="cancelStudioOperation()">${info.phase==='analyzing'?tx('停止本机分析','Stop local analysis'):cancelArmed?tx('再次点击：确认取消','Click again: confirm cancel'):tx('取消请求','Cancel request')}</button>`;
+  return `<div class="studio-progress ${partial?'has-preview':''}"><div class="progress-copy"><b>${esc(info.title)}</b><p>${esc(info.detail)}</p><div class="progress-time" id="studioElapsed" aria-hidden="true">${durationText(elapsedSeconds())||'0.0s'} · ${esc(operationCost())} ${tx('输出估价','output est.')}</div><div class="phase-track" aria-hidden="true"><i class="on"></i><i class="${info.step>=1?'on':''}"></i><i class="${info.step>=2?'on':''}"></i></div><div class="progress-actions"><button type="button" class="progress-background" onclick="continueStudioInBackground()">${tx('后台继续 · 关掉设置','Continue in background')}</button>${cancel}</div></div>${partial?`<img class="partial-preview" src="${esc(partial)}" alt="${tx('生成中的局部预览','Partial generation preview')}">`:''}</div>${diagnosticsHTML()}`;
+}
+function referenceReviewHTML(){
+  const mode=petLab.referenceMode==='sanitizedFullFrames'?tx('主体备用模式','subject fallback'):tx('人物多角度','matched person views');
+  const message=LANG==='zh'?petLab.referenceReviewMessageZh:petLab.referenceReviewMessageEn;
+  return `<div class="reference-review"><img class="reference-review-preview" src="${esc(petLab.referencePreview||'')}" alt="${tx('米墨准备发送给 OpenAI 的身份板','Identity board Mimo is prepared to send to OpenAI')}"><div class="reference-review-copy"><strong>${tx('这就是将要发送的身份板','This is the identity board that will be sent')}</strong>${esc(message||tx('确认主角正确后，米墨才会调用 OpenAI。','Mimo calls OpenAI only after you confirm the subject.'))}</div><div class="reference-review-meta"><span class="diag good">${esc(mode)}</span><span class="diag">${tx(`采用 ${petLab.referenceUsedCount} 张原图`,`${petLab.referenceUsedCount} source images used`)}</span><span class="diag">${tx(`${petLab.referenceEvidenceCount} 个证据角度`,`${petLab.referenceEvidenceCount} evidence views`)}</span>${petLab.referenceAmbiguous?`<span class="diag warn">${tx('需要仔细确认主角','check subject carefully')}</span>`:''}</div><div class="reference-review-actions"><button type="button" class="reference-confirm" onclick="confirmPetReferences()">${tx('确认主角 · 开始 Low 生成','Confirm subject · start Low generation')}</button><button type="button" onclick="cancelStudioOperation()">${tx('返回调整参考图','Back to references')}</button></div></div>`;
+}
+function candidateGridHTML(){
+  return `<div class="candidate-grid" role="radiogroup" aria-label="${tx('选择一个主角','Choose one master character')}">${petLab.candidates.map((candidate,i)=>`<button type="button" role="radio" aria-checked="${petLab.candidateIndex===i}" class="candidate ${petLab.candidateIndex===i?'sel':''}" onclick="selectCandidate(${i})"><img src="${esc(candidateImage(candidate))}" alt="${esc(tx(`草稿 ${i+1}`,`Draft ${i+1}`))}"><span>${petLab.candidateIndex===i?tx('选定的主角','selected master'):tx(`草稿 ${i+1}`,`draft ${i+1}`)}</span></button>`).join('')}</div>`;
+}
+function errorHTML(){
+  const local=petLab.errorKind==='local',setup=petLab.errorKind==='setup',installFailure=petLab.operation==='install'&&petLab.errorCode==='install_failed';
+  const title=installFailure?tx('角色还在，但没有保存成功','The character is intact, but was not saved'):setup?tx('开始生成前还差一步','One thing is needed before generation'):local?tx('图片到了，但本机处理没通过','Image arrived; local processing failed'):tx('OpenAI 生成没有完成','OpenAI generation did not complete');
+  const explanation=installFailure?tx('这不会再次调用 OpenAI；只会重试保存到这台 Mac。','This does not call OpenAI again; it only retries saving on this Mac.'):setup?tx('请求没有发出，也没有产生新的 API 费用。','No request was submitted and no new API cost was incurred.'):local?tx('这不是连接问题。OpenAI 已完成；米墨只会在角色完整但边距不足时提供一次更宽容的安全提取。真正被裁掉或粘连的图不会假装能本机修好。','This is not a connection problem. OpenAI finished. Mimo offers one more tolerant safe extraction only for complete art with a narrow margin; truly cropped or merged art is never presented as locally fixable.'):tx('问题发生在最终图片到达米墨之前，可能来自网络、服务负载、安全策略或 API 配额。','The problem occurred before the final image reached Mimo: network, provider load, safety policy, or API quota may be responsible.');
+  const retained=local&&petLab.outputRetained?tx('OpenAI 原始图已放进本机恢复档案，最多保留 24 小时。','The raw OpenAI output is in the local recovery archive for at most 24 hours.'):'';
+  const canRecover=local&&petLab.providerCompleted&&petLab.recoveryRequestID&&petLab.canRetryLocally;
+  const until=recoveryDate(petLab.recoveryUntil);
+  const expiry=until?tx(`会话内安全恢复可用到 ${until.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}`,`In-session safe recovery available until ${until.toLocaleTimeString('en',{hour:'numeric',minute:'2-digit'})}`):tx('这张原图仍可检查','The raw output remains inspectable');
+  const recovery=local&&petLab.rawPreview?`<div class="recovery-row"><img class="recovery-preview" src="${esc(petLab.rawPreview)}" alt="${tx('OpenAI 原始结果预览','Raw OpenAI result preview')}"><div class="recovery-copy"><strong>${canRecover?tx('OpenAI 已完成 · 可免费换安全提取模式','OpenAI finished · safe salvage is $0'):tx('OpenAI 原始结果','Raw OpenAI output')}</strong>${esc(canRecover?expiry:(retained||tx('只在当前会话中可见','Visible in this session only')))}</div></div>`:'';
+  const retryLocal=canRecover?`<button type="button" onclick="retryLocalProcessing()">${tx('安全提取边缘角色 · $0','Safely salvage near-edge art · $0')}</button>`:'';
+  let setupAction=`<button type="button" onclick="document.getElementById('apiSetup').open=true">${tx('检查 API 连接','Check API connection')}</button>`;
+  if(petLab.resetTo==='upload')setupAction=`<button type="button" onclick="requestPetReference()">${tx('添加新的参考图','Add a new reference')}</button>`;
+  if(petLab.resetTo==='candidates')setupAction=`<button type="button" onclick="generateCandidates()">${tx('重新生成 Low 草稿','Generate new Low drafts')}</button>`;
+  const archive=local&&petLab.outputRetained?`<button type="button" onclick="send({type:'petRevealGenerationDrafts'})">${tx('查看原图档案','Show raw archive')}</button>`:'';
+  const preservedInstall=!installFailure&&petLab.sheet&&petLab.draftID?`<button type="button" onclick="installCharacterSheet()">${tx('使用仍保留的上一套 ✦','Use preserved result ✦')}</button>`:'';
+  const action=installFailure?`<button type="button" onclick="installCharacterSheet()">${tx('重新保存到本机','Retry local save')}</button>`:setup?`${preservedInstall}${setupAction}`:`${preservedInstall}${retryLocal}${archive}<button type="button" onclick="retryStudioOperation()">${esc(tx(`重新请求 OpenAI · ${operationCost()}+`,`New OpenAI request · ${operationCost()}+`))}</button>`;
+  return `<div class="studio-error ${local?'local':''}"><b>${esc(title)}</b>${esc(petLab.error||explanation)}<br><span>${esc(explanation)} ${esc(retained)}</span>${recovery}${diagnosticsHTML()}<div class="error-actions">${action}</div></div>`;
+}
+function renderRecoveryArchive(){
+  const archive=document.getElementById('generationRecoveryArchive'),label=document.getElementById('generationRecoveryText');
+  if(!archive||!label)return;
+  const count=Math.max(0,Number(S.generationRecoveryCount)||0);
+  archive.classList.toggle('show',count>0);
+  label.textContent=tx(`本机有 ${count} 份失败/中断的 OpenAI 原图（24 小时内自动清理）`,`${count} failed/interrupted OpenAI output${count===1?'':'s'} on this Mac (auto-cleared within 24h)`);
+}
+let visibleDraftSignature='';
+function syncVisibleDrafts(){
+  const draftID=petLab.sheet&&petLab.draftID?petLab.draftID:null;
+  const candidateDraftID=petLab.candidates.length&&petLab.candidateDraftID?petLab.candidateDraftID:null;
+  const signature=`${draftID||''}|${candidateDraftID||''}`;if(signature===visibleDraftSignature)return;
+  visibleDraftSignature=signature;send({type:'petVisibleDrafts',draftID,candidateDraftID});
 }
 function renderPetLab(){
-  renderTemperaments();renderImageQualities();renderKeyState();
-  const busy=['busy','installing'].includes(petLab.status),generate=document.getElementById('petGenerate');
-  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[1];
-  if(generate){generate.disabled=busy;generate.textContent=petLab.status==='busy'?tx(`正在以 ${quality.name} 生成…`,`Generating · ${quality.name}…`):tx(`以 ${quality.name} 生成三段成长`,`Generate 3 forms · ${quality.name}`)}
+  renderTemperaments();renderImageQualities();renderKeyState();renderStudioSteps();renderReferenceSet();renderRecoveryArchive();
+  const busy=studioBusy()||petLab.status==='review',importing=referencesImporting(),generate=document.getElementById('petGenerate'),evolve=document.getElementById('petEvolutionGenerate');
+  document.querySelectorAll('[data-pet-upload]').forEach(button=>button.disabled=busy||importing||petLab.references.length>=MAX_PET_REFERENCES);
+  const likeness=document.getElementById('petLikeness');if(likeness)likeness.disabled=busy||importing;
+  const petName=document.getElementById('petName');if(petName)petName.disabled=busy||importing;
+  if(generate){generate.disabled=busy||importing;generate.textContent=importing?tx(`正在导入 ${petLab.importing} 张…`,`Importing ${petLab.importing}…`):petLab.status==='busy'&&petLab.operation==='candidates'?tx('正在检查主角…','Checking subject…'):petLab.candidates.length?tx('重画 3 个草稿 · ~$0.010','New 3 drafts · ~$0.010'):tx('画 3 个 Low 草稿 · ~$0.010','Make 3 Low drafts · ~$0.010')}
+  const finalControls=document.getElementById('finalControls');if(finalControls)finalControls.classList.toggle('show',petLab.candidateIndex!==null&&petLab.status!=='adopted');
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
+  const sheetQuality=IMAGE_QUALITIES.find(q=>q.id===petLab.sheetQuality)||quality;
+  const sheetQualityLabel=petLab.sheetQuality==='mixed'?'MIXED':sheetQuality.name.toUpperCase();
+  if(evolve){evolve.disabled=busy||petLab.candidateIndex===null;evolve.textContent=petLab.status==='busy'&&petLab.operation==='evolution'?tx(`正在做 ${quality.name} 成长图…`,`Creating ${quality.name} evolution…`):tx(`生成 ${quality.name} 成长图 · ~${quality.cost}`,`Create ${quality.name} evolution · ~${quality.cost}`)}
   const result=document.getElementById('petSheetResult'),state=document.getElementById('petLabState');if(!result||!state)return;
-  if(petLab.status==='busy'){
-    const copy=petLab.phase==='extracting'?tx('正在本地去背景、对齐三段形态…','Removing the matte and aligning all forms locally…'):tx(`正在画一张 ${quality.name} character sheet…`,`Drawing one ${quality.name} character sheet…`);
-    const wait=quality.id==='high'?tx('High 可能需要几分钟','High can take several minutes'):tx('通常需要一两分钟','usually takes a minute or two');
-    result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta">${esc(copy)}</span></div><div class="sheet-empty"><div><div class="pulse"></div>${esc(copy)}<br><small>${esc(wait)}</small></div></div>`;
+  result.setAttribute('aria-busy',petLab.status==='busy'?'true':'false');
+  if(petLab.status==='review'){
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('确认主角 · 尚未发送','Confirm subject · not sent yet')}</b><span class="sheet-meta">LOCAL · $0</span></div>${referenceReviewHTML()}`;
+  }else if(petLab.status==='busy'&&petLab.operation==='stage'&&petLab.sheet){
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('只重画这一段','Redrawing one form')}</b><span class="sheet-meta" id="sheetElapsed" aria-hidden="true">${durationText(elapsedSeconds())||'0.0s'}</span></div>${sheetStages(petLab.sheet,true)}${progressHTML()}`;
+  }else if(petLab.status==='busy'){
+    const title=petLab.localRetry?tx('本机重新处理 · 不会调用 OpenAI','Local retry · no OpenAI call'):petLab.operation==='candidates'?tx('Step 1 · 画 3 个 Low 草稿','Step 1 · Make 3 Low drafts'):tx('Step 3 · 生成三段成长','Step 3 · Create 3-form evolution');
+    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${petLab.operation==='candidates'?'LOW':quality.name.toUpperCase()}</span></div>${progressHTML()}`;
   }else if(petLab.status==='error'){
-    result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta err">${tx('失败','failed')}</span></div><div class="sheet-empty">${esc(petLab.error)}<br><small>${tx('检查连接或设置后，可以手动再试一次','Check your connection or setup, then try again')}</small></div>`;
+    const preserved=petLab.sheet?`${sheetStages(petLab.sheet,!petLab.preservedResult)}<div style="height:8px"></div>`:petLab.candidates.length?`${candidateGridHTML()}<div style="height:8px"></div>`:'';
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('这一步没有完成','This step did not finish')}</b><span class="sheet-meta err">${petLab.errorKind==='local'?'LOCAL':petLab.errorKind==='setup'?'SETUP':'OPENAI'} · ${tx('失败','FAILED')}</span></div>${preserved}${errorHTML()}`;
   }else if(petLab.status==='adopted'&&petLab.sheet){
-    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED ✦</span></div>${sheetStages(petLab.sheet)}`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED ✦</span></div>${sheetStages(petLab.sheet,false)}${diagnosticsHTML()}`;
+  }else if(petLab.candidates.length&&petLab.preservedResult&&petLab.sheet){
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选新的主角','Step 2 · Pick the new master')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}<div class="preserved-result"><b>${tx('上一套成长图仍安全保留','Previous finished evolution is still safe')}</b>${sheetStages(petLab.sheet,false)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('仍然使用上一套 ✦','Use previous result ✦')}</button></div></div>`;
   }else if(petLab.sheet){
-    result.innerHTML=`<div class="sheet-result-head"><b>${tx('同一只伴灵 · 三段成长','One familiar · three forms')}</b><span class="sheet-meta">${quality.name.toUpperCase()} · READY</span></div>${sheetStages(petLab.sheet)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button><button type="button" onclick="generateCharacterSheet()">${tx('再画一版','Try another')}</button></div>`;
+    const redo=petLab.candidateDraftID&&petLab.candidateIndex!==null?`<button type="button" onclick="generateEvolution()">${tx(`用 ${quality.name} 整套再画 · ~${quality.cost}+`,`Redo all at ${quality.name} · ~${quality.cost}+`)}</button>`:'';
+    const title=petLab.preservedResult?tx('上一套成长图 · 新设置尚未生成','Previous evolution · new settings not generated'):tx('同一个主角 · 三段成长','One master · three forms');
+    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · READY</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div>`;
+  }else if(petLab.candidates.length){
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选一个最像它的主角','Step 2 · Pick the master that feels right')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}`;
   }else{
-    result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta">1536 × 1024</span></div><div class="sheet-empty">${tx('这里会出现初生、绽放、发光三个完整角色形态。','Seed, Bloom, and Radiant will appear here as three complete character forms.')}</div>`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 1 · 先找出它是谁','Step 1 · Find who it is')}</b><span class="sheet-meta">LOW · ~ $0.010</span></div><div class="sheet-empty">${tx('先生成 3 个快速方形草稿。估价含 1 张流式预览，参考图输入另计。选中主角后，才会花费 Medium / High 成长图费用。','Generate 3 quick square drafts first. Estimate includes one streamed partial; reference input is extra. Medium / High evolution is only spent after you choose a master.')}</div>`;
   }
-  if(!petLab.source)state.innerHTML=`<span class="dot"></span>${tx('先丢进一张图片，再生成一套三段成长','Drop an image, then grow one three-form sheet')}`;
-  else if(petLab.status==='busy')state.innerHTML=`<span class="dot"></span>${tx('这次只生成一张图；完成后去背景都在本机进行','One generated sheet; matte removal happens locally afterward')}`;
+  if(!petLab.source)state.innerHTML=`<span class="dot"></span>${tx('先添加至少一张参考图；不会自动发送','Add at least one reference; nothing is sent automatically')}`;
+  else if(petLab.status==='review')state.innerHTML=`<span class="dot"></span>${tx('身份板只在本机预览 · 确认后才发送','Identity board is local-only · sent only after confirmation')}`;
+  else if(petLab.status==='busy')state.innerHTML=`<span class="dot"></span>${esc(phaseInfo().title)} · <span id="stateElapsed" aria-hidden="true">${durationText(elapsedSeconds())||'0.0s'}</span>`;
   else if(petLab.status==='installing')state.innerHTML=`<span class="dot"></span>${tx('正在保存到这台 Mac…','Saving this familiar on your Mac…')}`;
   else if(petLab.status==='adopted')state.innerHTML=`<span class="dot"></span>${esc(tx(`${petLab.adoptedName} 已住进桌面 · 三段成长与全部状态已接上`,`${petLab.adoptedName} is home · three forms and all states are connected`))}`;
-  else if(petLab.sheet)state.innerHTML=`<span class="dot"></span>${tx('三段形态已对齐 · 可以带回桌面','Three forms aligned · ready to bring home')}`;
-  else state.innerHTML=`<span class="dot"></span>${tx('参考图已就绪 · 选择气质后生成','Reference ready · choose a temperament and generate')}`;
+  else if(petLab.status==='error')state.innerHTML=`<span class="dot"></span>${petLab.errorCode==='install_failed'?tx('角色完整 · 只需重试本机保存','Character intact · retry local save only'):petLab.errorKind==='local'?tx('OpenAI 已完成 · 本机处理未通过','OpenAI finished · local processing failed'):petLab.errorKind==='setup'?tx('尚未发送请求','No request sent'):tx('OpenAI 请求未完成','OpenAI request did not finish')}`;
+  else if(petLab.preservedResult)state.innerHTML=`<span class="dot"></span>${tx('上一套结果仍可安装；新设置要从 Low 草稿开始','Previous result remains installable; new settings start with Low drafts')}`;
+  else if(petLab.sheet)state.innerHTML=`<span class="dot"></span>${tx('三段形态已对齐 · 每一段都可以单独重画','Three forms aligned · each one can be redrawn separately')}`;
+  else if(petLab.candidateIndex!==null)state.innerHTML=`<span class="dot"></span>${tx('主角已选定 · 现在选择最终精度','Master selected · choose final quality')}`;
+  else if(petLab.candidates.length)state.innerHTML=`<span class="dot"></span>${tx('3 个草稿已到 · 选一个作为同一角色的主形象','3 drafts arrived · choose one as the master identity')}`;
+  else state.innerHTML=`<span class="dot"></span>${tx('参考图已就绪 · 第一步只生成 Low 草稿','Reference ready · step one only makes Low drafts')}`;
+  syncVisibleDrafts();
 }
+setInterval(()=>{
+  if(petLab.status!=='busy'||!petLab.startedAt)return;const text=durationText(elapsedSeconds())||'0.0s';
+  ['studioElapsed','sheetElapsed','stateElapsed'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=id==='studioElapsed'?`${text} · ${operationCost()} ${tx('输出估价','output est.')}`:text});
+},1000);
 function savePetKeys(){send({type:'petSaveKeys',openAI:document.getElementById('openAIKey').value})}
 function clearPetKey(provider){send({type:'petClearKey',provider})}
 function petKeysSaved(state){
   S.openAIConfigured=!!state.openAIConfigured;const input=document.getElementById('openAIKey');
   if(input&&(state.cleared==='OpenAI'||!(state.failed||[]).includes('OpenAI')))input.value='';
-  renderKeyState();if(state.error){document.getElementById('apiSetup').open=true;petLab.error=state.error;petLab.status='error';renderPetLab()}
+  renderKeyState();if(state.error){document.getElementById('apiSetup').open=true;petLab.error=state.error;petLab.errorKind='setup';petLab.status='error';renderPetLab()}
 }
-function generateCharacterSheet(){
-  if(!petLab.source){petLab.error=tx('请先丢进一张图片','Drop an image first');petLab.status='error';renderPetLab();return}
-  if(petLab.status==='busy'||petLab.status==='installing')return;
-  if(!S.openAIConfigured){document.getElementById('apiSetup').open=true;petLab.error=tx('先连接 OpenAI，才能生成角色图','Connect OpenAI before generating a character sheet');petLab.status='error';renderPetLab();return}
-  if(petLab.requestID)send({type:'petCancel',requestID:petLab.requestID});
-  petLab.requestID=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`;petLab.draftID=null;petLab.sheet=null;petLab.error='';petLab.status='busy';petLab.phase='generating';petLab.adoptedName='';renderPetLab();
-  send({type:'petGenerateSheet',requestID:petLab.requestID,source:petLab.source,name:petLab.name,
-    temperamentID:petLab.temperamentID,quality:petLab.quality,likeness:+document.getElementById('petLikeness').value/100});
+function newRequestID(){
+  if(globalThis.crypto?.randomUUID)return crypto.randomUUID();
+  const bytes=new Uint8Array(16);
+  if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(bytes);else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+  bytes[6]=(bytes[6]&0x0f)|0x40;bytes[8]=(bytes[8]&0x3f)|0x80;
+  const hex=[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
 }
-function petSheetProgress(event){if(event.requestID!==petLab.requestID)return;petLab.status='busy';petLab.phase=event.phase||'generating';renderPetLab()}
-function petSheetResult(event){
-  if(event.requestID!==petLab.requestID)return;if(IMAGE_QUALITIES.some(q=>q.id===event.quality))petLab.quality=event.quality;petLab.status='ready';petLab.phase='';petLab.sheet=event.sheet;petLab.draftID=event.draftID||event.requestID;petLab.adoptedName='';renderPetLab();
+function setupStudioError(message){
+  Object.assign(petLab,{status:'error',errorKind:'setup',errorCode:'setup',error:message,operation:petLab.operation||'candidates',phase:'',
+    outputRetained:false,providerCompleted:false,canRetryLocally:false,recoveryRequestID:null,resetTo:null,
+    startedAt:null,finishedElapsed:null});renderPetLab();
 }
-function petSheetError(event){
-  if(event.requestID&&event.requestID!==petLab.requestID)return;petLab.status='error';petLab.phase='';petLab.error=event.message||tx('生成失败','Generation failed');petLab.sheet=null;petLab.draftID=null;renderPetLab();
+function canGenerate(){
+  if(!petLab.source){setupStudioError(tx('请先添加至少一张参考图。','Add at least one reference image first.'));return false}
+  if(referencesImporting()){setupStudioError(tx('参考图还在导入，请等缩略图全部出现。','References are still importing; wait for every thumbnail to appear.'));return false}
+  if(studioBusy()||petLab.status==='review')return false;
+  if(!S.openAIConfigured){document.getElementById('apiSetup').open=true;setupStudioError(tx('先连接 OpenAI，才能生成角色图。','Connect OpenAI before generating character art.'));return false}
+  return true;
+}
+function beginStudioOperation(operation,stageIndex=null){
+  if(operation==='candidates'&&petLab.sheet&&petLab.draftID)petLab.preservedResult=true;
+  const now=Date.now();Object.assign(petLab,{requestID:newRequestID(),status:'busy',operation,phase:'queued',
+    phaseMessage:'',error:'',errorKind:'',errorCode:'',outputRetained:false,warnings:[],partialImage:null,providerSeconds:null,
+    localSeconds:null,providerCompleted:false,rawPreview:null,recoveryDraftID:null,recoveryRequestID:null,
+    recoveryUntil:null,canRetryLocally:false,resetTo:null,localRetry:false,startedAt:now,finishedElapsed:null,
+    stageBusyIndex:stageIndex,model:null,size:null,partialImages:null,referenceCount:null,styleBoardUsed:null,
+    usage:null,providerDetail:null,cancelArmedUntil:0,adoptedName:'',referencePreview:null,referenceMode:null,
+    referenceEvidenceCount:0,referenceUsedCount:0,referenceAmbiguous:false,
+    referenceReviewMessageZh:'',referenceReviewMessageEn:''});
+  renderPetLab();return petLab.requestID;
+}
+function recordStudioTelemetry(event){
+  if(event.providerSeconds!==undefined)petLab.providerSeconds=+event.providerSeconds;
+  if(event.localSeconds!==undefined)petLab.localSeconds=+event.localSeconds;
+  if(Array.isArray(event.warnings))petLab.warnings=event.warnings;
+  if(event.partialImage)petLab.partialImage=event.partialImage;
+  if(event.outputRetained!==undefined)petLab.outputRetained=!!event.outputRetained;
+  if(event.providerCompleted!==undefined)petLab.providerCompleted=!!event.providerCompleted;
+  if(event.rawPreview)petLab.rawPreview=event.rawPreview;
+  if(event.recoveryDraftID)petLab.recoveryDraftID=event.recoveryDraftID;
+  if(event.recoveryUntil)petLab.recoveryUntil=event.recoveryUntil;
+  if(event.canRetryLocally!==undefined)petLab.canRetryLocally=!!event.canRetryLocally;
+  if(event.model)petLab.model=event.model;if(event.size)petLab.size=event.size;
+  if(event.partialImages!==undefined)petLab.partialImages=+event.partialImages;
+  if(event.referenceCount!==undefined)petLab.referenceCount=+event.referenceCount;
+  if(event.styleBoardUsed!==undefined)petLab.styleBoardUsed=!!event.styleBoardUsed;
+  if(event.usage&&typeof event.usage==='object')petLab.usage=event.usage;
+  if(event.providerDetail)petLab.providerDetail=String(event.providerDetail);
+  if(event.generationRecoveryCount!==undefined)S.generationRecoveryCount=Math.max(0,+event.generationRecoveryCount||0);
+}
+function finishStudioOperation(event){
+  const wasLocalRetry=petLab.localRetry;recordStudioTelemetry(event);
+  petLab.finishedElapsed=Number.isFinite(+event.totalSeconds)?+event.totalSeconds:
+    wasLocalRetry?(Math.max(0,+petLab.providerSeconds||0)+Math.max(0,+petLab.localSeconds||elapsedSeconds())):elapsedSeconds();
+  petLab.phase='';petLab.phaseMessage='';petLab.partialImage=null;petLab.localRetry=false;
+}
+function generateCandidates(){
+  if(!canGenerate())return;const requestID=beginStudioOperation('candidates');
+  send({type:'petGenerateCandidates',requestID,source:petLab.source,name:petLab.name,
+    temperamentID:petLab.temperamentID,likeness:+document.getElementById('petLikeness').value/100,
+    ...buildReferenceBridgePayload()});
+}
+function selectCandidate(index){
+  if(studioBusy()||index<0||index>=petLab.candidates.length)return;
+  if(index!==petLab.candidateIndex&&petLab.sheet)petLab.preservedResult=true;
+  petLab.candidateIndex=index;petLab.status='ready';petLab.error='';petLab.errorKind='';petLab.errorCode='';renderPetLab();
+}
+function generateEvolution(){
+  if(!canGenerate())return;if(!petLab.candidateDraftID||petLab.candidateIndex===null){setupStudioError(tx('先从三个草稿里选一个主角。','Choose a master from the three drafts first.'));return}
+  const requestID=beginStudioOperation('evolution');
+  send({type:'petGenerateEvolution',requestID,candidateDraftID:petLab.candidateDraftID,
+    candidateIndex:petLab.candidateIndex,quality:petLab.quality});
+}
+function regenerateStage(stageIndex){
+  if(!canGenerate())return;if(!petLab.draftID||!petLab.sheet||stageIndex<0||stageIndex>2)return;
+  const draftID=petLab.draftID,requestID=beginStudioOperation('stage',stageIndex);
+  send({type:'petRegenerateStage',requestID,draftID,stageIndex,quality:petLab.quality});
+}
+function retryStudioOperation(){
+  const operation=petLab.operation,stage=petLab.stageBusyIndex;
+  petLab.status='ready';
+  if(operation==='stage'&&stage!==null)return regenerateStage(stage);
+  if(operation==='evolution')return generateEvolution();
+  return generateCandidates();
+}
+function continueStudioInBackground(){
+  if(petLab.status==='busy')send({type:'petContinueInBackground',requestID:petLab.requestID});
+}
+function cancelStudioOperation(){
+  if((petLab.status!=='busy'&&petLab.status!=='review')||!petLab.requestID)return;const cancelledRequestID=petLab.requestID;
+  const reviewing=petLab.status==='review',info=phaseInfo();
+  if(!reviewing&&info.local&&info.phase!=='analyzing')return;
+  if(/generating|partial/.test((petLab.phase||'').toLowerCase())&&Date.now()>petLab.cancelArmedUntil){
+    petLab.cancelArmedUntil=Date.now()+5000;renderPetLab();setTimeout(()=>{if(Date.now()>=petLab.cancelArmedUntil){petLab.cancelArmedUntil=0;renderPetLab()}},5100);return;
+  }
+  const nextStatus=petLab.sheet||petLab.candidates.length?'ready':'idle';
+  Object.assign(petLab,{requestID:null,status:nextStatus,phase:'',phaseMessage:'',partialImage:null,
+    stageBusyIndex:null,localRetry:false,providerCompleted:false,rawPreview:null,recoveryDraftID:null,
+    recoveryRequestID:null,recoveryUntil:null,canRetryLocally:false,resetTo:null,cancelArmedUntil:0,finishedElapsed:elapsedSeconds(),
+    referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,referenceAmbiguous:false});
+  renderPetLab();send({type:'petCancel',requestID:cancelledRequestID});
+}
+function petGenerationCancelled(event){
+  if(event.generationRecoveryCount!==undefined)S.generationRecoveryCount=Math.max(0,+event.generationRecoveryCount||0);
+  renderRecoveryArchive();
+}
+function petDraftExpired(event){
+  if(event.kind==='candidate'&&event.draftID===petLab.candidateDraftID){
+    Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null});
+    if(!petLab.sheet)Object.assign(petLab,{status:'error',operation:'candidates',errorKind:'setup',errorCode:'candidate_expired',resetTo:'candidates',error:tx('这些 Low 草稿已经过期；不会自动产生新费用。','These Low drafts expired; no new cost was incurred automatically.')});
+  }
+  if(event.kind==='evolution'&&event.draftID===petLab.draftID){
+    Object.assign(petLab,{status:'error',operation:'install',errorKind:'setup',errorCode:'preview_expired',resetTo:'candidates',
+      error:tx('这张本机预览已经过期；不会自动产生新费用。','This local preview expired; no new cost was incurred automatically.'),
+      draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  }
+  renderPetLab();
+}
+function retryLocalProcessing(){
+  if(studioBusy()||!petLab.providerCompleted||!petLab.canRetryLocally||!petLab.recoveryRequestID)return;
+  const until=recoveryDate(petLab.recoveryUntil);if(until&&Date.now()>until.getTime()){
+    petLab.error=tx('会话内安全恢复已经过期；原图档案仍可检查，但重新生成需要新的 OpenAI 请求。','In-session safe recovery expired. The raw archive remains inspectable, but generating again needs a new OpenAI request.');
+    petLab.errorKind='setup';petLab.canRetryLocally=false;petLab.recoveryRequestID=null;renderPetLab();return;
+  }
+  Object.assign(petLab,{requestID:petLab.recoveryRequestID,status:'busy',phase:'extracting',phaseMessage:tx('使用已经生成的图片，只在这台 Mac 上重新去背景与检查边缘。','Using the existing image; only matte removal and edge checks run again on this Mac.'),
+    error:'',errorKind:'',localRetry:true,localSeconds:null,partialImage:petLab.rawPreview,startedAt:Date.now(),finishedElapsed:null});
+  renderPetLab();send({type:'petRetryLocalProcessing',requestID:petLab.recoveryRequestID});
+}
+function petStudioProgress(event){
+  if(event.requestID!==petLab.requestID)return;petLab.status='busy';petLab.phase=event.phase||'generating';
+  petLab.phaseMessage=LANG==='zh'?(event.messageZh||event.message||''):(event.messageEn||event.message||'');recordStudioTelemetry(event);renderPetLab();
+}
+function petReferencePreview(event){
+  if(event.requestID!==petLab.requestID||!event.board)return;
+  recordStudioTelemetry(event);Object.assign(petLab,{status:'review',phase:'reference-review',partialImage:null,
+    referencePreview:event.board,referenceMode:event.mode||'isolatedPeople',
+    referenceEvidenceCount:Math.max(0,+event.evidenceCount||0),referenceUsedCount:Math.max(0,+event.usedSourceCount||0),
+    referenceAmbiguous:!!event.ambiguous,referenceReviewMessageZh:event.messageZh||'',referenceReviewMessageEn:event.messageEn||''});
+  renderPetLab();
+}
+function confirmPetReferences(){
+  if(petLab.status!=='review'||!petLab.requestID||!petLab.referencePreview)return;
+  petLab.status='busy';petLab.phase='connecting';petLab.phaseMessage='';petLab.partialImage=petLab.referencePreview;renderPetLab();
+  send({type:'petConfirmReferences',requestID:petLab.requestID});
+}
+function petCandidateResult(event){
+  if(event.requestID!==petLab.requestID)return;const candidates=(event.candidates||event.images||[]).filter(candidate=>candidateImage(candidate));
+  if(!candidates.length){petStudioError({...event,kind:'local',message:tx('OpenAI 返回了结果，但没有找到可展示的候选角色。','OpenAI returned a result, but no displayable character candidates were found.')});return}
+  const keepPrevious=!!petLab.sheet&&!!petLab.draftID;finishStudioOperation(event);Object.assign(petLab,{requestID:null,status:'ready',operation:'candidates',candidates,
+    candidateDraftID:event.candidateDraftID||event.draftID||event.requestID,candidateIndex:null,preservedResult:keepPrevious,
+    stageBusyIndex:null,error:'',errorKind:'',errorCode:''});
+  if(!keepPrevious)Object.assign(petLab,{draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null]});renderPetLab();
+}
+function petEvolutionResult(event){
+  if(event.requestID!==petLab.requestID)return;
+  if(!event.sheet){petStudioError({...event,kind:'local',message:tx('成长图已返回，但本机没有得到可安装的透明三段图。','The evolution returned, but local processing did not produce an installable transparent sheet.')});return}
+  finishStudioOperation(event);if(IMAGE_QUALITIES.some(q=>q.id===event.quality))petLab.quality=event.quality;
+  const finalQuality=IMAGE_QUALITIES.some(q=>q.id===event.quality)?event.quality:petLab.quality;
+  Object.assign(petLab,{requestID:null,status:'ready',operation:'evolution',sheet:event.sheet,draftID:event.draftID||event.requestID,
+    sheetQuality:finalQuality,stageQualities:[finalQuality,finalQuality,finalQuality],preservedResult:false,
+    stageImages:[null,null,null],stageBusyIndex:null,error:'',errorKind:'',errorCode:''});renderPetLab();
+}
+function petStageResult(event){
+  if(event.requestID!==petLab.requestID)return;const stageIndex=Number.isInteger(event.stageIndex)?event.stageIndex:petLab.stageBusyIndex;
+  const stageImage=event.stage||event.image||event.stageImage;
+  if(!event.sheet&&!stageImage){petStudioError({...event,kind:'local',message:tx('这一段已返回，但本机没有得到可替换的透明角色图。','The form returned, but local processing did not produce a transparent replacement.')});return}
+  finishStudioOperation(event);if(event.sheet){petLab.sheet=event.sheet;petLab.stageImages=[null,null,null]}
+  if(stageImage&&stageIndex!==null&&stageIndex>=0&&stageIndex<3)petLab.stageImages[stageIndex]=stageImage;
+  if(event.draftID)petLab.draftID=event.draftID;
+  if(IMAGE_QUALITIES.some(q=>q.id===event.quality)&&stageIndex!==null&&stageIndex>=0&&stageIndex<3)petLab.stageQualities[stageIndex]=event.quality;
+  const used=[...new Set(petLab.stageQualities.filter(Boolean))];petLab.sheetQuality=used.length===1?used[0]:'mixed';
+  Object.assign(petLab,{requestID:null,status:'ready',operation:'stage',preservedResult:false,stageBusyIndex:null,error:'',errorKind:'',errorCode:''});renderPetLab();
+}
+function petStudioError(event){
+  if(event.requestID&&event.requestID!==petLab.requestID)return;const marker=`${event.kind||''} ${event.scope||''} ${event.phase||''} ${event.code||''} ${event.message||''} ${event.messageEn||''}`.toLowerCase();
+  const setup=!!event.requestNotStarted||/setup|input|stale|expired|missing_api_key|request_id|generation_in_progress/.test(marker);
+  const local=!setup&&/local|extract|process|normal|validat|transform|matte|clipped|edge|merged/.test(marker);
+  finishStudioOperation(event);Object.assign(petLab,{status:'error',errorKind:setup?'setup':local?'local':'provider',
+    error:(LANG==='zh'?(event.messageZh||event.message):(event.messageEn||event.message))||event.localizedMessage||tx('这一生成步骤没有完成。','This generation step did not finish.'),
+    errorCode:event.code||'',resetTo:event.resetTo||null,canRetryLocally:!!event.canRetryLocally});
+  if(local&&event.providerCompleted&&event.canRetryLocally){
+    petLab.recoveryRequestID=event.requestID||petLab.requestID;
+  }else petLab.recoveryRequestID=null;
+  if(event.resetTo==='candidates'&&event.code==='candidate_expired')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,preservedResult:!!petLab.sheet});
+  else if(event.resetTo==='candidates')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  if(event.resetTo==='upload')Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  if(event.draftID&&!petLab.draftID)petLab.draftID=event.draftID;renderPetLab();
 }
 function installCharacterSheet(){
-  if(!petLab.draftID||!petLab.sheet)return;petLab.status='installing';renderPetLab();
+  if(!petLab.draftID||!petLab.sheet||studioBusy())return;petLab.status='installing';renderPetLab();
   send({type:'petInstallRaster',draftID:petLab.draftID,name:petLab.name,temperamentID:petLab.temperamentID});
+}
+function petInstallError(event){
+  const expired=event.code==='preview_expired';Object.assign(petLab,{status:'error',operation:'install',errorKind:expired?'setup':'local',errorCode:event.code||'install_failed',resetTo:expired?'candidates':null,
+    error:(LANG==='zh'?(event.messageZh||event.message):(event.messageEn||event.message))||tx('无法保存这套伴灵。','Could not save this familiar.')});
+  if(expired)Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  renderPetLab();
 }
 function customPetAdopted(event){
   const spec=event.spec;if(!spec)return;S.customPets=(S.customPets||[]).filter(p=>p.characterID!==spec.characterID).concat([spec]);S.character=spec.characterID;
-  petLab.status='adopted';petLab.requestID=null;petLab.draftID=null;petLab.adoptedName=spec.name||tx('新伴灵','New familiar');petLab.sheet=spec.assetURL||petLab.sheet;renderCards();renderPetLab();
+  petLab.status='adopted';petLab.requestID=null;petLab.draftID=null;petLab.preservedResult=false;petLab.adoptedName=spec.name||tx('新伴灵','New familiar');petLab.sheet=spec.assetURL||petLab.sheet;petLab.startedAt=null;renderCards();renderPetLab();
 }
 function removeCustomPet(characterID){send({type:'petDelete',characterID})}
-function petDeleteFailed(event){petLab.error=event.message||tx('无法删除角色','Could not delete familiar');petLab.status='error';renderPetLab()}
-function loadPetImageData(url,sourceName){
-  if(petLab.requestID)send({type:'petCancel',requestID:petLab.requestID});
-  petLab.requestID=null;petLab.draftID=null;petLab.sheet=null;petLab.error='';petLab.status='idle';petLab.phase='';petLab.adoptedName='';
-  const img=new Image();img.onload=()=>{
-    const canvas=document.createElement('canvas');canvas.width=768;canvas.height=768;const ctx=canvas.getContext('2d');
-    const scale=Math.min(768/img.naturalWidth,768/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale;
-    ctx.drawImage(img,(768-w)/2,(768-h)/2,w,h);
-    petLab.source=canvas.toDataURL('image/png');petLab.sourceName=sourceName||'';
-    const thumb=document.getElementById('petSourceImg');thumb.src=petLab.source;thumb.style.display='block';document.getElementById('petSourceGlyph').style.display='none';
-    const guessed=(sourceName||'').replace(/\.[^.]+$/,'').replace(/[-_]+/g,' ').trim();if(guessed){petLab.name=guessed.slice(0,28);document.getElementById('petName').value=petLab.name}renderPetLab();
-  };img.src=url;
+function petDeleteFailed(event){petLab.error=event.message||tx('无法删除角色','Could not delete familiar');petLab.errorKind='setup';petLab.status='error';renderPetLab()}
+function decodePetReference(url,sourceName){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();img.onload=()=>{
+      if(!img.naturalWidth||!img.naturalHeight||img.naturalWidth>16384||img.naturalHeight>16384||img.naturalWidth*img.naturalHeight>100000000){
+        reject(new Error('unsafe_dimensions'));return;
+      }
+      // Keep enough detail for local subject detection/cropping in noisy screenshots.
+      // Native builds the compact model board after receiving this reference set.
+      const scale=Math.min(1,2048/Math.max(img.naturalWidth,img.naturalHeight));
+      const width=Math.max(1,Math.round(img.naturalWidth*scale)),height=Math.max(1,Math.round(img.naturalHeight*scale));
+      const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#f6efe4';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+      resolve({id:newRequestID(),source:canvas.toDataURL('image/jpeg',.88),name:sourceName||'',width,height,
+        analysis:{status:'pending'}});
+    };
+    img.onerror=()=>reject(new Error('decode_failed'));img.src=url;
+  });
+}
+let petReferenceLoadQueue=Promise.resolve();
+// Native single-select remains compatible. Passing {append:true} explicitly is
+// recommended when a future multi-select panel calls this once per chosen file.
+function loadPetImageData(url,sourceName,options={append:true}){
+  const append=options?.append!==false;
+  petLab.importing=Math.max(0,+petLab.importing||0)+1;renderPetLab();
+  const task=petReferenceLoadQueue.then(async()=>{
+    if(studioBusy())return false;
+    if(append&&petLab.references.length>=MAX_PET_REFERENCES){
+      petLab.referenceNoticeZh='已达到 8 张上限；没有添加更多图片。';petLab.referenceNoticeEn='8-image limit reached; no more images were added.';renderReferenceSet();return false;
+    }
+    let reference;
+    try{reference=await decodePetReference(url,sourceName)}catch(error){
+      setupStudioError(error.message==='unsafe_dimensions'?tx('图片像素尺寸太大，请先缩小。','The image pixel dimensions are too large; resize it first.'):tx('这张图片无法读取，请换一张 PNG、JPEG 或 WebP。','This image could not be read. Try a PNG, JPEG, or WebP.'));return false;
+    }
+    const wasEmpty=!petLab.references.length;
+    petLab.references=append?[...petLab.references,reference]:[reference];
+    if(wasEmpty||!append||!petLab.primaryReferenceID)petLab.primaryReferenceID=reference.id;
+    petLab.referenceNoticeZh=`已在本机准备 ${petLab.references.length} 张参考图；点击生成前不会发送。`;
+    petLab.referenceNoticeEn=`${petLab.references.length} reference${petLab.references.length===1?' is':'s are'} ready locally; nothing is sent before Generate.`;
+    syncPrimaryReference();
+    invalidatePetDraft();return true;
+  });
+  petReferenceLoadQueue=task.finally(()=>{
+    petLab.importing=Math.max(0,(+petLab.importing||1)-1);
+    if(referencesImporting()){
+      petLab.referenceNoticeZh=`正在导入参考图 · 还剩 ${petLab.importing} 张`;
+      petLab.referenceNoticeEn=`Importing references · ${petLab.importing} remaining`;
+    }
+    renderPetLab();
+  });
+  return petReferenceLoadQueue;
+}
+function fileDataURL(file){
+  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('read_failed'));reader.readAsDataURL(file)});
+}
+async function addPetReferenceFiles(fileList){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;const images=[...(fileList||[])].filter(file=>file.type.startsWith('image/'));
+  if(!images.length){setupStudioError(tx('请拖入 PNG、JPEG 或 WebP 图片。','Drop PNG, JPEG, or WebP images.'));return}
+  const available=Math.max(0,MAX_PET_REFERENCES-petLab.references.length),selected=images.slice(0,available);
+  if(!selected.length){petLab.referenceNoticeZh='已达到 8 张上限；没有添加更多图片。';petLab.referenceNoticeEn='8-image limit reached; no more images were added.';renderReferenceSet();return}
+  let skipped=images.length-selected.length,added=0;
+  for(const file of selected){
+    if(file.size>20*1024*1024){skipped++;continue}
+    try{const data=await fileDataURL(file),ok=await loadPetImageData(data,file.name,{append:true});if(ok)added++;else skipped++}catch(error){skipped++}
+  }
+  if(added&&petLab.status==='error'&&petLab.errorKind==='setup')invalidatePetDraft();
+  if(skipped){
+    petLab.referenceNoticeZh=`已添加可用图片；另有 ${skipped} 张因超过上限、20 MB 或无法读取而跳过。`;
+    petLab.referenceNoticeEn=`Usable images were added; ${skipped} skipped due to the limit, 20 MB size, or an unreadable file.`;renderReferenceSet();
+  }
 }
 function installPetDrop(){
-  const drop=document.getElementById('petSourceDrop');if(!drop)return;
-  ['dragenter','dragover'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag')}));
-  ['dragleave','drop'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('drag')}));
-  drop.addEventListener('drop',e=>{const file=[...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith('image/'));if(!file)return;const reader=new FileReader();reader.onload=()=>loadPetImageData(reader.result,file.name);reader.readAsDataURL(file)});
+  const targets=[document.getElementById('petSourceDrop'),document.getElementById('petReferenceSet')].filter(Boolean);if(!targets.length)return;
+  targets.forEach(drop=>{
+    ['dragenter','dragover'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag')}));
+    ['dragleave','drop'].forEach(type=>drop.addEventListener(type,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('drag')}));
+    drop.addEventListener('drop',e=>addPetReferenceFiles(e.dataTransfer?.files));
+  });
 }
 
 const kinds = () => [['code',tx('💪 成长 · 编程','💪 growth · code')],['term',tx('⛓️ 成长 · 终端','⛓️ growth · terminal')],
@@ -547,7 +1170,7 @@ const kinds = () => [['code',tx('💪 成长 · 编程','💪 growth · code')],
 const KIND_ICO = { code:'💪', term:'⛓️', cad:'📐', paper:'📖', notes:'📝', neutral:'😐', distraction:'🕳️' };
 
 function send(msg){
-  try { window.webkit.messageHandlers.settings.postMessage(msg); } catch(e) { console.log('send', msg); }
+  try { window.webkit.messageHandlers.settings.postMessage(msg); } catch(e) { console.warn('Settings bridge unavailable:', msg?.type || 'unknown'); }
 }
 
 let S = { character: 'lulu' };

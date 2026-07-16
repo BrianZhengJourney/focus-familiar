@@ -32,6 +32,29 @@ struct CharacterSheetProcessedStage {
     let normalizedBounds: CharacterSheetPixelBounds
 }
 
+/// A recoverable deviation from the prompt's nominal 512px thirds. The source
+/// image is continuous, so x=512 and x=1024 are layout hints rather than real
+/// clipping edges. These values make that recovery observable to callers.
+struct CharacterSheetBoundaryRecovery: Equatable, Codable {
+    /// 0 separates Seed/Bloom; 1 separates Bloom/Radiant.
+    let boundaryIndex: Int
+    let nominalX: Int
+    let resolvedX: Int
+    let leftClearance: Int
+    let rightClearance: Int
+}
+
+struct CharacterSheetQualityMetadata: Equatable, Codable {
+    let resolvedBoundaries: [Int]
+    /// Safe transparent pixels on the narrower side of each resolved seam.
+    let internalBoundaryClearances: [Int]
+    /// Empty for a sheet that already follows the requested thirds cleanly.
+    let boundaryRecoveries: [CharacterSheetBoundaryRecovery]
+    /// Stages accepted by the explicit no-cost salvage pass with 1...15px of
+    /// real outer-canvas clearance. A stage touching 0px is never recoverable.
+    let nearEdgeRecoveries: [Int]
+}
+
 struct CharacterSheetProcessingResult {
     /// A transparent 1536x512 PNG: Seed, Bloom, and Radiant in 512px cells.
     let pngData: Data
@@ -39,17 +62,38 @@ struct CharacterSheetProcessingResult {
     let scale: Double
     /// Top-left pixel coordinate of the shared bottom edge of every form.
     let baselineY: Int
+    let quality: CharacterSheetQualityMetadata
 
     var stagePNGs: [Data] { stages.map(\.pngData) }
+}
+
+struct CharacterSheetSingleStageProcessingResult {
+    let stage: CharacterSheetProcessedStage
+    let scale: Double
+    let baselineY: Int
+    let recoveredNearEdge: Bool
+}
+
+struct CharacterCandidateBoardProcessingResult {
+    /// Transparent comparison strip with three 512×512 candidate cells.
+    let pngData: Data
+    let candidatePNGs: [Data]
+    let quality: CharacterSheetQualityMetadata
 }
 
 enum CharacterSheetProcessingError: LocalizedError, Equatable {
     case notPNG
     case unreadableImage
     case invalidDimensions(width: Int, height: Int)
+    case invalidCandidateBoardDimensions(width: Int, height: Int)
+    case invalidSingleStageDimensions(width: Int, height: Int)
+    case invalidNormalizedSheetDimensions(width: Int, height: Int)
+    case invalidNormalizedStageDimensions(width: Int, height: Int)
     case emptyStage(Int)
     case stageTooSmall(Int)
     case stageTouchesMargin(Int)
+    case stagesMerged(Int)
+    case normalizedStageHasBackground
     case encodingFailed
 
     var errorDescription: String? {
@@ -60,12 +104,24 @@ enum CharacterSheetProcessingError: LocalizedError, Equatable {
             return "Character sheet could not be decoded"
         case .invalidDimensions(let width, let height):
             return "Character sheet must be 1536x1024 (received \(width)x\(height))"
+        case .invalidCandidateBoardDimensions(let width, let height):
+            return "Candidate board must be 1024x1024 (received \(width)x\(height))"
+        case .invalidSingleStageDimensions(let width, let height):
+            return "A regenerated character form must be 1024x1024 (received \(width)x\(height))"
+        case .invalidNormalizedSheetDimensions(let width, let height):
+            return "A normalized character sheet must be 1536x512 (received \(width)x\(height))"
+        case .invalidNormalizedStageDimensions(let width, let height):
+            return "A normalized character form must be 512x512 (received \(width)x\(height))"
         case .emptyStage(let index):
             return "Character sheet stage \(index + 1) is empty"
         case .stageTooSmall(let index):
             return "Character sheet stage \(index + 1) is too small"
         case .stageTouchesMargin(let index):
-            return "Character sheet stage \(index + 1) is clipped or touches an edge"
+            return "Character sheet stage \(index + 1) touches the source canvas edge"
+        case .stagesMerged(let boundaryIndex):
+            return "Character sheet stages \(boundaryIndex + 1) and \(boundaryIndex + 2) overlap or are merged"
+        case .normalizedStageHasBackground:
+            return "The replacement character form must have a transparent background"
         case .encodingFailed:
             return "Processed character sheet could not be encoded"
         }
@@ -113,6 +169,7 @@ enum CharacterSheetProcessor {
     static let outputStageSize = 512
     static let outputWidth = 1536
     static let outputHeight = 512
+    static let singleStageInputSize = 1024
 
     /// Source forms must have clear matte around them so a malformed layout is
     /// never silently cropped into a desktop sprite.
@@ -120,23 +177,63 @@ enum CharacterSheetProcessor {
     static let outputSidePadding = 32
     static let outputTopPadding = 24
     static let outputBottomPadding = 32
+    /// GPT may miss the requested thirds slightly. Search locally for the real
+    /// transparent gutter, while staying conservative about badly merged art.
+    static let boundarySearchRadius = 160
+    static let minimumBoundaryGutter = 8
 
-    static func process(pngData: Data) throws -> CharacterSheetProcessingResult {
+    static func process(pngData: Data, allowNearEdgeRecovery: Bool = false) throws
+        -> CharacterSheetProcessingResult {
         guard pngData.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) else {
             throw CharacterSheetProcessingError.notPNG
+        }
+        guard let dimensions = pngPixelDimensions(pngData) else {
+            throw CharacterSheetProcessingError.unreadableImage
+        }
+        guard dimensions.width == inputWidth, dimensions.height == inputHeight else {
+            throw CharacterSheetProcessingError.invalidDimensions(
+                width: dimensions.width, height: dimensions.height)
         }
         let source = try decodePNG(pngData)
         guard source.width == inputWidth, source.height == inputHeight else {
             throw CharacterSheetProcessingError.invalidDimensions(width: source.width, height: source.height)
         }
 
+        // Clean the continuous canvas before partitioning. Cleaning each fixed
+        // third separately made the artificial x=512/1024 dividers behave like
+        // physical crop edges and caused complete forms to be rejected.
+        var cleanedSource = source
+        removeBorderConnectedMatte(from: &cleanedSource)
+        removeSmallSpecks(from: &cleanedSource)
+        let boundaryResolutions = try resolveInternalBoundaries(
+            in: cleanedSource,
+            nominalXs: [stageSourceWidth, stageSourceWidth * 2],
+            minimumPanelWidth: outputStageSize / 2,
+            searchRadius: boundarySearchRadius
+        )
+        let boundaries = [0] + boundaryResolutions.map(\.resolvedX) + [inputWidth]
+
         var cleanedStages: [CharacterSheetRGBAImage] = []
         var sourceBounds: [CharacterSheetPixelBounds] = []
+        var nearEdgeRecoveries: [Int] = []
         for index in 0..<CharacterSheetStageKind.allCases.count {
-            var panel = extractPanel(source, index: index)
-            removeBorderConnectedMatte(from: &panel)
-            removeSmallSpecks(from: &panel)
-            let bounds = try validatedBounds(of: panel, stageIndex: index)
+            let panel = extractHorizontalRange(cleanedSource,
+                                               from: boundaries[index],
+                                               to: boundaries[index + 1])
+            let bounds = try validatedBounds(
+                of: panel,
+                stageIndex: index,
+                requireLeftCanvasMargin: index == 0,
+                requireRightCanvasMargin: index == CharacterSheetStageKind.allCases.count - 1,
+                requiredMargin: allowNearEdgeRecovery ? 1 : requiredSourceMargin
+            )
+            if allowNearEdgeRecovery,
+               usesNearEdgeRecovery(bounds: bounds, imageWidth: panel.width,
+                                    imageHeight: panel.height,
+                                    requireLeftCanvasMargin: index == 0,
+                                    requireRightCanvasMargin: index == CharacterSheetStageKind.allCases.count - 1) {
+                nearEdgeRecoveries.append(index)
+            }
             cleanedStages.append(panel)
             sourceBounds.append(bounds)
         }
@@ -170,15 +267,238 @@ enum CharacterSheetProcessor {
             ))
         }
 
+        let recoveries = boundaryResolutions.compactMap { resolution -> CharacterSheetBoundaryRecovery? in
+            let clearance = min(resolution.leftClearance, resolution.rightClearance)
+            guard resolution.resolvedX != resolution.nominalX
+                    || clearance < requiredSourceMargin else { return nil }
+            return CharacterSheetBoundaryRecovery(
+                boundaryIndex: resolution.boundaryIndex,
+                nominalX: resolution.nominalX,
+                resolvedX: resolution.resolvedX,
+                leftClearance: resolution.leftClearance,
+                rightClearance: resolution.rightClearance
+            )
+        }
         return CharacterSheetProcessingResult(
             pngData: try encodePNG(combined),
             stages: processedStages,
             scale: scale,
-            baselineY: baselineY
+            baselineY: baselineY,
+            quality: CharacterSheetQualityMetadata(
+                resolvedBoundaries: boundaryResolutions.map(\.resolvedX),
+                internalBoundaryClearances: boundaryResolutions.map {
+                    min($0.leftClearance, $0.rightClearance)
+                },
+                boundaryRecoveries: recoveries,
+                nearEdgeRecoveries: nearEdgeRecoveries
+            )
         )
     }
 
+    /// Extracts the inexpensive three-master exploration board. As with the
+    /// production sheet, equal thirds are hints: the real transparent gutters
+    /// are resolved on the continuous canvas before any crop is made.
+    static func processCandidateBoard(pngData: Data,
+                                      allowNearEdgeRecovery: Bool = false) throws
+        -> CharacterCandidateBoardProcessingResult {
+        guard hasPNGSignature(pngData) else { throw CharacterSheetProcessingError.notPNG }
+        guard let dimensions = pngPixelDimensions(pngData) else {
+            throw CharacterSheetProcessingError.unreadableImage
+        }
+        guard dimensions.width == 1024, dimensions.height == 1024 else {
+            throw CharacterSheetProcessingError.invalidCandidateBoardDimensions(
+                width: dimensions.width, height: dimensions.height)
+        }
+        var source = try decodePNG(pngData)
+        guard source.width == 1024, source.height == 1024 else {
+            throw CharacterSheetProcessingError.invalidCandidateBoardDimensions(
+                width: source.width, height: source.height)
+        }
+        removeBorderConnectedMatte(from: &source)
+        removeSmallSpecks(from: &source)
+        let nominalXs = [
+            Int((Double(source.width) / 3).rounded()),
+            Int((Double(source.width) * 2 / 3).rounded()),
+        ]
+        let resolutions = try resolveInternalBoundaries(
+            in: source, nominalXs: nominalXs,
+            minimumPanelWidth: 170, searchRadius: 120
+        )
+        let boundaries = [0] + resolutions.map(\.resolvedX) + [source.width]
+        var panels: [CharacterSheetRGBAImage] = []
+        var bounds: [CharacterSheetPixelBounds] = []
+        var nearEdgeRecoveries: [Int] = []
+        for index in 0..<3 {
+            let panel = extractHorizontalRange(source, from: boundaries[index],
+                                               to: boundaries[index + 1])
+            let candidateBounds = try validatedBounds(
+                of: panel, stageIndex: index,
+                requireLeftCanvasMargin: index == 0,
+                requireRightCanvasMargin: index == 2,
+                requiredMargin: allowNearEdgeRecovery ? 1 : requiredSourceMargin
+            )
+            if allowNearEdgeRecovery,
+               usesNearEdgeRecovery(bounds: candidateBounds,
+                                    imageWidth: panel.width, imageHeight: panel.height,
+                                    requireLeftCanvasMargin: index == 0,
+                                    requireRightCanvasMargin: index == 2) {
+                nearEdgeRecoveries.append(index)
+            }
+            panels.append(panel)
+            bounds.append(candidateBounds)
+        }
+
+        let largestWidth = bounds.map(\.width).max() ?? 0
+        let largestHeight = bounds.map(\.height).max() ?? 0
+        guard largestWidth > 0, largestHeight > 0 else {
+            throw CharacterSheetProcessingError.emptyStage(0)
+        }
+        let availableWidth = outputStageSize - outputSidePadding * 2
+        let baselineY = outputHeight - outputBottomPadding
+        let availableHeight = baselineY - outputTopPadding
+        let scale = min(Double(availableWidth) / Double(largestWidth),
+                        Double(availableHeight) / Double(largestHeight))
+        var combined = CharacterSheetRGBAImage(width: outputWidth, height: outputHeight)
+        var candidates: [Data] = []
+        for index in panels.indices {
+            let normalized = normalize(panels[index], bounds: bounds[index],
+                                       scale: scale, baselineY: baselineY)
+            guard alphaBounds(of: normalized) != nil else {
+                throw CharacterSheetProcessingError.emptyStage(index)
+            }
+            copy(normalized, into: &combined, destinationX: index * outputStageSize)
+            candidates.append(try encodePNG(normalized))
+        }
+        let recoveries = resolutions.compactMap { resolution -> CharacterSheetBoundaryRecovery? in
+            let clearance = min(resolution.leftClearance, resolution.rightClearance)
+            guard resolution.resolvedX != resolution.nominalX
+                    || clearance < requiredSourceMargin else { return nil }
+            return CharacterSheetBoundaryRecovery(
+                boundaryIndex: resolution.boundaryIndex,
+                nominalX: resolution.nominalX,
+                resolvedX: resolution.resolvedX,
+                leftClearance: resolution.leftClearance,
+                rightClearance: resolution.rightClearance
+            )
+        }
+        return CharacterCandidateBoardProcessingResult(
+            pngData: try encodePNG(combined), candidatePNGs: candidates,
+            quality: CharacterSheetQualityMetadata(
+                resolvedBoundaries: resolutions.map(\.resolvedX),
+                internalBoundaryClearances: resolutions.map {
+                    min($0.leftClearance, $0.rightClearance)
+                },
+                boundaryRecoveries: recoveries,
+                nearEdgeRecoveries: nearEdgeRecoveries
+            )
+        )
+    }
+
+    /// Converts one independently regenerated opaque 1024x1024 form into the
+    /// same transparent 512x512 runtime contract as a full character sheet.
+    static func processSingleStage(pngData: Data,
+                                   kind: CharacterSheetStageKind,
+                                   allowNearEdgeRecovery: Bool = false) throws
+        -> CharacterSheetSingleStageProcessingResult {
+        guard hasPNGSignature(pngData) else { throw CharacterSheetProcessingError.notPNG }
+        guard let dimensions = pngPixelDimensions(pngData) else {
+            throw CharacterSheetProcessingError.unreadableImage
+        }
+        guard dimensions.width == singleStageInputSize,
+              dimensions.height == singleStageInputSize else {
+            throw CharacterSheetProcessingError.invalidSingleStageDimensions(
+                width: dimensions.width, height: dimensions.height)
+        }
+        var source = try decodePNG(pngData)
+        guard source.width == singleStageInputSize, source.height == singleStageInputSize else {
+            throw CharacterSheetProcessingError.invalidSingleStageDimensions(
+                width: source.width, height: source.height)
+        }
+        removeBorderConnectedMatte(from: &source)
+        removeSmallSpecks(from: &source)
+        let stageIndex = CharacterSheetStageKind.allCases.firstIndex(of: kind) ?? 0
+        let bounds = try validatedBounds(of: source,
+                                         stageIndex: stageIndex,
+                                         requireLeftCanvasMargin: true,
+                                         requireRightCanvasMargin: true,
+                                         requiredMargin: allowNearEdgeRecovery ? 1 : requiredSourceMargin)
+        let recoveredNearEdge = allowNearEdgeRecovery && usesNearEdgeRecovery(
+            bounds: bounds, imageWidth: source.width, imageHeight: source.height,
+            requireLeftCanvasMargin: true, requireRightCanvasMargin: true)
+        let availableWidth = outputStageSize - outputSidePadding * 2
+        let baselineY = outputHeight - outputBottomPadding
+        let availableHeight = baselineY - outputTopPadding
+        let scale = min(Double(availableWidth) / Double(bounds.width),
+                        Double(availableHeight) / Double(bounds.height))
+        let normalized = normalize(source, bounds: bounds, scale: scale, baselineY: baselineY)
+        guard let normalizedBounds = alphaBounds(of: normalized) else {
+            throw CharacterSheetProcessingError.emptyStage(stageIndex)
+        }
+        return CharacterSheetSingleStageProcessingResult(
+            stage: CharacterSheetProcessedStage(kind: kind,
+                                                 pngData: try encodePNG(normalized),
+                                                 sourceBounds: bounds,
+                                                 normalizedBounds: normalizedBounds),
+            scale: scale,
+            baselineY: baselineY,
+            recoveredNearEdge: recoveredNearEdge
+        )
+    }
+
+    /// Replaces exactly one normalized frame without regenerating or touching
+    /// the other two paid outputs.
+    static func replaceStage(in normalizedSheetPNGData: Data,
+                             kind: CharacterSheetStageKind,
+                             with normalizedStagePNGData: Data) throws -> Data {
+        guard hasPNGSignature(normalizedSheetPNGData),
+              hasPNGSignature(normalizedStagePNGData) else {
+            throw CharacterSheetProcessingError.notPNG
+        }
+        guard let sheetDimensions = pngPixelDimensions(normalizedSheetPNGData),
+              sheetDimensions.width == outputWidth,
+              sheetDimensions.height == outputHeight else {
+            let dimensions = pngPixelDimensions(normalizedSheetPNGData) ?? (0, 0)
+            throw CharacterSheetProcessingError.invalidNormalizedSheetDimensions(
+                width: dimensions.0, height: dimensions.1)
+        }
+        guard let stageDimensions = pngPixelDimensions(normalizedStagePNGData),
+              stageDimensions.width == outputStageSize,
+              stageDimensions.height == outputHeight else {
+            let dimensions = pngPixelDimensions(normalizedStagePNGData) ?? (0, 0)
+            throw CharacterSheetProcessingError.invalidNormalizedStageDimensions(
+                width: dimensions.0, height: dimensions.1)
+        }
+        var sheet = try decodePNG(normalizedSheetPNGData)
+        let stage = try decodePNG(normalizedStagePNGData)
+        guard sheet.width == outputWidth, sheet.height == outputHeight else {
+            throw CharacterSheetProcessingError.invalidNormalizedSheetDimensions(
+                width: sheet.width, height: sheet.height)
+        }
+        guard stage.width == outputStageSize, stage.height == outputHeight else {
+            throw CharacterSheetProcessingError.invalidNormalizedStageDimensions(
+                width: stage.width, height: stage.height)
+        }
+        guard hasTransparentBorder(stage) else {
+            throw CharacterSheetProcessingError.normalizedStageHasBackground
+        }
+        let stageIndex = CharacterSheetStageKind.allCases.firstIndex(of: kind) ?? 0
+        copy(stage, into: &sheet, destinationX: stageIndex * outputStageSize)
+        return try encodePNG(sheet)
+    }
+
     // MARK: - PNG conversion
+
+    static func pngPixelDimensions(_ data: Data) -> (width: Int, height: Int)? {
+        guard data.count >= 24, hasPNGSignature(data),
+              data[12] == 0x49, data[13] == 0x48,
+              data[14] == 0x44, data[15] == 0x52 else { return nil }
+        func value(at offset: Int) -> Int {
+            data[offset..<(offset + 4)].reduce(0) { ($0 << 8) | Int($1) }
+        }
+        let width = value(at: 16), height = value(at: 20)
+        guard width > 0, height > 0 else { return nil }
+        return (width, height)
+    }
 
     static func decodePNG(_ data: Data) throws -> CharacterSheetRGBAImage {
         guard let representation = NSBitmapImageRep(data: data),
@@ -236,16 +556,101 @@ enum CharacterSheetProcessor {
 
     // MARK: - Matte and component processing
 
-    private static func extractPanel(_ source: CharacterSheetRGBAImage, index: Int) -> CharacterSheetRGBAImage {
-        var panel = CharacterSheetRGBAImage(width: stageSourceWidth, height: inputHeight)
-        let sourceX = index * stageSourceWidth
-        for y in 0..<inputHeight {
-            let inputStart = (y * inputWidth + sourceX) * 4
-            let outputStart = y * stageSourceWidth * 4
-            panel.pixels.replaceSubrange(outputStart..<(outputStart + stageSourceWidth * 4),
-                                         with: source.pixels[inputStart..<(inputStart + stageSourceWidth * 4)])
+    private static func hasPNGSignature(_ data: Data) -> Bool {
+        data.starts(with: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    }
+
+    private static func hasTransparentBorder(_ image: CharacterSheetRGBAImage) -> Bool {
+        for x in 0..<image.width {
+            guard image.rgba(x: x, y: 0).3 == 0,
+                  image.rgba(x: x, y: image.height - 1).3 == 0 else { return false }
+        }
+        for y in 1..<(image.height - 1) {
+            guard image.rgba(x: 0, y: y).3 == 0,
+                  image.rgba(x: image.width - 1, y: y).3 == 0 else { return false }
+        }
+        return true
+    }
+
+    private static func extractHorizontalRange(_ source: CharacterSheetRGBAImage,
+                                               from sourceX: Int,
+                                               to sourceEndX: Int) -> CharacterSheetRGBAImage {
+        let panelWidth = sourceEndX - sourceX
+        var panel = CharacterSheetRGBAImage(width: panelWidth, height: source.height)
+        for y in 0..<source.height {
+            let inputStart = (y * source.width + sourceX) * 4
+            let outputStart = y * panelWidth * 4
+            panel.pixels.replaceSubrange(outputStart..<(outputStart + panelWidth * 4),
+                                         with: source.pixels[inputStart..<(inputStart + panelWidth * 4)])
         }
         return panel
+    }
+
+    private struct BoundaryResolution {
+        let boundaryIndex: Int
+        let nominalX: Int
+        let resolvedX: Int
+        let leftClearance: Int
+        let rightClearance: Int
+    }
+
+    private static func resolveInternalBoundaries(in image: CharacterSheetRGBAImage,
+                                                  nominalXs: [Int],
+                                                  minimumPanelWidth: Int,
+                                                  searchRadius: Int) throws
+        -> [BoundaryResolution] {
+        var occupiedColumns = [Bool](repeating: false, count: image.width)
+        for y in 0..<image.height {
+            for x in 0..<image.width where image.pixels[(y * image.width + x) * 4 + 3] > 0 {
+                occupiedColumns[x] = true
+            }
+        }
+
+        let halfGutter = minimumBoundaryGutter / 2
+        func clearance(at seam: Int, direction: Int) -> Int {
+            var x = direction < 0 ? seam - 1 : seam
+            var count = 0
+            while x >= 0, x < image.width, !occupiedColumns[x] {
+                count += 1
+                x += direction
+            }
+            return count
+        }
+
+        var output: [BoundaryResolution] = []
+        for (boundaryIndex, nominalX) in nominalXs.enumerated() {
+            let lower = max(minimumPanelWidth, nominalX - searchRadius)
+            let upper = min(image.width - minimumPanelWidth,
+                            nominalX + searchRadius)
+            var candidates: [(distance: Int, inverseClearance: Int, seam: Int,
+                              left: Int, right: Int)] = []
+            for seam in lower...upper {
+                let left = clearance(at: seam, direction: -1)
+                let right = clearance(at: seam, direction: 1)
+                guard left >= halfGutter, right >= halfGutter else { continue }
+                candidates.append((abs(seam - nominalX), -min(left, right), seam, left, right))
+            }
+            guard let best = candidates.min(by: {
+                if $0.distance != $1.distance { return $0.distance < $1.distance }
+                if $0.inverseClearance != $1.inverseClearance {
+                    return $0.inverseClearance < $1.inverseClearance
+                }
+                return $0.seam < $1.seam
+            }) else {
+                throw CharacterSheetProcessingError.stagesMerged(boundaryIndex)
+            }
+            output.append(BoundaryResolution(boundaryIndex: boundaryIndex,
+                                             nominalX: nominalX,
+                                             resolvedX: best.seam,
+                                             leftClearance: best.left,
+                                             rightClearance: best.right))
+        }
+        let boundaries = [0] + output.map(\.resolvedX) + [image.width]
+        for index in 0..<(boundaries.count - 1)
+            where boundaries[index + 1] - boundaries[index] < minimumPanelWidth {
+            throw CharacterSheetProcessingError.stagesMerged(max(0, min(index, nominalXs.count - 1)))
+        }
+        return output
     }
 
     private static func removeBorderConnectedMatte(from image: inout CharacterSheetRGBAImage) {
@@ -412,7 +817,11 @@ enum CharacterSheetProcessor {
     }
 
     private static func validatedBounds(of image: CharacterSheetRGBAImage,
-                                        stageIndex: Int) throws -> CharacterSheetPixelBounds {
+                                        stageIndex: Int,
+                                        requireLeftCanvasMargin: Bool,
+                                        requireRightCanvasMargin: Bool,
+                                        requiredMargin: Int) throws
+        -> CharacterSheetPixelBounds {
         guard let bounds = alphaBounds(of: image) else {
             throw CharacterSheetProcessingError.emptyStage(stageIndex)
         }
@@ -423,13 +832,25 @@ enum CharacterSheetProcessor {
         }
         let rightMargin = image.width - (bounds.x + bounds.width)
         let bottomMargin = image.height - (bounds.y + bounds.height)
-        guard bounds.x >= requiredSourceMargin,
-              bounds.y >= requiredSourceMargin,
-              rightMargin >= requiredSourceMargin,
-              bottomMargin >= requiredSourceMargin else {
+        guard (!requireLeftCanvasMargin || bounds.x >= requiredMargin),
+              bounds.y >= requiredMargin,
+              (!requireRightCanvasMargin || rightMargin >= requiredMargin),
+              bottomMargin >= requiredMargin else {
             throw CharacterSheetProcessingError.stageTouchesMargin(stageIndex)
         }
         return bounds
+    }
+
+    private static func usesNearEdgeRecovery(bounds: CharacterSheetPixelBounds,
+                                             imageWidth: Int, imageHeight: Int,
+                                             requireLeftCanvasMargin: Bool,
+                                             requireRightCanvasMargin: Bool) -> Bool {
+        let right = imageWidth - (bounds.x + bounds.width)
+        let bottom = imageHeight - (bounds.y + bounds.height)
+        return (requireLeftCanvasMargin && bounds.x < requiredSourceMargin)
+            || bounds.y < requiredSourceMargin
+            || (requireRightCanvasMargin && right < requiredSourceMargin)
+            || bottom < requiredSourceMargin
     }
 
     // MARK: - Shared normalization

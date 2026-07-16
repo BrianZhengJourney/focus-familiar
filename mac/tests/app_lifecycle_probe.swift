@@ -14,11 +14,12 @@ let owned = windows.filter {
     ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid
 }
 for window in owned {
+    let number = window[kCGWindowNumber as String] as? Int ?? 0
     let name = window[kCGWindowName as String] as? String ?? ""
     let layer = window[kCGWindowLayer as String] as? Int ?? -1
     let onScreen = window[kCGWindowIsOnscreen as String] as? Bool ?? false
     let bounds = window[kCGWindowBounds as String] as? [String: Any] ?? [:]
-    print("layer=\(layer) onscreen=\(onScreen) name=\(name.debugDescription) bounds=\(bounds)")
+    print("id=\(number) layer=\(layer) onscreen=\(onScreen) name=\(name.debugDescription) bounds=\(bounds)")
 }
 
 if CommandLine.arguments.contains("--expect-settings") {

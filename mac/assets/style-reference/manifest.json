@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "asset": "mimo-style-reference-board.png",
+  "sha256": "c6041b785f179ae531be4d520802b25cea009c593279e00033b08a0b344420ed",
+  "dimensions": {
+    "width": 1536,
+    "height": 1024
+  },
+  "format": "png",
+  "background": "#F1ECE2",
+  "purpose": "Hidden style-only reference for Mimo character generation. It communicates the approved family proportions, pixel geometry, face language, palette restraint, and voxel-depth treatment; it is not an identity reference or an output layout template.",
+  "visibility": "internal-model-input-only",
+  "construction": {
+    "method": "Deterministic rasterization of the idle character data from the three project design-handoff components.",
+    "modelGenerated": false,
+    "included": [
+      "base body pixels",
+      "idle eyes",
+      "idle mouth",
+      "the handoff's 0.55-pixel dark voxel-depth duplicate"
+    ],
+    "excluded": [
+      "UI chrome",
+      "text and labels",
+      "screenshots",
+      "cast shadows",
+      "auras",
+      "particles",
+      "props and state-specific gear"
+    ]
+  },
+  "characters": [
+    {
+      "id": "lulu",
+      "displayName": "LuLu",
+      "source": "design_handoff_focus_familiar 2/Familiar Pixel.dc.html",
+      "sourceSha256": "1a9e5c54dab2894ea6de1d0a5ceef7663fd8f441744cea9024f83ac53ee27f6d"
+    },
+    {
+      "id": "clawd",
+      "displayName": "Clawd",
+      "source": "design_handoff_focus_familiar 2/Claude Pixel.dc.html",
+      "sourceSha256": "91b2842688cb26d5ddd30822376731ff93efe9e635047c1d4c6da123ee3cc99e"
+    },
+    {
+      "id": "nat",
+      "displayName": "Nat",
+      "source": "design_handoff_focus_familiar 2/Kitty Pixel.dc.html",
+      "sourceSha256": "d405c404c404d02ee627267b1dae3884ab7bcd6abc8830137b98441cadbe7a09"
+    }
+  ],
+  "handoff": {
+    "familyPage": "design_handoff_focus_familiar 2/Mascot Family.dc.html",
+    "familyPageSha256": "30fca6b2d852d20685017311d09475912cc78020c4c1b5c45c0ece5518666339",
+    "earlierArchive": "Focus Familiar Component.zip",
+    "earlierArchiveSha256": "6efd8084ccfb71c853a3529fe82098865c3f0006933e063cf5b81dd4a18d605c",
+    "note": "The earlier zip contains LuLu and the UI design references, but not the later Clawd and Nat component files. The full three-character handoff directory is authoritative for this board."
+  },
+  "runtimeMirror": {
+    "source": "mac/overlay.html",
+    "sha256AtConstruction": "7a32e591b0f9877ca4224947f65874ee404f379edbc5a348e59051e7e92a4e74",
+    "note": "The app already mirrors these three handoff data packs in its generic mascot renderer."
+  },
+  "recommendedUse": {
+    "inputRole": "style reference",
+    "promptInstruction": "Use this image only for Mimo's family resemblance: compact cute proportions, readable face, restrained palette, and crisp dimensional pixel treatment. Preserve the uploaded subject's identity and distinctive features. Do not copy LuLu, Clawd, or Nat; do not reproduce multiple characters, the three-column composition, baked shadows, UI, labels, or this background.",
+    "identityPriority": "The user's uploaded subject and an approved master-character image must take priority over this board.",
+    "outputBackground": "Continue requesting a single flat #F1ECE2 matte with generous edge clearance for deterministic local extraction."
+  }
+}

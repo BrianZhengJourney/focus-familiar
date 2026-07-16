@@ -379,7 +379,7 @@ final class OverlayWebView: WKWebView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate {
     var panel: OverlayPanel!
     var webView: WKWebView!
     var statusItem: NSStatusItem!
@@ -404,13 +404,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     let gitWatcher = GitWatcher()
     let petGenerator = PetGenerationCoordinator()
     let customPetStore = CustomPetStore(root: logDir)
-    var activePetGenerationID: String?
-    var pendingCharacterSheets: [String: PendingCharacterSheetDraft] = [:]
+    let generationDraftStore = FamiliarGenerationDraftStore(root: logDir)
+    var studioGenerationLedger = StudioGenerationLedger()
+    var studioCleanupTimer: Timer?
+    var activeStageParents: [String: String] = [:]
+    var backgroundStudioRequests: Set<String> = []
+    var visibleEvolutionDraftID: String?
+    var visibleCandidateDraftID: String?
+    var studioNotice: String?
+    var pendingCandidateBoards: [String: PendingCandidateBoardDraft] = [:]
+    var pendingEvolutionSheets: [String: PendingEvolutionSheetDraft] = [:]
+    var pendingLocalRecoveries: [String: PendingLocalGenerationRecovery] = [:]
+    var pendingReferencePreflights: [String: PendingReferencePreflight] = [:]
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleQuitAppleEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEQuitApplication))
         buildPanel()
         buildMainMenu()
         buildStatusItem()
@@ -418,6 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         registerHotKey()
         startHoverTracking()
         pruneOldLogs()
+        startStudioCleanup()
         gitWatcher.onCommit = { [weak self] repo in
             let message = "🎉 \(repo): commit shipped! +10 XP"
             self?.js("famProud(\(jsonStr(message)))")
@@ -442,6 +458,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func applicationDidChangeScreenParameters(_ notification: Notification) {
         guard panel != nil, !overlayHidden, !hidden else { return }
         revealOverlay()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        .terminateNow
+    }
+
+    @objc func handleQuitAppleEvent(_ event: NSAppleEventDescriptor,
+                                    withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        NSApp.terminate(nil)
     }
 
     // — panel + webview —
@@ -589,6 +614,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         ai.isEnabled = false
         ai.identifier = .init("aiStatus")
         menu.addItem(ai)
+        let studio = item("", #selector(showSettings), "", "sparkles")
+        studio.identifier = .init("studioStatus")
+        studio.isHidden = true
+        menu.addItem(studio)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(item(voice("退出 Mimo", "Quit Mimo"), #selector(quitApp(_:)), "q", "power"))
@@ -1084,6 +1113,10 @@ extension AppDelegate: NSMenuDelegate {
 
             if item.identifier?.rawValue == "aiStatus" { item.title = SmartClassifier.shared.statusLine }
             if item.identifier?.rawValue == "hideToggle" { item.title = overlayHidden ? "Show familiar" : "Hide familiar" }
+            if item.identifier?.rawValue == "studioStatus" {
+                item.isHidden = studioNotice == nil
+                item.title = studioNotice.map { voice("Mimo Studio：\($0)", "Mimo Studio: \($0)") } ?? ""
+            }
         }
     }
 }

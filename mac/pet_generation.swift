@@ -18,10 +18,19 @@ enum MimoSecret: String {
         }
     }
 
+    private func validated(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 4096,
+              !trimmed.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            return nil
+        }
+        return trimmed
+    }
+
     func read() -> String? {
         for key in environmentNames {
-            if let value = ProcessInfo.processInfo.environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !value.isEmpty { return value }
+            if let raw = ProcessInfo.processInfo.environment[key],
+               let value = validated(raw) { return value }
         }
         // Local builds are ad-hoc signed, so use the standard macOS login
         // Keychain. The data-protection Keychain requires a provisioned app ID.
@@ -35,7 +44,8 @@ enum MimoSecret: String {
         var item: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data,
-              let value = String(data: data, encoding: .utf8), !value.isEmpty else { return nil }
+              let raw = String(data: data, encoding: .utf8),
+              let value = validated(raw) else { return nil }
         return value
     }
 
@@ -51,14 +61,16 @@ enum MimoSecret: String {
             let status = SecItemDelete(lookup as CFDictionary)
             return status == errSecSuccess || status == errSecItemNotFound
         }
+        guard let validated = validated(trimmed) else { return false }
         let attrs: [String: Any] = [
-            kSecValueData as String: Data(trimmed.utf8),
+            kSecValueData as String: Data(validated.utf8),
         ]
         let updated = SecItemUpdate(lookup as CFDictionary, attrs as CFDictionary)
         if updated == errSecSuccess { return true }
         guard updated == errSecItemNotFound else { return false }
         var add = lookup
         attrs.forEach { add[$0.key] = $0.value }
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
@@ -97,15 +109,223 @@ enum PetGenerationQuality: String, CaseIterable {
     }
 }
 
+/// The final evolution pass deliberately excludes Low: Low is reserved for
+/// inexpensive master-character exploration, while an adopted asset must use
+/// one of the two production qualities.
+enum PetFinalGenerationQuality: String, CaseIterable {
+    case medium
+    case high
+
+    static func resolve(_ value: String?) -> PetFinalGenerationQuality {
+        guard let value else { return .medium }
+        return PetFinalGenerationQuality(
+            rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        ) ?? .medium
+    }
+
+    var providerQuality: PetGenerationQuality {
+        switch self {
+        case .medium: return .medium
+        case .high: return .high
+        }
+    }
+}
+
+enum PetEvolutionStage: String, CaseIterable {
+    case seed
+    case bloom
+    case radiant
+
+    var sheetIndex: Int {
+        switch self {
+        case .seed: return 0
+        case .bloom: return 1
+        case .radiant: return 2
+        }
+    }
+
+    fileprivate var promptDirection: String {
+        switch self {
+        case .seed:
+            return "SEED: youngest and smallest form; round, simple silhouette; fewest details."
+        case .bloom:
+            return "BLOOM: slightly taller and more confident; the approved signature feature has visibly grown."
+        case .radiant:
+            return "RADIANT: clearest evolved silhouette with one restrained crest, ear, leaf, tail, wing, or luminous body-marking flourish; powerful but still tiny and cute."
+        }
+    }
+}
+
+/// The Images edit endpoint accepts only 0...3 progressive images. Encoding
+/// those values as cases prevents arbitrary WebView input reaching OpenAI.
+enum PetPartialImageCount: Int, CaseIterable {
+    case finalOnly = 0
+    case one = 1
+    case two = 2
+    case three = 3
+
+    static func resolve(_ value: Int?) -> PetPartialImageCount {
+        guard let value else { return .two }
+        return PetPartialImageCount(rawValue: value) ?? .two
+    }
+}
+
+enum PetGenerationDelivery: Equatable {
+    case blocking
+    case streaming(PetPartialImageCount)
+}
+
+enum PetImageOutputSize: String {
+    case square = "1024x1024"
+    case landscape = "1536x1024"
+
+    var pixels: (width: Int, height: Int) {
+        switch self {
+        case .square: return (1024, 1024)
+        case .landscape: return (1536, 1024)
+        }
+    }
+}
+
+enum PetGenerationArtifact: Equatable {
+    case candidateBoard
+    case evolutionSheet
+    case replacement(PetEvolutionStage)
+
+    var outputSize: PetImageOutputSize {
+        switch self {
+        case .candidateBoard, .replacement: return .square
+        case .evolutionSheet: return .landscape
+        }
+    }
+}
+
+struct PetGenerationUsage: Equatable {
+    let inputTokens: Int?
+    let outputTokens: Int?
+    let totalTokens: Int?
+    let imageInputTokens: Int?
+    let textInputTokens: Int?
+
+    var dictionary: [String: Int] {
+        var values: [String: Int] = [:]
+        if let inputTokens { values["inputTokens"] = inputTokens }
+        if let outputTokens { values["outputTokens"] = outputTokens }
+        if let totalTokens { values["totalTokens"] = totalTokens }
+        if let imageInputTokens { values["imageInputTokens"] = imageInputTokens }
+        if let textInputTokens { values["textInputTokens"] = textInputTokens }
+        return values
+    }
+
+    fileprivate init(_ object: [String: Any]?) {
+        func integer(_ value: Any?) -> Int? {
+            if let value = value as? Int { return value }
+            if let value = value as? NSNumber { return value.intValue }
+            return nil
+        }
+        let details = object?["input_tokens_details"] as? [String: Any]
+        inputTokens = integer(object?["input_tokens"])
+        outputTokens = integer(object?["output_tokens"])
+        totalTokens = integer(object?["total_tokens"])
+        imageInputTokens = integer(details?["image_tokens"])
+        textInputTokens = integer(details?["text_tokens"])
+    }
+}
+
+struct PetGenerationOutput {
+    let data: Data
+    let usage: PetGenerationUsage
+}
+
+enum PetImageStreamEvent {
+    case partial(data: Data, index: Int)
+    case completed(PetGenerationOutput)
+    case failed(String)
+}
+
+enum PetImageStreamDecodingError: Error {
+    case oversizedEvent
+}
+
+/// Incremental SSE framing shared by the live URLSession byte stream and the
+/// regression replay seam. OpenAI can split a JSON payload at any byte, and a
+/// terminal event is still valid when the connection closes without a final
+/// blank line.
+struct PetImageStreamDecoder {
+    private static let maximumEventBytes = 29 * 1024 * 1024
+    private static let maximumLineBytes = maximumEventBytes + 16
+
+    private var line = Data()
+    private var eventData = Data()
+
+    mutating func append(_ byte: UInt8) throws -> [PetImageStreamEvent] {
+        if byte == 0x0a {
+            defer { line.removeAll(keepingCapacity: true) }
+            return try consumeLine()
+        }
+        if byte == 0x0d { return [] }
+        guard line.count < Self.maximumLineBytes else {
+            throw PetImageStreamDecodingError.oversizedEvent
+        }
+        line.append(byte)
+        return []
+    }
+
+    mutating func finish() throws -> [PetImageStreamEvent] {
+        var events: [PetImageStreamEvent] = []
+        if !line.isEmpty {
+            events.append(contentsOf: try consumeLine())
+            line.removeAll(keepingCapacity: false)
+        }
+        events.append(contentsOf: consumePayload())
+        return events
+    }
+
+    private mutating func consumeLine() throws -> [PetImageStreamEvent] {
+        if line.isEmpty { return consumePayload() }
+        let prefix = Data("data:".utf8)
+        guard line.starts(with: prefix) else { return [] }
+        var offset = prefix.count
+        if line.count > offset, line[offset] == 0x20 { offset += 1 }
+        let payload = line[offset...]
+        let separatorBytes = eventData.isEmpty ? 0 : 1
+        guard eventData.count + separatorBytes + payload.count <= Self.maximumEventBytes else {
+            throw PetImageStreamDecodingError.oversizedEvent
+        }
+        if separatorBytes == 1 { eventData.append(0x0a) }
+        eventData.append(contentsOf: payload)
+        return []
+    }
+
+    private mutating func consumePayload() -> [PetImageStreamEvent] {
+        guard !eventData.isEmpty else { return [] }
+        let payload = eventData
+        eventData.removeAll(keepingCapacity: true)
+        guard payload != Data("[DONE]".utf8),
+              let event = PetGenerationCoordinator.imageStreamEvent(jsonData: payload) else {
+            return []
+        }
+        return [event]
+    }
+}
+
+private struct PetMultipartImage {
+    let filename: String
+    let data: Data
+}
+
 final class PetGenerationCoordinator {
     typealias SheetProgress = (_ phase: String, _ detail: String?) -> Void
     typealias SheetCompletion = (Result<Data, Error>) -> Void
+    typealias StagedProgress = (_ phase: String, _ partialImage: Data?, _ partialIndex: Int?) -> Void
+    typealias StagedCompletion = (Result<PetGenerationOutput, Error>) -> Void
 
     private let session: URLSession
     private let callbackQueue = DispatchQueue.main
     private let lock = NSLock()
     private var cancelled = Set<String>()
     private var activeTasks: [String: [UUID: URLSessionTask]] = [:]
+    private var activeStreams: [String: [UUID: Task<Void, Never>]] = [:]
 
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -119,12 +339,107 @@ final class PetGenerationCoordinator {
         lock.lock()
         cancelled.insert(requestID)
         let tasks = Array((activeTasks.removeValue(forKey: requestID) ?? [:]).values)
+        let streams = Array((activeStreams.removeValue(forKey: requestID) ?? [:]).values)
         lock.unlock()
         tasks.forEach { $0.cancel() }
+        streams.forEach { $0.cancel() }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 300) { [weak self] in
             guard let self else { return }
             self.lock.lock(); self.cancelled.remove(requestID); self.lock.unlock()
         }
+    }
+
+    func generateCandidateBoard(requestID: String, sourceDataURI: String,
+                                styleBoardData: Data?, referenceEvidenceJSON: String = "{}",
+                                personalityVisual: String,
+                                likeness: Double, progress: @escaping StagedProgress,
+                                completion: @escaping StagedCompletion) {
+        begin(requestID)
+        guard let key = MimoSecret.openAI.read() else {
+            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+            return
+        }
+        guard let reference = Self.validatedDataURI(sourceDataURI),
+              Self.validReference(styleBoardData) else {
+            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+            return
+        }
+        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+        let request = Self.candidateBoardRequest(
+            referenceData: reference, styleBoardData: styleBoardData,
+            referenceEvidenceJSON: referenceEvidenceJSON,
+            personalityVisual: personalityVisual, likeness: likeness,
+            apiKey: key, delivery: .streaming(.one)
+        )
+        performImageStream(request, provider: "OpenAI", requestID: requestID,
+                           artifact: .candidateBoard, progress: progress,
+                           completion: completion)
+    }
+
+    func generateFinalEvolutionSheet(requestID: String, masterData: Data,
+                                     sourceDataURI: String, styleBoardData: Data?,
+                                     referenceEvidenceJSON: String = "{}",
+                                     personalityVisual: String, likeness: Double,
+                                     quality: PetFinalGenerationQuality,
+                                     progress: @escaping StagedProgress,
+                                     completion: @escaping StagedCompletion) {
+        begin(requestID)
+        guard let key = MimoSecret.openAI.read() else {
+            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+            return
+        }
+        guard Self.validReference(masterData),
+              let reference = Self.validatedDataURI(sourceDataURI),
+              Self.validReference(styleBoardData) else {
+            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+            return
+        }
+        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+        let request = Self.finalEvolutionSheetRequest(
+            masterData: masterData, referenceData: reference,
+            styleBoardData: styleBoardData,
+            referenceEvidenceJSON: referenceEvidenceJSON,
+            personalityVisual: personalityVisual,
+            likeness: likeness, quality: quality, apiKey: key,
+            delivery: .streaming(.one)
+        )
+        performImageStream(request, provider: "OpenAI", requestID: requestID,
+                           artifact: .evolutionSheet, progress: progress,
+                           completion: completion)
+    }
+
+    func regenerateEvolutionStage(requestID: String, stage: PetEvolutionStage,
+                                  currentSheetData: Data, masterData: Data,
+                                  sourceDataURI: String, styleBoardData: Data?,
+                                  referenceEvidenceJSON: String = "{}",
+                                  personalityVisual: String, likeness: Double,
+                                  quality: PetFinalGenerationQuality,
+                                  progress: @escaping StagedProgress,
+                                  completion: @escaping StagedCompletion) {
+        begin(requestID)
+        guard let key = MimoSecret.openAI.read() else {
+            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+            return
+        }
+        guard Self.validReference(currentSheetData), Self.validReference(masterData),
+              let reference = Self.validatedDataURI(sourceDataURI),
+              Self.validReference(styleBoardData) else {
+            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+            return
+        }
+        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+        let request = Self.regenerateStageRequest(
+            stage: stage, currentSheetData: currentSheetData,
+            masterData: masterData, referenceData: reference,
+            styleBoardData: styleBoardData,
+            referenceEvidenceJSON: referenceEvidenceJSON,
+            personalityVisual: personalityVisual,
+            likeness: likeness, quality: quality, apiKey: key,
+            delivery: .streaming(.one)
+        )
+        performImageStream(request, provider: "OpenAI", requestID: requestID,
+                           artifact: .replacement(stage), progress: progress,
+                           completion: completion)
     }
 
     func generateCharacterSheet(requestID: String, sourceDataURI: String,
@@ -172,35 +487,18 @@ final class PetGenerationCoordinator {
     static func characterSheetRequest(imageData: Data, personalityVisual: String,
                                       likeness: Double, apiKey: String,
                                       quality: PetGenerationQuality = .medium,
-                                      boundary: String = "mimo-\(UUID().uuidString)") -> URLRequest {
-        let url = URL(string: "https://api.openai.com/v1/images/edits")!
-        var body = Data()
-        func field(_ name: String, _ value: String) {
-            body.appendUTF8("--\(boundary)\r\n")
-            body.appendUTF8("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
-            body.appendUTF8("\(value)\r\n")
-        }
-        field("model", "gpt-image-2")
-        field("size", "1536x1024")
-        field("quality", quality.rawValue)
-        field("output_format", "png")
-        field("background", "opaque")
-        field("n", "1")
-        field("prompt", characterSheetPrompt(personalityVisual: personalityVisual, likeness: likeness))
-        body.appendUTF8("--\(boundary)\r\n")
-        body.appendUTF8("Content-Disposition: form-data; name=\"image[]\"; filename=\"reference.png\"\r\n")
-        body.appendUTF8("Content-Type: image/png\r\n\r\n")
-        body.append(imageData)
-        body.appendUTF8("\r\n--\(boundary)--\r\n")
-
-        let timeout: TimeInterval = quality == .high ? 420 : 240
-        var request = URLRequest(url: url, timeoutInterval: timeout)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
-        request.httpBody = body
-        return request
+                                      boundary: String = "mimo-\(UUID().uuidString)",
+                                      delivery: PetGenerationDelivery = .blocking) -> URLRequest {
+        imageEditRequest(
+            references: [PetMultipartImage(filename: "reference.png", data: imageData)],
+            prompt: characterSheetPrompt(personalityVisual: personalityVisual, likeness: likeness),
+            size: .landscape,
+            quality: quality,
+            apiKey: apiKey,
+            delivery: delivery,
+            timeout: quality == .high ? 420 : 240,
+            boundary: boundary
+        )
     }
 
     static func characterSheetPrompt(personalityVisual: String, likeness: Double) -> String {
@@ -241,6 +539,483 @@ final class PetGenerationCoordinator {
         floor, cast shadow, halo, external glow, particles, props, scenery, frame, UI, text, logo, watermark, extra
         characters, or cropped limbs. Convey Radiant energy only through silhouette and body markings; Mimo adds effects.
         """
+    }
+
+    // MARK: - Staged generation request contracts
+
+    /// Cheap exploration pass. Its square output is intentionally smaller
+    /// than the production sheet because square GPT Image generations usually
+    /// return sooner and three candidates remain large enough to choose from.
+    static func candidateBoardRequest(referenceData: Data, styleBoardData: Data? = nil,
+                                      referenceEvidenceJSON: String = "{}",
+                                      personalityVisual: String, likeness: Double,
+                                      apiKey: String,
+                                      delivery: PetGenerationDelivery = .blocking,
+                                      boundary: String = "mimo-candidates-\(UUID().uuidString)") -> URLRequest {
+        var references = [PetMultipartImage(filename: "identity-reference.png", data: referenceData)]
+        if let styleBoardData {
+            references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
+        }
+        return imageEditRequest(
+            references: references,
+            prompt: candidateBoardPrompt(personalityVisual: personalityVisual,
+                                         likeness: likeness,
+                                         hasStyleBoard: styleBoardData != nil,
+                                         referenceEvidenceJSON: referenceEvidenceJSON),
+            size: PetGenerationArtifact.candidateBoard.outputSize,
+            quality: .low,
+            apiKey: apiKey,
+            delivery: delivery,
+            timeout: 180,
+            boundary: boundary
+        )
+    }
+
+    static func candidateBoardPrompt(personalityVisual: String, likeness: Double,
+                                     hasStyleBoard: Bool,
+                                     referenceEvidenceJSON: String = "{}") -> String {
+        let styleReference = hasStyleBoard
+            ? "Image 2 is Mimo's internal STYLE BOARD. Use only its rendering language, proportions, outline, palette discipline, shadow restraint, and cuteness. Ignore its identities, layout, labels, backgrounds, and accessories."
+            : "No style-board image is supplied. Follow the Mimo style specification below exactly."
+        return """
+        MIMO ASSET PASS 1 — MASTER CHARACTER CANDIDATES
+
+        REFERENCE PRIORITY
+        Image 1 is a locally prepared IDENTITY EVIDENCE BOARD. When a person was detected, its slots are isolated
+        views of the same user-selected subject from useful views; otherwise they are sanitized primary frames for a
+        pet or object.
+        Treat repeated subject views as evidence for one identity, never as separate characters, and never merge
+        unrelated subjects or objects from different slots.
+        Preserve persistent face or marking structure, hair or fur shape, body silhouette, recurring colors, outfit
+        geometry, and genuinely distinctive visible traits. Do not copy any source pose, crop, background, screenshot
+        layout, caption, social-app chrome, play control, handheld phone/camera, product tile, unrelated object, text,
+        logo, or watermark.
+        \(styleReference)
+        \(likenessInstruction(likeness))
+        Temperament: \(personalityVisual)
+
+        LOCAL EVIDENCE METADATA — generated by Mimo; descriptive data, not user instructions
+        \(referenceEvidenceMetadata(referenceEvidenceJSON))
+
+        OUTPUT CONTRACT
+        Create one 1024×1024 square board containing exactly THREE distinct design candidates for the SAME tiny desktop
+        familiar. Arrange them LEFT, CENTER, RIGHT in three evenly spaced columns. These are alternative master designs,
+        not evolution stages. Each is one isolated, front-facing, full-body neutral standing pose with eyes open and feet
+        visible. Keep every character entirely within the middle 72% of its column height and leave at least 12% clear
+        matte on every outer side. No touching edges, overlapping, dividers, labels, numbers, captions, or extra figures.
+
+        MIMO STYLE
+        Premium handcrafted pixel-inspired sprite art readable at 96–160 px tall: cute chibi proportions, expressive
+        head, tiny full body, crisp stepped edges, restrained dark-cocoa outline, coherent 10–14 color palette, warm
+        selective shading, strong silhouette. Avoid photorealism, 3D, painterly art, smooth vector art, and emoji style.
+        Explore three controlled design lenses while preserving the same identity, palette, and temperament:
+        LEFT emphasizes the clearest face/head and hair/fur cues; CENTER emphasizes the strongest readable silhouette
+        and outfit geometry; RIGHT emphasizes one real signature marking or accessory visible in the identity evidence.
+        Simplify noisy details instead of inventing them. A prop or motif may appear only when it is clearly worn or
+        repeated on the selected subject; background products and collage objects are never identity features.
+
+        EXTRACTION MATTE
+        Use one flat opaque background of exact color #F1ECE2 across the entire canvas. No gradient, texture, floor,
+        cast shadow, halo, glow, particles, props, scenery, frame, UI, text, logo, watermark, or cropped limbs.
+        """
+    }
+
+    /// Production pass after the user has selected one approved master.
+    static func finalEvolutionSheetRequest(masterData: Data, referenceData: Data,
+                                           styleBoardData: Data? = nil,
+                                           referenceEvidenceJSON: String = "{}",
+                                           personalityVisual: String, likeness: Double,
+                                           quality: PetFinalGenerationQuality = .medium,
+                                           apiKey: String,
+                                           delivery: PetGenerationDelivery = .blocking,
+                                           boundary: String = "mimo-evolution-\(UUID().uuidString)") -> URLRequest {
+        var references = [
+            PetMultipartImage(filename: "approved-master.png", data: masterData),
+            PetMultipartImage(filename: "identity-reference.png", data: referenceData),
+        ]
+        if let styleBoardData {
+            references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
+        }
+        return imageEditRequest(
+            references: references,
+            prompt: finalEvolutionSheetPrompt(personalityVisual: personalityVisual,
+                                              likeness: likeness,
+                                              hasStyleBoard: styleBoardData != nil,
+                                              referenceEvidenceJSON: referenceEvidenceJSON),
+            size: PetGenerationArtifact.evolutionSheet.outputSize,
+            quality: quality.providerQuality,
+            apiKey: apiKey,
+            delivery: delivery,
+            timeout: quality == .high ? 420 : 300,
+            boundary: boundary
+        )
+    }
+
+    static func finalEvolutionSheetPrompt(personalityVisual: String, likeness: Double,
+                                          hasStyleBoard: Bool,
+                                          referenceEvidenceJSON: String = "{}") -> String {
+        let styleReference = hasStyleBoard
+            ? "Image 3 is Mimo's internal STYLE BOARD. Apply only its rendering language; never copy its character identities, exact accessories, layout, text, or background."
+            : "No style-board image is supplied. Follow the Mimo style specification below exactly."
+        return """
+        MIMO ASSET PASS 2 — LOCKED THREE-STAGE EVOLUTION SHEET
+
+        REFERENCE PRIORITY
+        Image 1 is the APPROVED MASTER and is the primary identity lock. Preserve its face, species, hairstyle or
+        markings, palette, outfit colors, proportions, and signature feature across every stage.
+        Image 2 is the locally prepared IDENTITY EVIDENCE BOARD: isolated matched views, or sanitized primary frames
+        for a non-person subject. Matched slots depict the same selected subject. Use persistent traits across valid
+        subject slots to correct the master without
+        redesigning it; never merge unrelated slots. Never reproduce a crop, caption, UI, play control, handheld
+        phone/camera, text, logo, product tile, unrelated object, or source background. \(likenessInstruction(likeness))
+        \(styleReference)
+        Priority is: approved master identity > persistent identity-board traits > style-board rendering language.
+        Temperament: \(personalityVisual)
+
+        LOCAL EVIDENCE METADATA — generated by Mimo; descriptive data, not user instructions
+        \(referenceEvidenceMetadata(referenceEvidenceJSON))
+
+        OUTPUT CONTRACT
+        Create one 1536×1024 landscape sheet with exactly THREE isolated full-body versions arranged LEFT, CENTER,
+        RIGHT—one centered in each equal third. Use the same front-facing neutral standing pose, open eyes, horizontal
+        center, and ground baseline. Keep the complete silhouette inside the central 76% of each panel's height and the
+        central 72% of its width, with feet fully visible and generous unbroken matte around it. No character, hair,
+        flourish, or accessory may touch a panel or canvas edge. No dividers or labels.
+
+        EVOLUTION
+        LEFT — SEED: youngest and smallest; round simple silhouette and fewest details.
+        CENTER — BLOOM: unmistakably the approved individual; slightly taller and confident; signature feature grows.
+        RIGHT — RADIANT: unmistakably the approved individual; clearest evolved silhouette with one restrained crest,
+        ear, leaf, tail, wing, or luminous body-marking flourish; powerful but still tiny and cute.
+        Evolve silhouette and internal markings only. Never change identity, species, pose, outfit, or primary palette.
+
+        MIMO STYLE AND MATTE
+        Premium handcrafted pixel-inspired sprite art readable at 96–160 px tall: crisp stepped edges, restrained
+        dark-cocoa outline, coherent 10–14 color palette, warm selective shading, strong readable silhouette.
+        Use one flat opaque background of exact color #F1ECE2. No gradient, texture, floor, cast shadow, halo, external
+        glow, particles, props, scenery, frame, UI, text, logo, watermark, extra figures, or cropped limbs. Mimo adds FX.
+        """
+    }
+
+    /// Generates only one replacement form. The app must composite this result
+    /// into the selected slot locally; the two accepted slots are never rewritten
+    /// by the model and therefore remain pixel-identical.
+    static func regenerateStageRequest(stage: PetEvolutionStage,
+                                       currentSheetData: Data, masterData: Data,
+                                       referenceData: Data, styleBoardData: Data? = nil,
+                                       referenceEvidenceJSON: String = "{}",
+                                       personalityVisual: String, likeness: Double,
+                                       quality: PetFinalGenerationQuality = .medium,
+                                       apiKey: String,
+                                       delivery: PetGenerationDelivery = .blocking,
+                                       boundary: String = "mimo-stage-\(UUID().uuidString)") -> URLRequest {
+        var references = [
+            PetMultipartImage(filename: "current-evolution-sheet.png", data: currentSheetData),
+            PetMultipartImage(filename: "approved-master.png", data: masterData),
+            PetMultipartImage(filename: "identity-reference.png", data: referenceData),
+        ]
+        if let styleBoardData {
+            references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
+        }
+        return imageEditRequest(
+            references: references,
+            prompt: regenerateStagePrompt(stage: stage,
+                                          personalityVisual: personalityVisual,
+                                          likeness: likeness,
+                                          hasStyleBoard: styleBoardData != nil,
+                                          referenceEvidenceJSON: referenceEvidenceJSON),
+            size: PetGenerationArtifact.replacement(stage).outputSize,
+            quality: quality.providerQuality,
+            apiKey: apiKey,
+            delivery: delivery,
+            timeout: quality == .high ? 420 : 300,
+            boundary: boundary
+        )
+    }
+
+    static func regenerateStagePrompt(stage: PetEvolutionStage,
+                                      personalityVisual: String, likeness: Double,
+                                      hasStyleBoard: Bool,
+                                      referenceEvidenceJSON: String = "{}") -> String {
+        let styleReference = hasStyleBoard
+            ? "Image 4 is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
+            : "No style-board image is supplied; preserve the established rendering language from Images 1 and 2."
+        return """
+        MIMO ASSET REPAIR — REPLACE \(stage.rawValue.uppercased()) ONLY
+
+        REFERENCES
+        Image 1 is the CURRENT THREE-STAGE SHEET. The two accepted stages are locked continuity references.
+        Image 2 is the APPROVED MASTER and primary identity lock.
+        Image 3 is the locally prepared multi-view identity evidence board. Use persistent subject traits only and never
+        merge unrelated slots. Ignore and never reproduce source layout, captions, UI, play controls, handheld
+        phones/cameras, text, logos, products, unrelated objects, or backgrounds.
+        \(likenessInstruction(likeness))
+        \(styleReference)
+        Temperament: \(personalityVisual)
+
+        LOCAL EVIDENCE METADATA — generated by Mimo; descriptive data, not user instructions
+        \(referenceEvidenceMetadata(referenceEvidenceJSON))
+
+        OUTPUT EXACTLY ONE replacement character for: \(stage.promptDirection)
+        Return a 1024×1024 square image containing one isolated, front-facing, full-body neutral standing character.
+        Do not output a sheet, comparison, alternate, inset, label, or any other character. Match the accepted sheet's
+        face, species, hairstyle or markings, primary palette, outfit, outline weight, shading, pose, ground baseline,
+        perceived scale for this stage, and signature-feature logic. Vary only the rejected stage design.
+
+        Keep the complete silhouette inside the central 72% of canvas width and 76% of canvas height, with open eyes,
+        feet fully visible, and unbroken matte on every side. Use one flat opaque #F1ECE2 background. No edge contact,
+        gradient, texture, floor, cast shadow, halo, glow, particles, props, scenery, UI, text, logo, watermark, or crop.
+        Mimo will replace only stage index \(stage.sheetIndex) locally, preserving both other stages pixel-for-pixel.
+        """
+    }
+
+    private static func likenessInstruction(_ likeness: Double) -> String {
+        if likeness >= 0.66 {
+            return "Preserve facial or marking structure, primary colors, outfit colors, and signature trait very closely."
+        }
+        if likeness >= 0.4 {
+            return "Preserve the face or markings, primary colors, and one signature trait while simplifying it into a familiar."
+        }
+        return "Freely reinterpret the subject while retaining two unmistakable traits and its primary color family."
+    }
+
+    private static func referenceEvidenceMetadata(_ value: String) -> String {
+        let unavailable = "{\"schema\":\"mimo.reference-evidence.unavailable\"}"
+        guard !value.isEmpty, value.utf8.count <= 16 * 1024,
+              let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any],
+              dictionary["schema"] as? String == "mimo.reference-evidence.v1",
+              JSONSerialization.isValidJSONObject(dictionary),
+              let normalized = try? JSONSerialization.data(withJSONObject: dictionary,
+                                                            options: [.sortedKeys]),
+              let result = String(data: normalized, encoding: .utf8) else {
+            return unavailable
+        }
+        return result
+    }
+
+    private static func imageEditRequest(references: [PetMultipartImage], prompt: String,
+                                         size: PetImageOutputSize,
+                                         quality: PetGenerationQuality,
+                                         apiKey: String,
+                                         delivery: PetGenerationDelivery,
+                                         timeout: TimeInterval,
+                                         boundary: String) -> URLRequest {
+        precondition(!references.isEmpty && references.count <= 10,
+                     "OpenAI image edits require 1...10 reference images")
+        let url = URL(string: "https://api.openai.com/v1/images/edits")!
+        var body = Data()
+        func field(_ name: String, _ value: String) {
+            body.appendUTF8("--\(boundary)\r\n")
+            body.appendUTF8("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.appendUTF8("\(value)\r\n")
+        }
+        field("model", "gpt-image-2")
+        field("size", size.rawValue)
+        field("quality", quality.rawValue)
+        field("output_format", "png")
+        field("background", "opaque")
+        field("n", "1")
+        field("prompt", prompt)
+        if case .streaming(let partialImages) = delivery {
+            field("stream", "true")
+            field("partial_images", String(partialImages.rawValue))
+        }
+        for reference in references {
+            body.appendUTF8("--\(boundary)\r\n")
+            body.appendUTF8("Content-Disposition: form-data; name=\"image[]\"; filename=\"\(reference.filename)\"\r\n")
+            body.appendUTF8("Content-Type: image/png\r\n\r\n")
+            body.append(reference.data)
+            body.appendUTF8("\r\n")
+        }
+        body.appendUTF8("--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
+        if case .streaming = delivery {
+            request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        }
+        request.httpBody = body
+        return request
+    }
+
+    /// Parses one OpenAI image SSE `data:` payload. Keeping this pure makes
+    /// the provider contract regression-testable without spending credits.
+    static func imageStreamEvent(jsonData: Data) -> PetImageStreamEvent? {
+        guard jsonData.count <= 29 * 1024 * 1024,
+              let object = try? JSONSerialization.jsonObject(with: jsonData),
+              let dictionary = object as? [String: Any] else { return nil }
+        let type = dictionary["type"] as? String ?? ""
+        if type == "image_edit.partial_image" || type == "image_generation.partial_image" {
+            guard let encoded = dictionary["b64_json"] as? String,
+                  encoded.utf8.count <= 28 * 1024 * 1024,
+                  let data = Data(base64Encoded: encoded),
+                  !data.isEmpty, data.count <= 20 * 1024 * 1024,
+                  isSupportedImageData(data) else { return nil }
+            let index = (dictionary["partial_image_index"] as? NSNumber)?.intValue ?? 0
+            return .partial(data: data, index: index)
+        }
+        if type == "image_edit.completed" || type == "image_generation.completed" {
+            guard let encoded = dictionary["b64_json"] as? String,
+                  encoded.utf8.count <= 28 * 1024 * 1024,
+                  let data = Data(base64Encoded: encoded),
+                  !data.isEmpty, data.count <= 20 * 1024 * 1024,
+                  isSupportedImageData(data) else { return nil }
+            let usage = PetGenerationUsage(dictionary["usage"] as? [String: Any])
+            return .completed(PetGenerationOutput(data: data, usage: usage))
+        }
+        if type == "error" || dictionary["error"] != nil {
+            return .failed(providerMessage(dictionary) ?? "OpenAI image stream failed")
+        }
+        return nil
+    }
+
+    /// Replays arbitrarily chunked SSE bytes through the exact decoder used by
+    /// the network path. This catches provider event-name, framing, chunking,
+    /// and EOF regressions without making a paid API request.
+    static func imageStreamEvents(sseChunks: [Data]) throws -> [PetImageStreamEvent] {
+        var decoder = PetImageStreamDecoder()
+        var events: [PetImageStreamEvent] = []
+        for chunk in sseChunks {
+            for byte in chunk {
+                events.append(contentsOf: try decoder.append(byte))
+            }
+        }
+        events.append(contentsOf: try decoder.finish())
+        return events
+    }
+
+    private static func imageResponseTrace(_ response: HTTPURLResponse) -> String {
+        var details = ["HTTP \(response.statusCode)"]
+        if let raw = response.value(forHTTPHeaderField: "x-request-id")?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty, raw.utf8.count <= 256,
+           !raw.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) {
+            details.append("request-id \(raw)")
+        }
+        return details.joined(separator: ", ")
+    }
+
+    private func performImageStream(_ request: URLRequest, provider: String,
+                                    requestID: String, artifact _: PetGenerationArtifact,
+                                    progress: @escaping StagedProgress,
+                                    completion: @escaping StagedCompletion) {
+        let token = UUID()
+        let (registrationEvents, registrationContinuation) = AsyncStream<Void>.makeStream()
+        let stream = Task { [weak self] in
+            for await _ in registrationEvents { break }
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            defer { self.untrackStream(token, requestID: requestID) }
+            do {
+                let (bytes, response) = try await self.session.bytes(for: request)
+                guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                guard let http = response as? HTTPURLResponse else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.invalidResponse(provider)))
+                    return
+                }
+                let responseTrace = Self.imageResponseTrace(http)
+                guard 200..<300 ~= http.statusCode else {
+                    var body = Data()
+                    body.reserveCapacity(64 * 1024)
+                    for try await byte in bytes {
+                        guard body.count < 64 * 1024 else { break }
+                        body.append(byte)
+                    }
+                    let object = try? JSONSerialization.jsonObject(with: body)
+                    let providerMessage = Self.providerMessage(object as Any)
+                        ?? "\(provider) request failed"
+                    let message = "\(providerMessage) [\(responseTrace)]"
+                    self.finishStaged(completion, result: .failure(PetGenerationError.provider(message)))
+                    return
+                }
+
+                self.emitStaged(progress, phase: "generating", partialImage: nil, partialIndex: nil)
+                var decoder = PetImageStreamDecoder()
+                var terminal = false
+                var partialEventCount = 0
+                let streamDescription = "\(provider) image stream [\(responseTrace)]"
+
+                func consume(_ event: PetImageStreamEvent) -> Bool {
+                    switch event {
+                    case .partial(let image, let index):
+                        partialEventCount += 1
+                        guard partialEventCount <= 3 else {
+                            terminal = true
+                            self.finishStaged(
+                                completion,
+                                result: .failure(PetGenerationError.invalidResponse(streamDescription))
+                            )
+                            return true
+                        }
+                        self.emitStaged(progress, phase: "partial", partialImage: image,
+                                        partialIndex: index)
+                    case .completed(let output):
+                        terminal = true
+                        self.finishStaged(completion, result: .success(output))
+                    case .failed(let message):
+                        terminal = true
+                        self.finishStaged(completion,
+                                          result: .failure(PetGenerationError.provider(
+                                            "\(message) [\(responseTrace)]"
+                                          )))
+                        return true
+                    }
+                    return terminal
+                }
+
+                streamBytes: for try await byte in bytes {
+                    guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                    do {
+                        for event in try decoder.append(byte) {
+                            if consume(event) { break streamBytes }
+                        }
+                    } catch {
+                        terminal = true
+                        self.finishStaged(
+                            completion,
+                            result: .failure(PetGenerationError.invalidResponse(
+                                "\(provider) oversized image stream [\(responseTrace)]"
+                            ))
+                        )
+                        break
+                    }
+                }
+                if !terminal {
+                    do {
+                        for event in try decoder.finish() {
+                            if consume(event) { break }
+                        }
+                    } catch {
+                        terminal = true
+                        self.finishStaged(
+                            completion,
+                            result: .failure(PetGenerationError.invalidResponse(
+                                "\(provider) oversized image stream [\(responseTrace)]"
+                            ))
+                        )
+                    }
+                }
+                if !terminal && !Task.isCancelled && !self.isCancelled(requestID) {
+                    self.finishStaged(
+                        completion,
+                        result: .failure(PetGenerationError.invalidResponse(streamDescription))
+                    )
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                self.finishStaged(completion, result: .failure(error))
+            }
+        }
+        trackStream(stream, token: token, requestID: requestID)
+        registrationContinuation.yield()
+        registrationContinuation.finish()
     }
 
     private func resolveImage(_ value: String, requestID: String,
@@ -286,8 +1061,8 @@ final class PetGenerationCoordinator {
             }
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             guard 200..<300 ~= http.statusCode else {
-                let retryable = http.statusCode == 429
-                    || (request.httpMethod != "POST" && 500...599 ~= http.statusCode)
+                let retryable = request.httpMethod != "POST"
+                    && (http.statusCode == 429 || 500...599 ~= http.statusCode)
                 let retryLimit = 2
                 if attempt < retryLimit && retryable {
                     let headerDelay = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 2
@@ -317,6 +1092,20 @@ final class PetGenerationCoordinator {
         callbackQueue.async { callback(result) }
     }
 
+    private func begin(_ requestID: String) {
+        lock.lock(); cancelled.remove(requestID); lock.unlock()
+    }
+
+    private func emitStaged(_ callback: @escaping StagedProgress, phase: String,
+                            partialImage: Data?, partialIndex: Int?) {
+        callbackQueue.async { callback(phase, partialImage, partialIndex) }
+    }
+
+    private func finishStaged(_ callback: @escaping StagedCompletion,
+                              result: Result<PetGenerationOutput, Error>) {
+        callbackQueue.async { callback(result) }
+    }
+
     private func isCancelled(_ requestID: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return cancelled.contains(requestID)
@@ -334,6 +1123,30 @@ final class PetGenerationCoordinator {
         activeTasks[requestID]?.removeValue(forKey: token)
         if activeTasks[requestID]?.isEmpty == true { activeTasks.removeValue(forKey: requestID) }
         lock.unlock()
+    }
+
+    private func trackStream(_ task: Task<Void, Never>, token: UUID, requestID: String) {
+        lock.lock()
+        if cancelled.contains(requestID) { lock.unlock(); task.cancel(); return }
+        activeStreams[requestID, default: [:]][token] = task
+        lock.unlock()
+    }
+
+    private func untrackStream(_ token: UUID, requestID: String) {
+        lock.lock()
+        activeStreams[requestID]?.removeValue(forKey: token)
+        if activeStreams[requestID]?.isEmpty == true { activeStreams.removeValue(forKey: requestID) }
+        lock.unlock()
+    }
+
+    private static func validatedDataURI(_ value: String) -> Data? {
+        guard let data = dataFromDataURI(value), validReference(data) else { return nil }
+        return data
+    }
+
+    private static func validReference(_ data: Data?) -> Bool {
+        guard let data else { return true }
+        return !data.isEmpty && data.count <= 20 * 1024 * 1024 && isSupportedImageData(data)
     }
 
     static func dataFromDataURI(_ value: String) -> Data? {

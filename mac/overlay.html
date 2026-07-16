@@ -501,7 +501,7 @@ body[data-char="pixel"] .shadow{ display:none; }
   <div class="pomo-wrap" id="pomoWrap">
     <span class="chip pomo" id="pomoChip" onclick="famPomodoro(0)" title="结束这次冒险">🏹 <b id="pomoTime">25:00</b><span class="pomobar"><span id="pomoFill"></span></span></span>
   </div>
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <div class="bubble" id="bubble">
     <div class="bubble-inner" id="bubbleInner"></div>
     <div class="bubble-tail"></div>
@@ -1318,10 +1318,15 @@ function statusCopy(state){
 }
 
 let _toastT;
-function toast(msg){
+function toast(msg,duration=3200){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('on');
-  clearTimeout(_toastT); _toastT = setTimeout(() => t.classList.remove('on'), 3200);
+  clearTimeout(_toastT); _toastT = setTimeout(() => t.classList.remove('on'), duration);
+}
+
+function famNotice(kind,label){
+  const prefix=kind==='success'?'✓':kind==='error'?'!':'·';
+  toast(`${prefix} ${label}`,8000);
 }
 
 /* ═══ focus engine — real-time-ish, slightly accelerated ═══ */

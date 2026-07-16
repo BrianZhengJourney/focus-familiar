@@ -19,7 +19,11 @@ private func paintRect(_ image: inout CharacterSheetRGBAImage,
     }
 }
 
-private func fixture(emptyStage: Int? = nil, clippedStage: Int? = nil) throws -> Data {
+private func fixture(emptyStage: Int? = nil,
+                     middleFormOverride: (x: Int, width: Int)? = nil,
+                     canvasClippedStage: Int? = nil,
+                     canvasTouchStage: Int? = nil,
+                     mergedBoundary: Int? = nil) throws -> Data {
     var image = CharacterSheetRGBAImage(width: 1536, height: 1024, fill: matte)
     // Give the inferred matte a little deterministic border variance.
     for x in 0..<image.width {
@@ -35,16 +39,42 @@ private func fixture(emptyStage: Int? = nil, clippedStage: Int? = nil) throws ->
     ]
     for (index, form) in forms.enumerated() where index != emptyStage {
         let panelX = index * 512
-        let localX = clippedStage == index ? 5 : form.x
-        paintRect(&image, x: panelX + localX, y: form.y,
-                  width: form.width, height: form.height, color: ink)
+        var globalX = panelX + form.x
+        var width = form.width
+        var y = form.y
+        if index == 1, let middleFormOverride {
+            // A complete middle form can legitimately extend past the model's
+            // requested 512px thirds. There is still clean matte between it
+            // and the next form, so this is recoverable rather than clipped.
+            globalX = middleFormOverride.x
+            width = middleFormOverride.width
+        }
+        if canvasClippedStage == index {
+            if index == 0 { globalX = 5 }
+            if index == 1 { y = 5 }
+            if index == 2 { globalX = image.width - width - 5 }
+        }
+        if canvasTouchStage == index {
+            if index == 0 { globalX = 0 }
+            if index == 1 { y = 0 }
+            if index == 2 { globalX = image.width - width }
+        }
+        paintRect(&image, x: globalX, y: y,
+                  width: width, height: form.height, color: ink)
         // A near-background-colored inset must survive because it is not
         // border-connected to the matte.
-        paintRect(&image, x: panelX + localX + 20, y: form.y + 30,
+        paintRect(&image, x: globalX + 20, y: y + 30,
                   width: 20, height: 20, color: nearMatte)
         // Provider dust should not expand the character bounds.
         paintRect(&image, x: panelX + 50, y: 50, width: 2, height: 2,
                   color: (130, 40, 170, 255))
+    }
+    if mergedBoundary == 0 {
+        // Join the first two otherwise-valid forms across their entire gutter.
+        // No lossless vertical partition exists around x=512.
+        paintRect(&image, x: 342, y: 500, width: 322, height: 12, color: ink)
+    } else if mergedBoundary == 1 {
+        paintRect(&image, x: 873, y: 500, width: 283, height: 12, color: ink)
     }
     return try CharacterSheetProcessor.encodePNG(image)
 }
@@ -58,6 +88,59 @@ private func containsColor(_ image: CharacterSheetRGBAImage,
         }
     }
     return false
+}
+
+private func singleStageFixture(clipped: Bool = false, touchesEdge: Bool = false,
+                                color: (UInt8, UInt8, UInt8, UInt8) = (45, 144, 132, 255)) throws
+    -> Data {
+    var image = CharacterSheetRGBAImage(width: 1024, height: 1024, fill: matte)
+    for x in 0..<image.width {
+        let delta = UInt8(x % 3)
+        image.setRGBA(x: x, y: 0, (241 + delta, 236 + delta, 226 + delta, 255))
+        image.setRGBA(x: x, y: image.height - 1, (241 + delta, 236 + delta, 226 + delta, 255))
+    }
+    let x = touchesEdge ? 0 : (clipped ? 5 : 300)
+    paintRect(&image, x: x, y: 180,
+              width: 424, height: 700, color: color)
+    paintRect(&image, x: x + 20, y: 210,
+              width: 20, height: 20, color: nearMatte)
+    paintRect(&image, x: 80, y: 80, width: 2, height: 2,
+              color: (130, 40, 170, 255))
+    return try CharacterSheetProcessor.encodePNG(image)
+}
+
+private func candidateBoardFixture(crossSecondDivider: Bool = false) throws -> Data {
+    var image = CharacterSheetRGBAImage(width: 1024, height: 1024, fill: matte)
+    for x in 0..<image.width {
+        let delta = UInt8(x % 3)
+        image.setRGBA(x: x, y: 0, (241 + delta, 236 + delta, 226 + delta, 255))
+        image.setRGBA(x: x, y: image.height - 1, (241 + delta, 236 + delta, 226 + delta, 255))
+    }
+    let forms = [
+        (x: 90, width: 160, height: 560),
+        (x: 420, width: crossSecondDivider ? 290 : 180, height: 620),
+        (x: 770, width: 170, height: 590),
+    ]
+    for (index, form) in forms.enumerated() {
+        let y = 850 - form.height
+        paintRect(&image, x: form.x, y: y, width: form.width,
+                  height: form.height, color: ink)
+        paintRect(&image, x: form.x + 18, y: y + 24, width: 18,
+                  height: 18, color: nearMatte)
+        paintRect(&image, x: 35 + index * 340, y: 45,
+                  width: 2, height: 2, color: (130, 40, 170, 255))
+    }
+    return try CharacterSheetProcessor.encodePNG(image)
+}
+
+private func cellBytes(_ image: CharacterSheetRGBAImage, index: Int) -> [UInt8] {
+    var bytes: [UInt8] = []
+    bytes.reserveCapacity(512 * 512 * 4)
+    for y in 0..<512 {
+        let start = (y * image.width + index * 512) * 4
+        bytes.append(contentsOf: image.pixels[start..<(start + 512 * 4)])
+    }
+    return bytes
 }
 
 @main
@@ -92,11 +175,24 @@ struct CharacterSheetTests {
         }
 
         let input = try fixture()
+        var oversizedHeader = input
+        oversizedHeader.replaceSubrange(16..<20, with: [0x00, 0x01, 0x00, 0x00])
+        do {
+            _ = try CharacterSheetProcessor.process(pngData: oversizedHeader)
+            expect(false, "unsafe PNG dimensions should fail before raster decoding")
+        } catch {
+            expect(error as? CharacterSheetProcessingError == .invalidDimensions(
+                width: 65_536, height: 1_024),
+                "PNG IHDR dimensions should be preflighted before AppKit decoding")
+        }
         let result = try CharacterSheetProcessor.process(pngData: input)
         expect(result.stages.map(\.kind) == [.seed, .bloom, .radiant],
                "stage order must be Seed, Bloom, Radiant")
         expect(result.stagePNGs.count == 3, "processor should expose all three stage PNGs")
         expect(result.baselineY == 480, "all stages should share the documented feet baseline")
+        expect(result.quality.resolvedBoundaries == [512, 1024]
+               && result.quality.boundaryRecoveries.isEmpty,
+               "a well-spaced sheet should retain nominal thirds without recovery warnings")
 
         let combined = try CharacterSheetProcessor.decodePNG(result.pngData)
         expect(combined.width == 1536 && combined.height == 512,
@@ -129,6 +225,29 @@ struct CharacterSheetTests {
         expect(result.pngData == repeated.pngData,
                "processing the same sheet should be byte-for-byte deterministic")
 
+        let candidateBoard = try CharacterSheetProcessor.processCandidateBoard(
+            pngData: candidateBoardFixture())
+        expect(candidateBoard.candidatePNGs.count == 3,
+               "the Low exploration board should expose exactly three candidates")
+        expect(candidateBoard.quality.resolvedBoundaries == [341, 683],
+               "a well-spaced candidate board should preserve rounded thirds")
+        let candidateStrip = try CharacterSheetProcessor.decodePNG(candidateBoard.pngData)
+        expect(candidateStrip.width == 1536 && candidateStrip.height == 512,
+               "candidate comparison output should use three transparent 512px cells")
+        for png in candidateBoard.candidatePNGs {
+            let candidate = try CharacterSheetProcessor.decodePNG(png)
+            expect(candidate.width == 512 && candidate.height == 512
+                   && candidate.rgba(x: 0, y: 0).3 == 0,
+                   "each selectable candidate should be a transparent 512px master")
+        }
+        let recoveredCandidateBoard = try CharacterSheetProcessor.processCandidateBoard(
+            pngData: candidateBoardFixture(crossSecondDivider: true))
+        expect(recoveredCandidateBoard.quality.resolvedBoundaries[1] > 683
+               && recoveredCandidateBoard.quality.boundaryRecoveries.contains(where: {
+                   $0.boundaryIndex == 1 && $0.resolvedX > 683
+               }),
+               "a complete candidate crossing a nominal divider should recover at its real gutter")
+
         do {
             _ = try CharacterSheetProcessor.process(pngData: fixture(emptyStage: 1))
             expect(false, "an empty evolution panel should fail")
@@ -137,12 +256,116 @@ struct CharacterSheetTests {
                    "empty panel should identify its stage")
         }
 
+        let recovered = try CharacterSheetProcessor.process(
+            pngData: fixture(middleFormOverride: (x: 820, width: 230)))
+        expect(recovered.stages[1].sourceBounds.width == 230,
+               "a complete middle form crossing the artificial 1024px divider should be recovered")
+        expect(recovered.quality.resolvedBoundaries[1] > 1024,
+               "the real right gutter should replace the crossed nominal divider")
+        expect(recovered.quality.boundaryRecoveries.contains(where: {
+            $0.boundaryIndex == 1 && $0.nominalX == 1024 && $0.resolvedX > 1024
+        }), "adaptive boundary recovery should be exposed as structured quality metadata")
+
+        let recoveredAcrossLeft = try CharacterSheetProcessor.process(
+            pngData: fixture(middleFormOverride: (x: 500, width: 210)))
+        expect(recoveredAcrossLeft.stages[1].sourceBounds.width == 210
+               && recoveredAcrossLeft.quality.resolvedBoundaries[0] < 512,
+               "a complete middle form crossing the artificial 512px divider should also recover")
+
+        for clippedStage in 0..<3 {
+            do {
+                _ = try CharacterSheetProcessor.process(
+                    pngData: fixture(canvasClippedStage: clippedStage))
+                expect(false, "a form touching a physical source-canvas edge should fail")
+            } catch {
+                expect(error as? CharacterSheetProcessingError == .stageTouchesMargin(clippedStage),
+                       "physical canvas clipping should still identify stage \(clippedStage + 1)")
+            }
+        }
+
+        for nearEdgeStage in 0..<3 {
+            let salvaged = try CharacterSheetProcessor.process(
+                pngData: fixture(canvasClippedStage: nearEdgeStage),
+                allowNearEdgeRecovery: true)
+            expect(salvaged.quality.nearEdgeRecoveries.contains(nearEdgeStage),
+                   "the explicit salvage pass should disclose a complete near-edge stage")
+            do {
+                _ = try CharacterSheetProcessor.process(
+                    pngData: fixture(canvasTouchStage: nearEdgeStage),
+                    allowNearEdgeRecovery: true)
+                expect(false, "a character actually touching the source edge must not be salvaged")
+            } catch {
+                expect(error as? CharacterSheetProcessingError == .stageTouchesMargin(nearEdgeStage),
+                       "zero-clearance output must still fail in salvage mode")
+            }
+        }
+
+        for mergedBoundary in 0..<2 {
+            do {
+                _ = try CharacterSheetProcessor.process(
+                    pngData: fixture(mergedBoundary: mergedBoundary))
+                expect(false, "stages joined across a divider should fail")
+            } catch {
+                expect(error as? CharacterSheetProcessingError == .stagesMerged(mergedBoundary),
+                       "an inseparable stage pair should identify boundary \(mergedBoundary + 1)")
+            }
+        }
+
+        let regenerated = try CharacterSheetProcessor.processSingleStage(
+            pngData: singleStageFixture(), kind: .bloom)
+        expect(regenerated.stage.kind == .bloom && regenerated.baselineY == 480,
+               "single-form processing should preserve the selected evolution kind and baseline")
+        let regeneratedPNG = try CharacterSheetProcessor.decodePNG(regenerated.stage.pngData)
+        expect(regeneratedPNG.width == 512 && regeneratedPNG.height == 512,
+               "a regenerated form should normalize to one transparent 512px cell")
+        expect(regeneratedPNG.rgba(x: 0, y: 0).3 == 0,
+               "single-form matte removal should produce transparency")
+        expect(containsColor(regeneratedPNG, nearMatte),
+               "single-form processing should preserve enclosed near-matte details")
+
+        let replacedData = try CharacterSheetProcessor.replaceStage(
+            in: result.pngData, kind: .bloom, with: regenerated.stage.pngData)
+        let replaced = try CharacterSheetProcessor.decodePNG(replacedData)
+        expect(cellBytes(replaced, index: 0) == cellBytes(combined, index: 0),
+               "replacing Bloom must not alter the paid Seed frame")
+        expect(cellBytes(replaced, index: 1) != cellBytes(combined, index: 1),
+               "replacing Bloom should update exactly its frame")
+        expect(cellBytes(replaced, index: 2) == cellBytes(combined, index: 2),
+               "replacing Bloom must not alter the paid Radiant frame")
+
         do {
-            _ = try CharacterSheetProcessor.process(pngData: fixture(clippedStage: 2))
-            expect(false, "a clipped evolution panel should fail")
+            _ = try CharacterSheetProcessor.processSingleStage(
+                pngData: singleStageFixture(clipped: true), kind: .bloom)
+            expect(false, "a regenerated form clipped by its physical canvas should fail")
         } catch {
-            expect(error as? CharacterSheetProcessingError == .stageTouchesMargin(2),
-                   "clipped panel should identify its stage")
+            expect(error as? CharacterSheetProcessingError == .stageTouchesMargin(1),
+                   "single-form canvas clipping should preserve the selected stage index")
+        }
+        let salvagedSingle = try CharacterSheetProcessor.processSingleStage(
+            pngData: singleStageFixture(clipped: true), kind: .bloom,
+            allowNearEdgeRecovery: true)
+        expect(salvagedSingle.recoveredNearEdge,
+               "single-stage recovery should use a genuinely more tolerant 1px-safe pass")
+        do {
+            _ = try CharacterSheetProcessor.processSingleStage(
+                pngData: singleStageFixture(touchesEdge: true), kind: .bloom,
+                allowNearEdgeRecovery: true)
+            expect(false, "a single form touching the canvas cannot be reconstructed locally")
+        } catch {
+            expect(error as? CharacterSheetProcessingError == .stageTouchesMargin(1),
+                   "single-stage salvage must keep zero-clearance rejection")
+        }
+
+        let opaqueStage = CharacterSheetRGBAImage(width: 512, height: 512, fill: matte)
+        do {
+            _ = try CharacterSheetProcessor.replaceStage(
+                in: result.pngData,
+                kind: .seed,
+                with: CharacterSheetProcessor.encodePNG(opaqueStage))
+            expect(false, "a raw opaque image must not be inserted as a normalized stage")
+        } catch {
+            expect(error as? CharacterSheetProcessingError == .normalizedStageHasBackground,
+                   "replacement should reject a stage whose background was not removed")
         }
 
         print("character sheet tests passed")

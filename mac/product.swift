@@ -5,12 +5,90 @@ import Cocoa
 import WebKit
 import ServiceManagement
 import UniformTypeIdentifiers
+import ImageIO
 
-struct PendingCharacterSheetDraft {
+struct PendingCandidateBoardDraft {
     let pngData: Data
+    let candidatePNGs: [Data]
+    let sourceDataURI: String
+    let referenceEvidenceJSON: String
     let temperamentID: String
-    let quality: PetGenerationQuality
+    let likeness: Double
+    var lastTouchedAt: Date
+}
+
+struct PendingEvolutionSheetDraft {
+    var pngData: Data
+    var stagePNGs: [Data]
+    let masterPNG: Data
+    let sourceDataURI: String
+    let referenceEvidenceJSON: String
+    let temperamentID: String
+    let likeness: Double
+    let quality: PetFinalGenerationQuality
+    var stageQualities: [PetFinalGenerationQuality]
+    var lastTouchedAt: Date
+    var relatedRequestIDs: [String]
+}
+
+struct CandidateGenerationRecovery {
+    let rawPNG: Data
+    let sourceDataURI: String
+    let referenceEvidenceJSON: String
+    let temperamentID: String
+    let likeness: Double
+    let providerSeconds: Double
+    let usage: PetGenerationUsage
+    let styleBoardUsed: Bool
     let createdAt: Date
+}
+
+struct EvolutionGenerationRecovery {
+    let rawPNG: Data
+    let masterPNG: Data
+    let sourceDataURI: String
+    let referenceEvidenceJSON: String
+    let temperamentID: String
+    let likeness: Double
+    let quality: PetFinalGenerationQuality
+    let providerSeconds: Double
+    let usage: PetGenerationUsage
+    let candidateDraftID: String
+    let styleBoardUsed: Bool
+    let createdAt: Date
+}
+
+struct PendingReferencePreflight {
+    let sourceDataURI: String
+    let referenceEvidenceJSON: String
+    let profile: CustomPetTemperamentProfile
+    let likeness: Double
+    let createdAt: Date
+}
+
+struct StageGenerationRecovery {
+    let rawPNG: Data
+    let parentDraftID: String
+    let stage: PetEvolutionStage
+    let quality: PetFinalGenerationQuality
+    let providerSeconds: Double
+    let usage: PetGenerationUsage
+    let styleBoardUsed: Bool
+    let createdAt: Date
+}
+
+enum PendingLocalGenerationRecovery {
+    case candidates(CandidateGenerationRecovery)
+    case evolution(EvolutionGenerationRecovery)
+    case replacement(StageGenerationRecovery)
+
+    var createdAt: Date {
+        switch self {
+        case .candidates(let value): return value.createdAt
+        case .evolution(let value): return value.createdAt
+        case .replacement(let value): return value.createdAt
+        }
+    }
 }
 
 // ── data retention & privacy eraser ─────────────────────────
@@ -91,21 +169,31 @@ func appIconDataURI(_ bundleId: String) -> String? {
 }
 
 func petReferenceDataURI(_ url: URL) -> String? {
-    guard let source = NSImage(contentsOf: url), source.size.width > 0, source.size.height > 0 else { return nil }
-    let canvasSide: CGFloat = 768
-    let scale = min(canvasSide / source.size.width, canvasSide / source.size.height)
-    let fitted = NSSize(width: source.size.width * scale, height: source.size.height * scale)
-    let destination = NSRect(x: (canvasSide - fitted.width) / 2, y: (canvasSide - fitted.height) / 2,
-                             width: fitted.width, height: fitted.height)
-    let image = NSImage(size: NSSize(width: canvasSide, height: canvasSide))
-    image.lockFocus()
-    NSGraphicsContext.current?.imageInterpolation = .high
-    source.draw(in: destination, from: NSRect(origin: .zero, size: source.size),
-                operation: .copy, fraction: 1)
-    image.unlockFocus()
-    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-          let png = rep.representation(using: .png, properties: [:]) else { return nil }
-    return "data:image/png;base64," + png.base64EncodedString()
+    let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? Int.max
+    guard fileSize > 0, fileSize <= 20 * 1024 * 1024,
+          let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any],
+          let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+          let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+          width.intValue > 0, height.intValue > 0,
+          width.intValue <= 16_384, height.intValue <= 16_384,
+          Int64(width.intValue) * Int64(height.intValue) <= 100_000_000 else { return nil }
+    // Preserve enough detail for local face/person detection in tall social
+    // screenshots and collage panels. Do not letterbox: black/empty borders
+    // are precisely the noise the reference preflight needs to discard.
+    let maximumDimension = 2_048
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maximumDimension,
+        kCGImageSourceShouldCacheImmediately: true,
+    ]
+    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+        imageSource, 0, options as CFDictionary) else { return nil }
+    let rep = NSBitmapImageRep(cgImage: thumbnail)
+    guard let jpeg = rep.representation(using: .jpeg,
+                                        properties: [.compressionFactor: 0.88]) else { return nil }
+    return "data:image/jpeg;base64," + jpeg.base64EncodedString()
 }
 
 func validGeneratedPetSpec(_ spec: [String: Any]) -> Bool {
@@ -271,6 +359,10 @@ extension AppDelegate {
     }
 
     @objc func showSettings() {
+        pruneStudioState()
+        touchVisibleStudioDrafts()
+        studioNotice = nil
+        statusItem?.button?.toolTip = "Mimo"
         if let w = settingsWin {
             pushSettingsState()
             NSApp.activate(ignoringOtherApps: true)
@@ -289,6 +381,7 @@ extension AppDelegate {
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 780),
                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
         win.title = voice("Mimo 米墨", "Mimo")
+        win.delegate = self
         win.contentView = web
         win.isReleasedWhenClosed = false
         win.center()
@@ -296,6 +389,28 @@ extension AppDelegate {
         settingsWin = win
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window === settingsWin else { return }
+        touchVisibleStudioDrafts()
+        if let requestID = studioGenerationLedger.activeRequestID {
+            backgroundStudioRequests.insert(requestID)
+        }
+    }
+
+    private func touchVisibleStudioDrafts(now: Date = Date()) {
+        if let visibleEvolutionDraftID,
+           var value = pendingEvolutionSheets[visibleEvolutionDraftID] {
+            value.lastTouchedAt = now
+            pendingEvolutionSheets[visibleEvolutionDraftID] = value
+        }
+        if let visibleCandidateDraftID,
+           var value = pendingCandidateBoards[visibleCandidateDraftID] {
+            value.lastTouchedAt = now
+            pendingCandidateBoards[visibleCandidateDraftID] = value
+        }
     }
 
     func permLine(_ code: OSStatus) -> String {
@@ -334,13 +449,892 @@ extension AppDelegate {
             "projects": GitWatcher.projectsDir().lastPathComponent,
             "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
             "openAIConfigured": MimoSecret.openAI.isConfigured,
-            "imageQuality": PetGenerationQuality.resolve(d.string(forKey: "petImageQuality")).rawValue,
+            "imageQuality": PetFinalGenerationQuality.resolve(
+                d.string(forKey: "petImageQuality")).rawValue,
+            "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),
         ]
         if let customPet = storedCustomPetSpec() { state["customPet"] = customPet }
         state["customPets"] = (try? customPetStore.listRuntimeSpecs()) ?? []
         guard let data = try? JSONSerialization.data(withJSONObject: state),
               let json = String(data: data, encoding: .utf8) else { return }
         settingsWeb?.evaluateJavaScript("initSettings(\(json))", completionHandler: nil)
+    }
+
+    private func generationRequestID(_ value: Any?) -> String? {
+        guard let value = value as? String, let uuid = UUID(uuidString: value) else { return nil }
+        return uuid.uuidString.lowercased()
+    }
+
+    /// Decodes the bounded, browser-normalized reference set without retaining
+    /// filenames or source bytes beyond the local preflight closure. Primary is
+    /// moved first because it anchors conservative same-subject grouping.
+    private func petReferenceInputs(_ body: [String: Any]) -> [MimoReferenceInput]? {
+        struct Row {
+            let id: String
+            let data: Data
+            let order: Int
+            let primary: Bool
+        }
+
+        let primaryID = body["primaryReferenceID"] as? String
+        var rows: [Row] = []
+        var seen = Set<String>()
+        var totalBytes = 0
+        if let references = body["references"] as? [[String: Any]], !references.isEmpty {
+            guard references.count <= 8 else { return nil }
+            for (index, reference) in references.enumerated() {
+                guard let id = reference["id"] as? String,
+                      !id.isEmpty, id.utf8.count <= 128, seen.insert(id).inserted,
+                      let source = reference["source"] as? String,
+                      source.hasPrefix("data:image/"), source.utf8.count < 28_000_000,
+                      let data = PetGenerationCoordinator.dataFromDataURI(source),
+                      !data.isEmpty, data.count <= 20 * 1024 * 1024,
+                      PetGenerationCoordinator.isSupportedImageData(data),
+                      totalBytes <= 64 * 1024 * 1024 - data.count else { return nil }
+                totalBytes += data.count
+                let order = (reference["order"] as? NSNumber)?.intValue ?? index
+                rows.append(Row(id: id, data: data, order: order,
+                                primary: id == primaryID || reference["role"] as? String == "primary"))
+            }
+        } else {
+            guard let source = body["source"] as? String,
+                  source.hasPrefix("data:image/"), source.utf8.count < 28_000_000,
+                  let data = PetGenerationCoordinator.dataFromDataURI(source),
+                  !data.isEmpty, data.count <= 20 * 1024 * 1024,
+                  PetGenerationCoordinator.isSupportedImageData(data) else { return nil }
+            rows = [Row(id: "legacy-primary", data: data, order: 0, primary: true)]
+        }
+        guard !rows.isEmpty else { return nil }
+        rows.sort {
+            if $0.primary != $1.primary { return $0.primary && !$1.primary }
+            if $0.order != $1.order { return $0.order < $1.order }
+            return $0.id < $1.id
+        }
+        return rows.map { MimoReferenceInput(id: $0.id, data: $0.data) }
+    }
+
+    private func pushPetReferenceAnalysis(_ result: MimoReferencePreprocessingResult) {
+        let usedIDs = Set(result.providerPayload?.identityBoard.sourceInputIDs ?? [])
+        let rows: [[String: Any]] = result.images.map { image in
+            var zh: [String] = []
+            var en: [String] = []
+            let used = usedIDs.contains(image.inputID)
+            zh.append(used ? "✓ 身份板采用" : "未采用")
+            en.append(used ? "✓ used in board" : "not used")
+            if let person = image.usablePeople.first {
+                var zhDetail = "人物 ×\(max(1, image.detectedPersonCount))"
+                var enDetail = "person ×\(max(1, image.detectedPersonCount))"
+                switch person.view {
+                case .frontal: zhDetail += " · 正面"; enDetail += " · front"
+                case .threeQuarter: zhDetail += " · 3/4"; enDetail += " · 3/4"
+                case .profile: zhDetail += " · 侧脸"; enDetail += " · profile"
+                case .unknown: break
+                }
+                zh.append(zhDetail); en.append(enDetail)
+            } else if used {
+                zh.append("主体备用"); en.append("subject fallback")
+            } else {
+                zh.append("未找到清楚人物"); en.append("no clear person")
+            }
+            return [
+                "id": image.inputID,
+                "status": "ready",
+                "badgesZh": Array(zh.prefix(2)),
+                "badgesEn": Array(en.prefix(2)),
+            ]
+        }
+        settingsCall("petReferenceAnalysis", ["references": rows])
+    }
+
+    func startStudioCleanup() {
+        studioCleanupTimer?.invalidate()
+        studioCleanupTimer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
+            self?.pruneStudioState()
+        }
+    }
+
+    func pruneStudioState(now: Date = Date()) {
+        let sessionCutoff = now.addingTimeInterval(-30 * 60)
+        let ledgerCutoff = now.addingTimeInterval(-FamiliarGenerationDraftStore.retention)
+        let expiredPreflights = pendingReferencePreflights.compactMap { key, value in
+            value.createdAt < sessionCutoff ? key : nil
+        }
+        for requestID in expiredPreflights {
+            pendingReferencePreflights.removeValue(forKey: requestID)
+            if studioGenerationLedger.activeRequestID == requestID {
+                studioGenerationLedger.finish(requestID: requestID)
+                backgroundStudioRequests.remove(requestID)
+            }
+        }
+        pendingLocalRecoveries = pendingLocalRecoveries.filter { $0.value.createdAt >= sessionCutoff }
+        let recoveryParentIDs = pendingLocalRecoveries.values.compactMap { recovery -> String? in
+            if case .replacement(let value) = recovery { return value.parentDraftID }
+            return nil
+        }
+        var pinnedEvolutionIDs = Set(activeStageParents.values).union(recoveryParentIDs)
+        if settingsWin?.isVisible == true, let visibleEvolutionDraftID {
+            pinnedEvolutionIDs.insert(visibleEvolutionDraftID)
+        }
+        pendingEvolutionSheets = retainingStudioDrafts(
+            pendingEvolutionSheets, newerThan: sessionCutoff,
+            pinnedIDs: pinnedEvolutionIDs, lastTouchedAt: { $0.lastTouchedAt })
+        let recoveryCandidateIDs = pendingLocalRecoveries.values.compactMap { recovery -> String? in
+            if case .evolution(let value) = recovery { return value.candidateDraftID }
+            return nil
+        }
+        let pinnedCandidateIDs = Set(pendingEvolutionSheets.values.flatMap(\.relatedRequestIDs))
+            .union(recoveryCandidateIDs)
+            .union(settingsWin?.isVisible == true
+                   ? visibleCandidateDraftID.map { Set([$0]) } ?? [] : [])
+        pendingCandidateBoards = retainingStudioDrafts(
+            pendingCandidateBoards, newerThan: sessionCutoff,
+            pinnedIDs: pinnedCandidateIDs, lastTouchedAt: { $0.lastTouchedAt })
+        if let visibleEvolutionDraftID,
+           pendingEvolutionSheets[visibleEvolutionDraftID] == nil {
+            self.visibleEvolutionDraftID = nil
+            settingsCall("petDraftExpired", ["kind": "evolution", "draftID": visibleEvolutionDraftID])
+        }
+        if let visibleCandidateDraftID,
+           pendingCandidateBoards[visibleCandidateDraftID] == nil {
+            self.visibleCandidateDraftID = nil
+            settingsCall("petDraftExpired", ["kind": "candidate", "draftID": visibleCandidateDraftID])
+        }
+        studioGenerationLedger.prune(before: ledgerCutoff)
+        _ = try? generationDraftStore.purgeExpired(now: now)
+    }
+
+    private func announceStudioBackground(_ requestID: String, kind: String,
+                                          _ zh: String, _ en: String) {
+        guard backgroundStudioRequests.remove(requestID) != nil else { return }
+        let message = voice(zh, en)
+        studioNotice = message
+        statusItem?.button?.toolTip = message
+        js("famNotice(\(jsonStr(kind)), \(jsonStr(message)))")
+    }
+
+    private func reserveProviderGeneration(_ requestID: String) -> Bool {
+        switch studioGenerationLedger.reserve(requestID: requestID) {
+        case .accepted:
+            return true
+        case .duplicateActive:
+            settingsCall("petStudioProgress", [
+                "requestID": requestID, "phase": "generating",
+                "messageZh": "这个请求已经在进行，不会重复扣费。",
+                "messageEn": "This request is already running; Mimo did not submit it twice.",
+            ])
+        case .anotherRequestActive:
+            settingsCall("petStudioError", [
+                "requestID": requestID, "kind": "setup", "phase": "busy",
+                "code": "generation_in_progress",
+                "messageZh": "另一个生成还在进行；米墨没有发出第二个付费请求。",
+                "messageEn": "Another generation is still running; Mimo did not submit a second paid request.",
+                "outputRetained": false, "requestNotStarted": true,
+            ])
+        case .requestIDReused:
+            settingsCall("petStudioError", [
+                "requestID": requestID, "kind": "setup", "phase": "input",
+                "code": "request_id_reused",
+                "messageZh": "这个请求编号已经用过；为避免重复扣费，米墨没有再次提交。",
+                "messageEn": "This request ID was already used; Mimo did not resubmit it and risk a duplicate charge.",
+                "outputRetained": false, "requestNotStarted": true,
+            ])
+        }
+        return false
+    }
+
+    private func reserveLocalProcessing(_ requestID: String) -> Bool {
+        studioGenerationLedger.reserveLocalProcessing(requestID: requestID)
+    }
+
+    private func studioProgress(requestID: String, phase: String, startedAt: Date,
+                                partial: Data? = nil, providerSeconds: Double? = nil,
+                                localSeconds: Double? = nil, warnings: [String] = []) {
+        var payload: [String: Any] = [
+            "requestID": requestID,
+            "phase": phase,
+            "elapsedSeconds": Date().timeIntervalSince(startedAt),
+        ]
+        if let partial { payload["partialImage"] = PetGenerationCoordinator.dataURI(partial) }
+        if let providerSeconds { payload["providerSeconds"] = providerSeconds }
+        if let localSeconds { payload["localSeconds"] = localSeconds }
+        if !warnings.isEmpty { payload["warnings"] = warnings }
+        settingsCall("petStudioProgress", payload)
+    }
+
+    private func boundaryWarnings(_ quality: CharacterSheetQualityMetadata) -> [[String: String]] {
+        let boundary = quality.boundaryRecoveries.map {
+            [
+                "zh": "已把内部第 \($0.boundaryIndex + 1) 条分隔参考线从 x=\($0.nominalX) 调整到真实空隙 x=\($0.resolvedX)。",
+                "en": "Recovered divider \($0.boundaryIndex + 1) from x=\($0.nominalX) to x=\($0.resolvedX).",
+            ]
+        }
+        let nearEdge = quality.nearEdgeRecoveries.map {
+            [
+                "zh": "第 \($0 + 1) 个形态很靠近画布，但仍有完整边距；已用安全恢复模式提取。",
+                "en": "Recovered complete form \($0 + 1) from a narrow but nonzero canvas margin.",
+            ]
+        }
+        return boundary + nearEdge
+    }
+
+    private func localProcessingCopy(_ error: Error) -> (code: String, zh: String, en: String) {
+        guard let value = error as? CharacterSheetProcessingError else {
+            return ("local_processing_failed",
+                    "米墨的本机处理没有完成；OpenAI 原始结果仍可查看。",
+                    error.localizedDescription)
+        }
+        switch value {
+        case .notPNG:
+            return ("not_png", "OpenAI 返回的文件不是可处理的 PNG。", value.localizedDescription)
+        case .unreadableImage:
+            return ("unreadable_image", "这张生成图在本机无法解码。", value.localizedDescription)
+        case .invalidDimensions(let width, let height):
+            return ("invalid_sheet_dimensions", "成长图尺寸应为 1536×1024，实际是 \(width)×\(height)。", value.localizedDescription)
+        case .invalidCandidateBoardDimensions(let width, let height):
+            return ("invalid_candidate_dimensions", "候选图尺寸应为 1024×1024，实际是 \(width)×\(height)。", value.localizedDescription)
+        case .invalidSingleStageDimensions(let width, let height):
+            return ("invalid_stage_dimensions", "单段重画尺寸应为 1024×1024，实际是 \(width)×\(height)。", value.localizedDescription)
+        case .invalidNormalizedSheetDimensions, .invalidNormalizedStageDimensions:
+            return ("invalid_local_asset", "本机透明角色图的尺寸不符合安装格式。", value.localizedDescription)
+        case .emptyStage(let index):
+            return ("empty_form", "第 \(index + 1) 个形态是空的。", value.localizedDescription)
+        case .stageTooSmall(let index):
+            return ("form_too_small", "第 \(index + 1) 个形态太小，无法安全变成桌面角色。", value.localizedDescription)
+        case .stageTouchesMargin(let index):
+            return ("form_near_edge", "第 \(index + 1) 个形态离真实画布边缘太近；可免费尝试更宽容的安全提取。", value.localizedDescription)
+        case .stagesMerged(let boundary):
+            return ("forms_merged", "第 \(boundary + 1) 和第 \(boundary + 2) 个形态粘在一起，无法无损分开。", value.localizedDescription)
+        case .normalizedStageHasBackground:
+            return ("background_not_removed", "单段重画仍带有不透明背景，不能覆盖已接受的角色图。", value.localizedDescription)
+        case .encodingFailed:
+            return ("local_encoding_failed", "本机无法编码最终透明角色图。", value.localizedDescription)
+        }
+    }
+
+    private func providerFailureCopy(_ error: Error) -> (code: String, zh: String, en: String) {
+        let detail = error.localizedDescription
+        let lower = detail.lowercased()
+        if let generation = error as? PetGenerationError, case .timedOut = generation {
+            return ("provider_timeout", "OpenAI 这次生成超时了；没有可用的最终图片返回。", "OpenAI timed out before returning a usable final image.")
+        }
+        if let urlError = error as? URLError {
+            if urlError.code == .timedOut {
+                return ("network_timeout", "连接等待超时；请稍后重试。", "The connection timed out; try again shortly.")
+            }
+            return ("network_error", "连接 OpenAI 时中断了；请检查网络后重试。", "The connection to OpenAI was interrupted; check the network and try again.")
+        }
+        if lower.contains("429") || lower.contains("rate limit") || lower.contains("too many requests") {
+            return ("rate_limited", "OpenAI 现在请求太多；等一会儿再试。", "OpenAI is rate-limiting requests; wait a moment and try again.")
+        }
+        if lower.contains("quota") || lower.contains("billing") || lower.contains("credit") || lower.contains("insufficient") {
+            return ("quota_exhausted", "这个 OpenAI API 账户的额度或余额不足。", "This OpenAI API account has insufficient quota or credits.")
+        }
+        if lower.contains("safety") || lower.contains("content policy") || lower.contains("moderation") {
+            return ("safety_rejected", "OpenAI 的安全检查没有接受这次图片请求；可以换一张参考图或调整描述。", "OpenAI safety checks rejected this image request; try another reference or description.")
+        }
+        if lower.contains("timed out") || lower.contains("timeout") {
+            return ("provider_timeout", "这次生成等待超时；没有可用的最终图片返回。", "Generation timed out before a usable final image returned.")
+        }
+        return ("provider_failed", "OpenAI 没有返回可用的最终图片；可以稍后重试。", "OpenAI did not return a usable final image; try again later.")
+    }
+
+    private func canSalvageNearEdge(_ error: Error) -> Bool {
+        guard let processing = error as? CharacterSheetProcessingError else { return false }
+        if case .stageTouchesMargin = processing { return true }
+        return false
+    }
+
+    private func retainedDraftExists(_ requestID: String) -> Bool {
+        (try? generationDraftStore.manifest(requestID: requestID)) != nil
+    }
+
+    private func retainRaw(_ rawPNG: Data, requestID: String,
+                           phase: FamiliarGenerationPhase, quality: String,
+                           providerSeconds: Double) -> Bool {
+        do {
+            try generationDraftStore.saveRaw(requestID: requestID, pngData: rawPNG,
+                                             phase: phase, quality: quality,
+                                             providerSeconds: providerSeconds)
+            return true
+        } catch {
+            NSLog("Mimo could not retain generated output %@: %@", requestID, error.localizedDescription)
+            return false
+        }
+    }
+
+    private func studioProviderError(requestID: String, error: Error,
+                                     startedAt: Date, phase: String) {
+        guard studioGenerationLedger.activeRequestID == requestID else { return }
+        activeStageParents.removeValue(forKey: requestID)
+        if let generationError = error as? PetGenerationError,
+           case .missingKey = generationError {
+            settingsCall("petStudioError", [
+                "requestID": requestID, "kind": "setup", "phase": "input",
+                "code": "missing_api_key",
+                "messageZh": "请先连接 OpenAI；图片尚未发送，也不会产生费用。",
+                "messageEn": "Connect OpenAI first; no image was sent and no cost was incurred.",
+                "outputRetained": false, "requestNotStarted": true,
+            ])
+            studioGenerationLedger.finish(requestID: requestID)
+            announceStudioBackground(requestID, kind: "warning", "生成前还需要检查 API 连接。", "Generation needs the API connection checked.")
+            return
+        }
+        let copy = providerFailureCopy(error)
+        settingsCall("petStudioError", [
+            "requestID": requestID,
+            "kind": "provider",
+            "phase": phase,
+            "code": copy.code,
+            "message": copy.en,
+            "messageZh": copy.zh,
+            "messageEn": copy.en,
+            "providerDetail": String(error.localizedDescription.prefix(1000)),
+            "providerSeconds": Date().timeIntervalSince(startedAt),
+            "outputRetained": false,
+        ])
+        studioGenerationLedger.finish(requestID: requestID)
+        announceStudioBackground(requestID, kind: "error", "这次生成没有完成；打开设置可以查看原因。", "Generation did not finish; open Settings for details.")
+    }
+
+    private func studioLocalError(requestID: String, error: Error,
+                                  rawPNG: Data, providerSeconds: Double,
+                                  localSeconds: Double, outputRetained: Bool,
+                                  canRetryLocally: Bool,
+                                  warnings: [[String: String]] = []) {
+        if outputRetained {
+            _ = try? generationDraftStore.markLocalFailure(
+                requestID: requestID, message: error.localizedDescription,
+                localSeconds: localSeconds)
+        }
+        let copy = localProcessingCopy(error)
+        var payload: [String: Any] = [
+            "requestID": requestID,
+            "kind": "local",
+            "phase": "processing",
+            "code": copy.code,
+            "message": copy.en,
+            "messageZh": copy.zh,
+            "messageEn": copy.en,
+            "providerSeconds": providerSeconds,
+            "localSeconds": localSeconds,
+            "rawPreview": PetGenerationCoordinator.dataURI(rawPNG),
+            "outputRetained": outputRetained,
+            "providerCompleted": true,
+            "canRetryLocally": canRetryLocally,
+        ]
+        if canRetryLocally {
+            payload["recoveryDraftID"] = requestID
+            payload["recoveryUntil"] = Date().addingTimeInterval(30 * 60)
+                .timeIntervalSince1970 * 1000
+        }
+        if !warnings.isEmpty { payload["warnings"] = warnings }
+        payload["generationRecoveryCount"] = generationDraftStore.recoverableDraftCount()
+        settingsCall("petStudioError", payload)
+        activeStageParents.removeValue(forKey: requestID)
+        studioGenerationLedger.finish(requestID: requestID)
+        announceStudioBackground(requestID, kind: "warning", "图片已回来，但本机检查没有通过；原图仍可查看。", "The image arrived, but local checks failed; the raw output is still available.")
+    }
+
+    private func prepareCandidateGeneration(requestID: String,
+                                            inputs: [MimoReferenceInput],
+                                            profile: CustomPetTemperamentProfile,
+                                            likeness: Double) {
+        guard reserveProviderGeneration(requestID) else { return }
+        let startedAt = Date()
+        studioProgress(requestID: requestID, phase: "analyzing", startedAt: startedAt)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = MimoReferencePreprocessor().process(inputs, isCancelled: {
+                var cancelled = true
+                DispatchQueue.main.sync { [weak self] in
+                    cancelled = self?.studioGenerationLedger.activeRequestID != requestID
+                }
+                return cancelled
+            })
+            let localSeconds = Date().timeIntervalSince(startedAt)
+            DispatchQueue.main.async {
+                guard let self,
+                      self.studioGenerationLedger.activeRequestID == requestID else { return }
+                self.pushPetReferenceAnalysis(result)
+                guard let payload = result.providerPayload else {
+                    self.settingsCall("petStudioError", [
+                        "requestID": requestID,
+                        "kind": "setup", "phase": "input",
+                        "code": "reference_preflight_failed",
+                        "messageZh": "这些图片里没有找到足够清楚的主体；没有调用 OpenAI，也没有产生费用。请把最清楚的人物或物体设为主参考。",
+                        "messageEn": "Mimo could not find a clear enough subject in these images. OpenAI was not called and no cost was incurred. Make the clearest person or object the primary reference.",
+                        "localSeconds": localSeconds,
+                        "outputRetained": false, "requestNotStarted": true,
+                    ])
+                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.announceStudioBackground(requestID, kind: "warning",
+                                                  "参考图需要更清楚的主角。",
+                                                  "The references need a clearer primary subject.")
+                    return
+                }
+                let boardURI = PetGenerationCoordinator.dataURI(payload.identityBoard.png)
+                self.studioProgress(requestID: requestID, phase: "analyzing",
+                                    startedAt: startedAt,
+                                    partial: payload.identityBoard.png,
+                                    localSeconds: localSeconds,
+                                    warnings: payload.identityBoard.mode == .sanitizedFullFrames
+                                      ? ["No reliable person was found; using a locally sanitized subject board."] : [])
+                self.pendingReferencePreflights[requestID] = PendingReferencePreflight(
+                    sourceDataURI: boardURI,
+                    referenceEvidenceJSON: payload.analysisJSON,
+                    profile: profile, likeness: likeness, createdAt: Date())
+                let ambiguous = result.images.contains {
+                    $0.warnings.contains(.identityAmbiguous)
+                }
+                self.settingsCall("petReferencePreview", [
+                    "requestID": requestID,
+                    "board": boardURI,
+                    "mode": payload.identityBoard.mode.rawValue,
+                    "sourceCount": result.images.count,
+                    "usedSourceCount": Set(payload.identityBoard.sourceInputIDs).count,
+                    "evidenceCount": payload.identityBoard.referenceIDs.count,
+                    "ambiguous": ambiguous,
+                    "localSeconds": localSeconds,
+                    "messageZh": ambiguous
+                      ? "检测到不止一个可能的人物。请确认身份板里的主角正确；不对就取消并把最清楚的图设为主参考。"
+                      : "请确认这就是你想做成伴灵的主角。确认前不会调用 OpenAI。",
+                    "messageEn": ambiguous
+                      ? "More than one possible person was detected. Confirm that the identity board shows the right subject, or cancel and make the clearest image primary."
+                      : "Confirm that this is the subject you want to turn into a familiar. OpenAI is not called before confirmation.",
+                ])
+            }
+        }
+    }
+
+    private func startCandidateGeneration(requestID: String, source: String,
+                                          referenceEvidenceJSON: String,
+                                          profile: CustomPetTemperamentProfile,
+                                          likeness: Double,
+                                          alreadyReserved: Bool = false) {
+        guard alreadyReserved || reserveProviderGeneration(requestID) else { return }
+        let startedAt = Date()
+        let style = MimoStyleReference.requestData()
+        petGenerator.generateCandidateBoard(
+            requestID: requestID, sourceDataURI: source, styleBoardData: style,
+            referenceEvidenceJSON: referenceEvidenceJSON,
+            personalityVisual: profile.promptFragment, likeness: likeness,
+            progress: { [weak self] phase, partial, _ in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                self.studioProgress(requestID: requestID, phase: phase,
+                                    startedAt: startedAt, partial: partial)
+            }, completion: { [weak self] result in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .failure(let error):
+                    self.studioProviderError(requestID: requestID, error: error,
+                                             startedAt: startedAt, phase: "candidates")
+                case .success(let output):
+                    let providerSeconds = Date().timeIntervalSince(startedAt)
+                    let retained = self.retainRaw(
+                        output.data, requestID: requestID, phase: .candidates,
+                        quality: PetGenerationQuality.low.rawValue,
+                        providerSeconds: providerSeconds)
+                    let recovery = CandidateGenerationRecovery(
+                        rawPNG: output.data, sourceDataURI: source,
+                        referenceEvidenceJSON: referenceEvidenceJSON,
+                        temperamentID: profile.id, likeness: likeness,
+                        providerSeconds: providerSeconds, usage: output.usage,
+                        styleBoardUsed: style != nil, createdAt: Date())
+                    self.pendingLocalRecoveries[requestID] = .candidates(recovery)
+                    self.processCandidateGeneration(requestID: requestID,
+                                                    recovery: recovery,
+                                                    outputRetained: retained)
+                }
+            }
+        )
+    }
+
+    private func processCandidateGeneration(requestID: String,
+                                            recovery: CandidateGenerationRecovery,
+                                            outputRetained: Bool,
+                                            salvageNearEdge: Bool = false) {
+        let localStartedAt = Date()
+        studioProgress(requestID: requestID, phase: "processing",
+                       startedAt: localStartedAt,
+                       providerSeconds: recovery.providerSeconds)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result {
+                try CharacterSheetProcessor.processCandidateBoard(
+                    pngData: recovery.rawPNG,
+                    allowNearEdgeRecovery: salvageNearEdge)
+            }
+            let localSeconds = Date().timeIntervalSince(localStartedAt)
+            DispatchQueue.main.async {
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .success(let board):
+                    var warnings = self.boundaryWarnings(board.quality)
+                    if !recovery.styleBoardUsed {
+                        warnings.append([
+                            "zh": "内置米墨风格板没有载入；这次只使用了文字风格约束。",
+                            "en": "The bundled Mimo style board was unavailable; prompt-only styling was used.",
+                        ])
+                    }
+                    if outputRetained {
+                        _ = try? self.generationDraftStore.markProcessed(
+                            requestID: requestID, pngData: board.pngData,
+                            localSeconds: localSeconds,
+                            warnings: warnings.compactMap { $0["en"] })
+                    }
+                    _ = try? self.generationDraftStore.delete(requestID: requestID)
+                    self.pendingCandidateBoards[requestID] = PendingCandidateBoardDraft(
+                        pngData: board.pngData, candidatePNGs: board.candidatePNGs,
+                        sourceDataURI: recovery.sourceDataURI,
+                        referenceEvidenceJSON: recovery.referenceEvidenceJSON,
+                        temperamentID: recovery.temperamentID,
+                        likeness: recovery.likeness, lastTouchedAt: Date())
+                    self.visibleCandidateDraftID = requestID
+                    self.pendingLocalRecoveries.removeValue(forKey: requestID)
+                    self.settingsCall("petCandidateResult", [
+                        "requestID": requestID,
+                        "candidateDraftID": requestID,
+                        "draftID": requestID,
+                        "candidates": board.candidatePNGs.map(PetGenerationCoordinator.dataURI),
+                        "sheet": PetGenerationCoordinator.dataURI(board.pngData),
+                        "providerSeconds": recovery.providerSeconds,
+                        "localSeconds": localSeconds,
+                        "warnings": warnings,
+                        "usage": recovery.usage.dictionary,
+                        "model": "gpt-image-2", "size": "1024x1024",
+                        "partialImages": 1,
+                        "styleBoardUsed": recovery.styleBoardUsed,
+                        "referenceCount": recovery.styleBoardUsed ? 2 : 1,
+                        "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
+                    ])
+                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.announceStudioBackground(requestID, kind: "success", "3 个 Low 草稿已经画好，打开设置来选主角。", "Three Low drafts are ready; open Settings to pick the master.")
+                case .failure(let error):
+                    let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
+                    if !canRetry { self.pendingLocalRecoveries.removeValue(forKey: requestID) }
+                    self.studioLocalError(
+                        requestID: requestID, error: error, rawPNG: recovery.rawPNG,
+                        providerSeconds: recovery.providerSeconds,
+                        localSeconds: localSeconds, outputRetained: outputRetained,
+                        canRetryLocally: canRetry)
+                }
+            }
+        }
+    }
+
+    private func startEvolutionGeneration(requestID: String,
+                                          candidateDraftID: String,
+                                          candidate: PendingCandidateBoardDraft,
+                                          candidateIndex: Int,
+                                          quality: PetFinalGenerationQuality) {
+        guard reserveProviderGeneration(requestID) else { return }
+        let startedAt = Date()
+        let master = candidate.candidatePNGs[candidateIndex]
+        let profile = CustomPetTemperaments.profile(for: candidate.temperamentID)
+        let style = MimoStyleReference.requestData()
+        petGenerator.generateFinalEvolutionSheet(
+            requestID: requestID, masterData: master,
+            sourceDataURI: candidate.sourceDataURI,
+            styleBoardData: style,
+            referenceEvidenceJSON: candidate.referenceEvidenceJSON,
+            personalityVisual: profile.promptFragment,
+            likeness: candidate.likeness, quality: quality,
+            progress: { [weak self] phase, partial, _ in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                self.studioProgress(requestID: requestID, phase: phase,
+                                    startedAt: startedAt, partial: partial)
+            }, completion: { [weak self] result in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .failure(let error):
+                    self.studioProviderError(requestID: requestID, error: error,
+                                             startedAt: startedAt, phase: "evolution")
+                case .success(let output):
+                    let providerSeconds = Date().timeIntervalSince(startedAt)
+                    let retained = self.retainRaw(
+                        output.data, requestID: requestID, phase: .evolution,
+                        quality: quality.rawValue, providerSeconds: providerSeconds)
+                    let recovery = EvolutionGenerationRecovery(
+                        rawPNG: output.data, masterPNG: master,
+                        sourceDataURI: candidate.sourceDataURI,
+                        referenceEvidenceJSON: candidate.referenceEvidenceJSON,
+                        temperamentID: candidate.temperamentID,
+                        likeness: candidate.likeness, quality: quality,
+                        providerSeconds: providerSeconds, usage: output.usage,
+                        candidateDraftID: candidateDraftID,
+                        styleBoardUsed: style != nil, createdAt: Date())
+                    self.pendingLocalRecoveries[requestID] = .evolution(recovery)
+                    self.processEvolutionGeneration(requestID: requestID,
+                                                    recovery: recovery,
+                                                    outputRetained: retained)
+                }
+            }
+        )
+    }
+
+    private func processEvolutionGeneration(requestID: String,
+                                            recovery: EvolutionGenerationRecovery,
+                                            outputRetained: Bool,
+                                            salvageNearEdge: Bool = false) {
+        let localStartedAt = Date()
+        studioProgress(requestID: requestID, phase: "processing",
+                       startedAt: localStartedAt,
+                       providerSeconds: recovery.providerSeconds)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result {
+                try CharacterSheetProcessor.process(
+                    pngData: recovery.rawPNG,
+                    allowNearEdgeRecovery: salvageNearEdge)
+            }
+            let localSeconds = Date().timeIntervalSince(localStartedAt)
+            DispatchQueue.main.async {
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .success(let sheet):
+                    var warnings = self.boundaryWarnings(sheet.quality)
+                    if !recovery.styleBoardUsed {
+                        warnings.append([
+                            "zh": "内置米墨风格板没有载入；这次使用了主角图与文字风格约束。",
+                            "en": "The bundled Mimo style board was unavailable; master and prompt styling were used.",
+                        ])
+                    }
+                    if outputRetained {
+                        _ = try? self.generationDraftStore.markProcessed(
+                            requestID: requestID, pngData: sheet.pngData,
+                            localSeconds: localSeconds,
+                            warnings: warnings.compactMap { $0["en"] })
+                    }
+                    _ = try? self.generationDraftStore.delete(requestID: requestID)
+                    self.pendingEvolutionSheets[requestID] = PendingEvolutionSheetDraft(
+                        pngData: sheet.pngData, stagePNGs: sheet.stagePNGs,
+                        masterPNG: recovery.masterPNG,
+                        sourceDataURI: recovery.sourceDataURI,
+                        referenceEvidenceJSON: recovery.referenceEvidenceJSON,
+                        temperamentID: recovery.temperamentID,
+                        likeness: recovery.likeness, quality: recovery.quality,
+                        stageQualities: Array(repeating: recovery.quality, count: 3),
+                        lastTouchedAt: Date(),
+                        relatedRequestIDs: [recovery.candidateDraftID, requestID])
+                    self.visibleEvolutionDraftID = requestID
+                    self.pendingLocalRecoveries.removeValue(forKey: requestID)
+                    self.settingsCall("petEvolutionResult", [
+                        "requestID": requestID,
+                        "draftID": requestID,
+                        "sheet": PetGenerationCoordinator.dataURI(sheet.pngData),
+                        "quality": recovery.quality.rawValue,
+                        "providerSeconds": recovery.providerSeconds,
+                        "localSeconds": localSeconds,
+                        "warnings": warnings,
+                        "usage": recovery.usage.dictionary,
+                        "model": "gpt-image-2", "size": "1536x1024",
+                        "partialImages": 1,
+                        "styleBoardUsed": recovery.styleBoardUsed,
+                        "referenceCount": recovery.styleBoardUsed ? 3 : 2,
+                        "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
+                    ])
+                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.announceStudioBackground(requestID, kind: "success", "三段成长图已经做好，打开设置可以预览或带回桌面。", "The three-form evolution is ready; open Settings to preview or install it.")
+                case .failure(let error):
+                    let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
+                    if !canRetry { self.pendingLocalRecoveries.removeValue(forKey: requestID) }
+                    self.studioLocalError(
+                        requestID: requestID, error: error, rawPNG: recovery.rawPNG,
+                        providerSeconds: recovery.providerSeconds,
+                        localSeconds: localSeconds, outputRetained: outputRetained,
+                        canRetryLocally: canRetry)
+                }
+            }
+        }
+    }
+
+    private func startStageRegeneration(requestID: String, parentDraftID: String,
+                                        stage: PetEvolutionStage,
+                                        evolution: PendingEvolutionSheetDraft,
+                                        quality: PetFinalGenerationQuality) {
+        guard reserveProviderGeneration(requestID) else { return }
+        activeStageParents[requestID] = parentDraftID
+        if var stored = pendingEvolutionSheets[parentDraftID] {
+            stored.lastTouchedAt = Date()
+            pendingEvolutionSheets[parentDraftID] = stored
+        }
+        let startedAt = Date()
+        let profile = CustomPetTemperaments.profile(for: evolution.temperamentID)
+        let style = MimoStyleReference.requestData()
+        petGenerator.regenerateEvolutionStage(
+            requestID: requestID, stage: stage,
+            currentSheetData: evolution.pngData, masterData: evolution.masterPNG,
+            sourceDataURI: evolution.sourceDataURI,
+            styleBoardData: style,
+            referenceEvidenceJSON: evolution.referenceEvidenceJSON,
+            personalityVisual: profile.promptFragment, likeness: evolution.likeness,
+            quality: quality,
+            progress: { [weak self] phase, partial, _ in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                self.studioProgress(requestID: requestID, phase: phase,
+                                    startedAt: startedAt, partial: partial)
+            }, completion: { [weak self] result in
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .failure(let error):
+                    self.studioProviderError(requestID: requestID, error: error,
+                                             startedAt: startedAt, phase: "replacement")
+                case .success(let output):
+                    let providerSeconds = Date().timeIntervalSince(startedAt)
+                    let retained = self.retainRaw(
+                        output.data, requestID: requestID, phase: .replacement,
+                        quality: quality.rawValue,
+                        providerSeconds: providerSeconds)
+                    let recovery = StageGenerationRecovery(
+                        rawPNG: output.data, parentDraftID: parentDraftID,
+                        stage: stage, quality: quality,
+                        providerSeconds: providerSeconds,
+                        usage: output.usage, styleBoardUsed: style != nil,
+                        createdAt: Date())
+                    self.pendingLocalRecoveries[requestID] = .replacement(recovery)
+                    self.processStageGeneration(requestID: requestID,
+                                                recovery: recovery,
+                                                outputRetained: retained)
+                }
+            }
+        )
+    }
+
+    private func processStageGeneration(requestID: String,
+                                        recovery: StageGenerationRecovery,
+                                        outputRetained: Bool,
+                                        salvageNearEdge: Bool = false) {
+        guard let parent = pendingEvolutionSheets[recovery.parentDraftID] else {
+            activeStageParents.removeValue(forKey: requestID)
+            pendingLocalRecoveries.removeValue(forKey: requestID)
+            studioLocalError(
+                requestID: requestID,
+                error: PetGenerationError.provider("The evolution preview expired before the replacement could be merged."),
+                rawPNG: recovery.rawPNG, providerSeconds: recovery.providerSeconds,
+                localSeconds: 0, outputRetained: outputRetained,
+                canRetryLocally: false)
+            return
+        }
+        let localStartedAt = Date()
+        studioProgress(requestID: requestID, phase: "processing",
+                       startedAt: localStartedAt,
+                       providerSeconds: recovery.providerSeconds)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result { () -> (Data, Data, Bool) in
+                guard let kind = CharacterSheetStageKind(rawValue: recovery.stage.rawValue) else {
+                    throw CharacterSheetProcessingError.unreadableImage
+                }
+                let replacement = try CharacterSheetProcessor.processSingleStage(
+                    pngData: recovery.rawPNG, kind: kind,
+                    allowNearEdgeRecovery: salvageNearEdge)
+                let sheet = try CharacterSheetProcessor.replaceStage(
+                    in: parent.pngData, kind: kind,
+                    with: replacement.stage.pngData)
+                return (sheet, replacement.stage.pngData, replacement.recoveredNearEdge)
+            }
+            let localSeconds = Date().timeIntervalSince(localStartedAt)
+            DispatchQueue.main.async {
+                guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
+                switch result {
+                case .success(let (sheet, stagePNG, recoveredNearEdge)):
+                    if outputRetained {
+                        _ = try? self.generationDraftStore.markProcessed(
+                            requestID: requestID, pngData: sheet,
+                            localSeconds: localSeconds)
+                    }
+                    guard var updated = self.pendingEvolutionSheets[recovery.parentDraftID] else {
+                        self.pendingLocalRecoveries.removeValue(forKey: requestID)
+                        self.studioLocalError(
+                            requestID: requestID,
+                            error: PetGenerationError.provider("The evolution preview expired before the replacement could be merged."),
+                            rawPNG: recovery.rawPNG,
+                            providerSeconds: recovery.providerSeconds,
+                            localSeconds: localSeconds,
+                            outputRetained: outputRetained,
+                            canRetryLocally: false)
+                        return
+                    }
+                    _ = try? self.generationDraftStore.delete(requestID: requestID)
+                    updated.pngData = sheet
+                    updated.stagePNGs[recovery.stage.sheetIndex] = stagePNG
+                    updated.stageQualities[recovery.stage.sheetIndex] = recovery.quality
+                    updated.lastTouchedAt = Date()
+                    if !updated.relatedRequestIDs.contains(requestID) {
+                        updated.relatedRequestIDs.append(requestID)
+                    }
+                    self.pendingEvolutionSheets[recovery.parentDraftID] = updated
+                    self.visibleEvolutionDraftID = recovery.parentDraftID
+                    self.activeStageParents.removeValue(forKey: requestID)
+                    self.pendingLocalRecoveries.removeValue(forKey: requestID)
+                    var warnings: [[String: String]] = []
+                    if recoveredNearEdge {
+                        warnings.append([
+                            "zh": "这个形态很靠近画布，但仍有完整边距；已用安全恢复模式提取。",
+                            "en": "Recovered this complete form from a narrow but nonzero canvas margin.",
+                        ])
+                    }
+                    if !recovery.styleBoardUsed {
+                        warnings.append([
+                            "zh": "内置米墨风格板没有载入；这次依据现有成长图保持风格。",
+                            "en": "The bundled Mimo style board was unavailable; existing-sheet styling was used.",
+                        ])
+                    }
+                    self.settingsCall("petStageResult", [
+                        "requestID": requestID,
+                        "draftID": recovery.parentDraftID,
+                        "stageIndex": recovery.stage.sheetIndex,
+                        "quality": recovery.quality.rawValue,
+                        "sheet": PetGenerationCoordinator.dataURI(sheet),
+                        "stageImage": PetGenerationCoordinator.dataURI(stagePNG),
+                        "providerSeconds": recovery.providerSeconds,
+                        "localSeconds": localSeconds,
+                        "warnings": warnings,
+                        "usage": recovery.usage.dictionary,
+                        "model": "gpt-image-2", "size": "1024x1024",
+                        "partialImages": 1,
+                        "styleBoardUsed": recovery.styleBoardUsed,
+                        "referenceCount": recovery.styleBoardUsed ? 4 : 3,
+                        "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
+                    ])
+                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.announceStudioBackground(requestID, kind: "success", "这一段已经重画完成，另外两段保持不变。", "That form is redrawn; the other two are unchanged.")
+                case .failure(let error):
+                    let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
+                    if !canRetry { self.pendingLocalRecoveries.removeValue(forKey: requestID) }
+                    self.studioLocalError(
+                        requestID: requestID, error: error, rawPNG: recovery.rawPNG,
+                        providerSeconds: recovery.providerSeconds,
+                        localSeconds: localSeconds, outputRetained: outputRetained,
+                        canRetryLocally: canRetry)
+                }
+            }
+        }
+    }
+
+    private func retryLocalGeneration(_ requestID: String) {
+        guard let recovery = pendingLocalRecoveries[requestID] else {
+            settingsCall("petStudioError", [
+                "requestID": requestID,
+                "kind": "local",
+                "phase": "recovery",
+                "message": voice("这份本地恢复稿已过期", "This local recovery draft expired"),
+                "outputRetained": false,
+            ])
+            return
+        }
+        guard reserveLocalProcessing(requestID) else { return }
+        switch recovery {
+        case .candidates(let context):
+            processCandidateGeneration(requestID: requestID, recovery: context,
+                                       outputRetained: retainedDraftExists(requestID),
+                                       salvageNearEdge: true)
+        case .evolution(let context):
+            processEvolutionGeneration(requestID: requestID, recovery: context,
+                                       outputRetained: retainedDraftExists(requestID),
+                                       salvageNearEdge: true)
+        case .replacement(let context):
+            activeStageParents[requestID] = context.parentDraftID
+            processStageGeneration(requestID: requestID, recovery: context,
+                                   outputRetained: retainedDraftExists(requestID),
+                                   salvageNearEdge: true)
+        }
     }
 
     func handleSettings(_ body: [String: Any]) {
@@ -372,15 +1366,25 @@ extension AppDelegate {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = false
             panel.canChooseFiles = true
-            panel.allowsMultipleSelection = false
+            panel.allowsMultipleSelection = true
             panel.allowedContentTypes = [.image]
-            panel.message = voice("为你的小伴灵选择一张参考图片", "Choose a reference for your tiny familiar")
-            if panel.runModal() == .OK, let url = panel.url,
-               let uri = petReferenceDataURI(url) {
-                let name = url.deletingPathExtension().lastPathComponent
-                settingsWeb?.evaluateJavaScript(
-                    "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)))",
-                    completionHandler: nil)
+            panel.message = voice("最多选择 8 张同一主角的多角度参考", "Choose up to 8 views of the same subject")
+            if panel.runModal() == .OK {
+                for url in panel.urls.prefix(8) {
+                    if let uri = petReferenceDataURI(url) {
+                    let name = url.deletingPathExtension().lastPathComponent
+                    settingsWeb?.evaluateJavaScript(
+                            "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)), {append:true})",
+                        completionHandler: nil)
+                    } else {
+                        settingsCall("petStudioError", [
+                            "kind": "setup", "phase": "input", "code": "invalid_reference",
+                            "messageZh": "有一张图片太大、尺寸异常或无法读取；已跳过它。请选择 20 MB 以内的 PNG、JPEG 或 WebP。",
+                            "messageEn": "One image was too large, had unsafe dimensions, or could not be read, so it was skipped. Choose PNG, JPEG, or WebP under 20 MB.",
+                            "requestNotStarted": true, "outputRetained": false,
+                        ])
+                    }
+                }
             }
         case "petSaveKeys":
             var failed: [String] = []
@@ -409,101 +1413,184 @@ extension AppDelegate {
             ]
             if !cleared { keyState["error"] = voice("无法清除 \(provider)", "Could not clear \(provider)") }
             settingsCall("petKeysSaved", keyState)
-        case "petCancel":
-            if let id = body["requestID"] as? String {
-                petGenerator.cancel(id)
-                pendingCharacterSheets.removeValue(forKey: id)
-                if activePetGenerationID == id {
-                    activePetGenerationID = nil
-                }
-            }
-        case "petQuality":
-            let quality = PetGenerationQuality.resolve(body["quality"] as? String)
-            d.set(quality.rawValue, forKey: "petImageQuality")
-        case "petGenerateSheet":
-            let requestID = (body["requestID"] as? String) ?? UUID().uuidString
-            guard let source = body["source"] as? String, source.hasPrefix("data:image/"),
-                  source.count < 16_000_000,
-                  let sourceData = PetGenerationCoordinator.dataFromDataURI(source),
-                  sourceData.count <= 12 * 1024 * 1024,
-                  PetGenerationCoordinator.isSupportedImageData(sourceData) else {
-                settingsCall("petSheetError", [
-                    "requestID": requestID,
-                    "message": voice("参考图片无效", "Invalid reference image"),
+        case "petConfirmReferences":
+            guard let requestID = generationRequestID(body["requestID"]),
+                  studioGenerationLedger.activeRequestID == requestID,
+                  let prepared = pendingReferencePreflights.removeValue(forKey: requestID) else {
+                settingsCall("petStudioError", [
+                    "requestID": body["requestID"] as? String ?? "",
+                    "kind": "setup", "phase": "input",
+                    "code": "reference_preview_expired",
+                    "messageZh": "这张身份板已过期；没有调用 OpenAI。请重新检查参考图。",
+                    "messageEn": "This identity-board preview expired. OpenAI was not called; review the references again.",
+                    "outputRetained": false, "requestNotStarted": true,
                 ])
                 return
             }
-            let temperamentID = body["temperamentID"] as? String
-            let profile = CustomPetTemperaments.profile(for: temperamentID)
-            let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
-            let quality = PetGenerationQuality.resolve(body["quality"] as? String)
-            d.set(quality.rawValue, forKey: "petImageQuality")
-            if let previous = activePetGenerationID {
-                petGenerator.cancel(previous)
-                pendingCharacterSheets.removeValue(forKey: previous)
-            }
-            pendingCharacterSheets = pendingCharacterSheets.filter {
-                Date().timeIntervalSince($0.value.createdAt) < 15 * 60
-            }
-            activePetGenerationID = requestID
-            petGenerator.generateCharacterSheet(requestID: requestID, sourceDataURI: source,
-                                                personalityVisual: profile.promptFragment,
-                                                likeness: likeness, quality: quality,
-                                                progress: { [weak self] phase, detail in
-                guard let self, self.activePetGenerationID == requestID else { return }
-                var payload: [String: Any] = ["requestID": requestID, "phase": phase]
-                if let detail { payload["detail"] = detail }
-                self.settingsCall("petSheetProgress", payload)
-            }, completion: { [weak self] result in
-                guard let self, self.activePetGenerationID == requestID else { return }
-                switch result {
-                case .success(let rawSheet):
-                    self.settingsCall("petSheetProgress", ["requestID": requestID, "phase": "extracting"])
-                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                        let processed = Result { try CharacterSheetProcessor.process(pngData: rawSheet) }
-                        DispatchQueue.main.async {
-                            guard let self, self.activePetGenerationID == requestID else { return }
-                            switch processed {
-                            case .success(let sheet):
-                                self.pendingCharacterSheets[requestID] = PendingCharacterSheetDraft(
-                                    pngData: sheet.pngData, temperamentID: profile.id,
-                                    quality: quality, createdAt: Date())
-                                self.settingsCall("petSheetResult", [
-                                    "requestID": requestID, "draftID": requestID,
-                                    "sheet": PetGenerationCoordinator.dataURI(sheet.pngData),
-                                    "quality": quality.rawValue,
-                                ])
-                            case .failure(let error):
-                                self.settingsCall("petSheetError", [
-                                    "requestID": requestID, "message": error.localizedDescription,
-                                ])
-                            }
-                            self.activePetGenerationID = nil
-                        }
+            startCandidateGeneration(
+                requestID: requestID,
+                source: prepared.sourceDataURI,
+                referenceEvidenceJSON: prepared.referenceEvidenceJSON,
+                profile: prepared.profile, likeness: prepared.likeness,
+                alreadyReserved: true)
+        case "petCancel":
+            if let rawID = body["requestID"] as? String,
+               let uuid = UUID(uuidString: rawID) {
+                let id = uuid.uuidString.lowercased()
+                petGenerator.cancel(id)
+                pendingReferencePreflights.removeValue(forKey: id)
+                pendingCandidateBoards.removeValue(forKey: id)
+                if let evolution = pendingEvolutionSheets.removeValue(forKey: id) {
+                    for relatedID in evolution.relatedRequestIDs {
+                        _ = try? generationDraftStore.delete(requestID: relatedID)
                     }
-                case .failure(let error):
-                    self.settingsCall("petSheetError", [
-                        "requestID": requestID, "message": error.localizedDescription,
-                    ])
-                    self.activePetGenerationID = nil
                 }
-            })
+                pendingLocalRecoveries.removeValue(forKey: id)
+                activeStageParents.removeValue(forKey: id)
+                backgroundStudioRequests.remove(id)
+                if visibleCandidateDraftID == id { visibleCandidateDraftID = nil }
+                if visibleEvolutionDraftID == id { visibleEvolutionDraftID = nil }
+                _ = try? generationDraftStore.delete(requestID: id)
+                studioGenerationLedger.finish(requestID: id)
+                settingsCall("petGenerationCancelled", [
+                    "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),
+                ])
+            }
+        case "petQuality":
+            let quality = PetFinalGenerationQuality.resolve(body["quality"] as? String)
+            d.set(quality.rawValue, forKey: "petImageQuality")
+        case "petVisibleDrafts":
+            if let raw = body["draftID"] as? String,
+               let id = generationRequestID(raw), pendingEvolutionSheets[id] != nil {
+                visibleEvolutionDraftID = id
+            } else {
+                visibleEvolutionDraftID = nil
+            }
+            if let raw = body["candidateDraftID"] as? String,
+               let id = generationRequestID(raw), pendingCandidateBoards[id] != nil {
+                visibleCandidateDraftID = id
+            } else {
+                visibleCandidateDraftID = nil
+            }
+            touchVisibleStudioDrafts()
+        case "petGenerateCandidates":
+            pruneStudioState()
+            guard let requestID = generationRequestID(body["requestID"]),
+                  let inputs = petReferenceInputs(body) else {
+                settingsCall("petStudioError", [
+                    "requestID": body["requestID"] as? String ?? "",
+                    "kind": "setup", "phase": "input", "code": "invalid_reference",
+                    "messageZh": "参考集无效、重复、过大或超过 8 张；没有调用 OpenAI，也不会产生费用。",
+                    "messageEn": "The reference set was invalid, duplicated, too large, or exceeded 8 images. OpenAI was not called and no cost was incurred.",
+                    "outputRetained": false, "requestNotStarted": true,
+                    "resetTo": "upload",
+                ])
+                return
+            }
+            let profile = CustomPetTemperaments.profile(
+                for: body["temperamentID"] as? String)
+            let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
+            prepareCandidateGeneration(requestID: requestID, inputs: inputs,
+                                       profile: profile, likeness: likeness)
+        case "petGenerateEvolution":
+            pruneStudioState()
+            guard let requestID = generationRequestID(body["requestID"]),
+                  let candidateDraftID = body["candidateDraftID"] as? String,
+                  let candidate = pendingCandidateBoards[candidateDraftID],
+                  let index = (body["candidateIndex"] as? NSNumber)?.intValue,
+                  candidate.candidatePNGs.indices.contains(index) else {
+                settingsCall("petStudioError", [
+                    "requestID": body["requestID"] as? String ?? "",
+                    "kind": "setup", "phase": "input", "code": "candidate_expired",
+                    "messageZh": "候选稿已过期；米墨没有发出新的付费请求。请重新生成 Low 草稿。",
+                    "messageEn": "The candidate draft expired; Mimo did not submit a paid request. Generate new Low drafts.",
+                    "outputRetained": false, "requestNotStarted": true,
+                    "resetTo": "candidates",
+                ])
+                return
+            }
+            let quality = PetFinalGenerationQuality.resolve(body["quality"] as? String)
+            d.set(quality.rawValue, forKey: "petImageQuality")
+            if var refreshed = pendingCandidateBoards[candidateDraftID] {
+                refreshed.lastTouchedAt = Date()
+                pendingCandidateBoards[candidateDraftID] = refreshed
+            }
+            startEvolutionGeneration(requestID: requestID,
+                                     candidateDraftID: candidateDraftID,
+                                     candidate: candidate,
+                                     candidateIndex: index, quality: quality)
+        case "petRegenerateStage":
+            pruneStudioState()
+            guard let requestID = generationRequestID(body["requestID"]),
+                  let draftID = body["draftID"] as? String,
+                  let evolution = pendingEvolutionSheets[draftID],
+                  let index = (body["stageIndex"] as? NSNumber)?.intValue,
+                  let stage = PetEvolutionStage.allCases.first(where: { $0.sheetIndex == index }) else {
+                settingsCall("petStudioError", [
+                    "requestID": body["requestID"] as? String ?? "",
+                    "kind": "setup", "phase": "input", "code": "evolution_expired",
+                    "messageZh": "这张成长图已过期；米墨没有发出单段重画请求。请从 Low 草稿重新开始。",
+                    "messageEn": "This evolution draft expired; Mimo did not submit a redraw. Start again from Low drafts.",
+                    "outputRetained": false, "requestNotStarted": true,
+                    "resetTo": "candidates",
+                ])
+                return
+            }
+            let stageQuality = (body["quality"] as? String).map {
+                PetFinalGenerationQuality.resolve($0)
+            } ?? evolution.quality
+            startStageRegeneration(requestID: requestID, parentDraftID: draftID,
+                                   stage: stage, evolution: evolution,
+                                   quality: stageQuality)
+        case "petRetryLocalProcessing":
+            pruneStudioState()
+            guard let requestID = generationRequestID(body["requestID"]),
+                  pendingLocalRecoveries[requestID] != nil else {
+                settingsCall("petStudioError", [
+                    "requestID": body["requestID"] as? String ?? "",
+                    "kind": "setup", "phase": "recovery", "code": "recovery_expired",
+                    "messageZh": "这份会话内恢复稿已过期；不会产生新的费用。",
+                    "messageEn": "This in-session recovery draft expired; no new cost was incurred.",
+                    "outputRetained": false, "requestNotStarted": true,
+                ])
+                return
+            }
+            retryLocalGeneration(requestID)
+        case "petContinueInBackground":
+            if let requestID = generationRequestID(body["requestID"]) {
+                backgroundStudioRequests.insert(requestID)
+            }
+            settingsWin?.close()
+        case "petRevealGenerationDrafts":
+            NSWorkspace.shared.activateFileViewerSelecting([generationDraftStore.folderURL])
         case "petInstallRaster":
             guard let draftID = body["draftID"] as? String,
-                  let draft = pendingCharacterSheets[draftID] else {
-                settingsCall("petSheetError", [
-                    "requestID": body["draftID"] as? String ?? "",
-                    "message": voice("这张预览已过期，请重新生成", "This preview expired; generate it again"),
+                  let evolution = pendingEvolutionSheets[draftID] else {
+                if visibleEvolutionDraftID == body["draftID"] as? String {
+                    visibleEvolutionDraftID = nil
+                }
+                settingsCall("petInstallError", [
+                    "draftID": body["draftID"] as? String ?? "",
+                    "code": "preview_expired",
+                    "messageZh": "这张预览已过期，请重新生成。",
+                    "messageEn": "This preview expired; generate it again.",
                 ])
                 return
             }
             let requestedName = (body["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let name = requestedName.isEmpty ? voice("我的小伴灵", "My little familiar") : String(requestedName.prefix(60))
-            let profile = CustomPetTemperaments.profile(for: draft.temperamentID)
+            let profile = CustomPetTemperaments.profile(for: evolution.temperamentID)
             do {
-                let spec = try customPetStore.install(pngData: draft.pngData, name: name,
+                let spec = try customPetStore.install(pngData: evolution.pngData, name: name,
                                                       temperamentID: profile.id, accent: profile.accent)
-                pendingCharacterSheets.removeValue(forKey: draftID)
+                pendingEvolutionSheets.removeValue(forKey: draftID)
+                visibleEvolutionDraftID = nil
+                visibleCandidateDraftID = nil
+                for relatedID in evolution.relatedRequestIDs {
+                    pendingCandidateBoards.removeValue(forKey: relatedID)
+                    pendingLocalRecoveries.removeValue(forKey: relatedID)
+                    _ = try? generationDraftStore.delete(requestID: relatedID)
+                }
                 guard let characterID = spec["characterID"] as? String,
                       JSONSerialization.isValidJSONObject(spec),
                       let data = try? JSONSerialization.data(withJSONObject: spec),
@@ -516,7 +1603,11 @@ extension AppDelegate {
                 pushSettingsState()
                 revealOverlay()
             } catch {
-                settingsCall("petSheetError", ["requestID": draftID, "message": error.localizedDescription])
+                settingsCall("petInstallError", [
+                    "draftID": draftID, "code": "install_failed",
+                    "messageZh": "无法把这套伴灵保存到本机：\(error.localizedDescription)",
+                    "messageEn": "Could not save this familiar on the Mac: \(error.localizedDescription)",
+                ])
             }
         case "petDelete":
             guard let characterID = body["characterID"] as? String else { return }

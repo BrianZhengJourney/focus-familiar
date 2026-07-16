@@ -278,7 +278,9 @@ struct MimoLiveGenerationLoop {
 
         // Explicit preflight: this uses the same credential boundary as the
         // app and deliberately records only a boolean outcome.
-        guard MimoSecret.openAI.read() != nil else { throw LiveLoopError.missingAPIKey }
+        guard let openAIKey = MimoSecret.openAI.read() else {
+            throw LiveLoopError.missingAPIKey
+        }
         emitter.emit("credential_preflight", ["configured": true, "provider": "openai"])
 
         let inputData = try options.imageURLs.enumerated().map { index, url -> MimoReferenceInput in
@@ -317,7 +319,10 @@ struct MimoLiveGenerationLoop {
         let sourceDataURI = PetGenerationCoordinator.dataURI(payload.identityBoard.png)
         let profile = CustomPetTemperaments.profile(for: "quiet-curious")
         let likeness = 0.65
-        let coordinator = PetGenerationCoordinator()
+        // Reuse the in-memory credential for all three phases so an ad-hoc
+        // test binary can trigger at most one Keychain authorization prompt.
+        // The value is neither logged nor persisted by the harness.
+        let coordinator = PetGenerationCoordinator(openAIKeyReader: { openAIKey })
 
         let candidateRequestID = "live-candidates-\(UUID().uuidString.lowercased())"
         let candidateRun = try awaitGeneration(

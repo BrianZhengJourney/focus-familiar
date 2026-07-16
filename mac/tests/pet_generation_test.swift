@@ -368,6 +368,41 @@ struct PetGenerationTests {
         let png = rep.representation(using: .png, properties: [:])!
         let size = PetGenerationCoordinator.pngPixelSize(png)
         expect(size?.0 == 4 && size?.1 == 3, "PNG dimensions should be decoded")
+
+        // A Keychain authorization sheet must never block AppKit's main
+        // thread. Cancelling while the credential read is pending must also
+        // prevent the eventual authorization from starting a paid request.
+        let keyReadStarted = DispatchSemaphore(value: 0)
+        let releaseKeyRead = DispatchSemaphore(value: 0)
+        let unexpectedProgress = DispatchSemaphore(value: 0)
+        let unexpectedCompletion = DispatchSemaphore(value: 0)
+        let credentialCoordinator = PetGenerationCoordinator(openAIKeyReader: {
+            keyReadStarted.signal()
+            _ = releaseKeyRead.wait(timeout: .now() + 1)
+            return "test-key"
+        })
+        let credentialRequestID = "credential-cancel-test"
+        let callStarted = ProcessInfo.processInfo.systemUptime
+        credentialCoordinator.generateCandidateBoard(
+            requestID: credentialRequestID,
+            sourceDataURI: PetGenerationCoordinator.dataURI(streamPNG),
+            styleBoardData: nil,
+            personalityVisual: "quiet",
+            likeness: 0.5,
+            progress: { _, _, _ in unexpectedProgress.signal() },
+            completion: { _ in unexpectedCompletion.signal() }
+        )
+        let callElapsed = ProcessInfo.processInfo.systemUptime - callStarted
+        expect(callElapsed < 0.2,
+               "starting generation must not synchronously wait for Keychain authorization")
+        expect(keyReadStarted.wait(timeout: .now() + 1) == .success,
+               "the credential read should start on its background queue")
+        credentialCoordinator.cancel(credentialRequestID)
+        releaseKeyRead.signal()
+        expect(unexpectedProgress.wait(timeout: .now() + 0.25) == .timedOut,
+               "cancelled credential reads must not advance provider progress")
+        expect(unexpectedCompletion.wait(timeout: .now() + 0.25) == .timedOut,
+               "cancelled credential reads must not start or finish a paid request")
         print("pet generation tests passed")
     }
 }

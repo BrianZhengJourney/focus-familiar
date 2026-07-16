@@ -4,6 +4,7 @@
 
 import Cocoa
 import Foundation
+import LocalAuthentication
 import Security
 
 enum MimoSecret: String {
@@ -74,7 +75,29 @@ enum MimoSecret: String {
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
-    var isConfigured: Bool { read() != nil }
+    /// Settings only needs to know whether a credential exists. Asking for its
+    /// bytes here can summon SecurityAgent and block the app's main thread on
+    /// every ad-hoc development build. Attribute lookup is non-interactive;
+    /// the value is requested only after the user starts a generation.
+    var isConfigured: Bool {
+        for key in environmentNames {
+            if let raw = ProcessInfo.processInfo.environment[key], validated(raw) != nil {
+                return true
+            }
+        }
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.brianzheng.mimo",
+            kSecAttrAccount as String: account,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
+        ]
+        var item: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
+    }
 }
 
 enum PetGenerationError: LocalizedError {
@@ -322,12 +345,16 @@ final class PetGenerationCoordinator {
 
     private let session: URLSession
     private let callbackQueue = DispatchQueue.main
+    private let credentialQueue = DispatchQueue(label: "com.brianzheng.mimo.credentials",
+                                                qos: .userInitiated)
+    private let openAIKeyReader: () -> String?
     private let lock = NSLock()
     private var cancelled = Set<String>()
     private var activeTasks: [String: [UUID: URLSessionTask]] = [:]
     private var activeStreams: [String: [UUID: Task<Void, Never>]] = [:]
 
-    init() {
+    init(openAIKeyReader: @escaping () -> String? = { MimoSecret.openAI.read() }) {
+        self.openAIKeyReader = openAIKeyReader
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 180
         config.timeoutIntervalForResource = 420
@@ -355,25 +382,31 @@ final class PetGenerationCoordinator {
                                 likeness: Double, progress: @escaping StagedProgress,
                                 completion: @escaping StagedCompletion) {
         begin(requestID)
-        guard let key = MimoSecret.openAI.read() else {
-            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
-            return
+        credentialQueue.async { [weak self] in
+            guard let self, !self.isCancelled(requestID) else { return }
+            guard let key = self.openAIKeyReader() else {
+                guard !self.isCancelled(requestID) else { return }
+                self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+                return
+            }
+            guard !self.isCancelled(requestID) else { return }
+            guard let reference = Self.validatedDataURI(sourceDataURI),
+                  Self.validReference(styleBoardData) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
+            self.emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+            let request = Self.candidateBoardRequest(
+                referenceData: reference, styleBoardData: styleBoardData,
+                referenceEvidenceJSON: referenceEvidenceJSON,
+                personalityVisual: personalityVisual, likeness: likeness,
+                apiKey: key, delivery: .streaming(.one)
+            )
+            guard !self.isCancelled(requestID) else { return }
+            self.performImageStream(request, provider: "OpenAI", requestID: requestID,
+                                    artifact: .candidateBoard, progress: progress,
+                                    completion: completion)
         }
-        guard let reference = Self.validatedDataURI(sourceDataURI),
-              Self.validReference(styleBoardData) else {
-            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
-            return
-        }
-        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
-        let request = Self.candidateBoardRequest(
-            referenceData: reference, styleBoardData: styleBoardData,
-            referenceEvidenceJSON: referenceEvidenceJSON,
-            personalityVisual: personalityVisual, likeness: likeness,
-            apiKey: key, delivery: .streaming(.one)
-        )
-        performImageStream(request, provider: "OpenAI", requestID: requestID,
-                           artifact: .candidateBoard, progress: progress,
-                           completion: completion)
     }
 
     func generateFinalEvolutionSheet(requestID: String, masterData: Data,
@@ -384,28 +417,34 @@ final class PetGenerationCoordinator {
                                      progress: @escaping StagedProgress,
                                      completion: @escaping StagedCompletion) {
         begin(requestID)
-        guard let key = MimoSecret.openAI.read() else {
-            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
-            return
+        credentialQueue.async { [weak self] in
+            guard let self, !self.isCancelled(requestID) else { return }
+            guard let key = self.openAIKeyReader() else {
+                guard !self.isCancelled(requestID) else { return }
+                self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+                return
+            }
+            guard !self.isCancelled(requestID) else { return }
+            guard Self.validReference(masterData),
+                  let reference = Self.validatedDataURI(sourceDataURI),
+                  Self.validReference(styleBoardData) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
+            self.emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+            let request = Self.finalEvolutionSheetRequest(
+                masterData: masterData, referenceData: reference,
+                styleBoardData: styleBoardData,
+                referenceEvidenceJSON: referenceEvidenceJSON,
+                personalityVisual: personalityVisual,
+                likeness: likeness, quality: quality, apiKey: key,
+                delivery: .streaming(.one)
+            )
+            guard !self.isCancelled(requestID) else { return }
+            self.performImageStream(request, provider: "OpenAI", requestID: requestID,
+                                    artifact: .evolutionSheet, progress: progress,
+                                    completion: completion)
         }
-        guard Self.validReference(masterData),
-              let reference = Self.validatedDataURI(sourceDataURI),
-              Self.validReference(styleBoardData) else {
-            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
-            return
-        }
-        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
-        let request = Self.finalEvolutionSheetRequest(
-            masterData: masterData, referenceData: reference,
-            styleBoardData: styleBoardData,
-            referenceEvidenceJSON: referenceEvidenceJSON,
-            personalityVisual: personalityVisual,
-            likeness: likeness, quality: quality, apiKey: key,
-            delivery: .streaming(.one)
-        )
-        performImageStream(request, provider: "OpenAI", requestID: requestID,
-                           artifact: .evolutionSheet, progress: progress,
-                           completion: completion)
     }
 
     func regenerateEvolutionStage(requestID: String, stage: PetEvolutionStage,
@@ -417,29 +456,35 @@ final class PetGenerationCoordinator {
                                   progress: @escaping StagedProgress,
                                   completion: @escaping StagedCompletion) {
         begin(requestID)
-        guard let key = MimoSecret.openAI.read() else {
-            finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
-            return
+        credentialQueue.async { [weak self] in
+            guard let self, !self.isCancelled(requestID) else { return }
+            guard let key = self.openAIKeyReader() else {
+                guard !self.isCancelled(requestID) else { return }
+                self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+                return
+            }
+            guard !self.isCancelled(requestID) else { return }
+            guard Self.validReference(currentSheetData), Self.validReference(masterData),
+                  let reference = Self.validatedDataURI(sourceDataURI),
+                  Self.validReference(styleBoardData) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
+            self.emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+            let request = Self.regenerateStageRequest(
+                stage: stage, currentSheetData: currentSheetData,
+                masterData: masterData, referenceData: reference,
+                styleBoardData: styleBoardData,
+                referenceEvidenceJSON: referenceEvidenceJSON,
+                personalityVisual: personalityVisual,
+                likeness: likeness, quality: quality, apiKey: key,
+                delivery: .streaming(.one)
+            )
+            guard !self.isCancelled(requestID) else { return }
+            self.performImageStream(request, provider: "OpenAI", requestID: requestID,
+                                    artifact: .replacement(stage), progress: progress,
+                                    completion: completion)
         }
-        guard Self.validReference(currentSheetData), Self.validReference(masterData),
-              let reference = Self.validatedDataURI(sourceDataURI),
-              Self.validReference(styleBoardData) else {
-            finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
-            return
-        }
-        emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
-        let request = Self.regenerateStageRequest(
-            stage: stage, currentSheetData: currentSheetData,
-            masterData: masterData, referenceData: reference,
-            styleBoardData: styleBoardData,
-            referenceEvidenceJSON: referenceEvidenceJSON,
-            personalityVisual: personalityVisual,
-            likeness: likeness, quality: quality, apiKey: key,
-            delivery: .streaming(.one)
-        )
-        performImageStream(request, provider: "OpenAI", requestID: requestID,
-                           artifact: .replacement(stage), progress: progress,
-                           completion: completion)
     }
 
     func generateCharacterSheet(requestID: String, sourceDataURI: String,
@@ -448,37 +493,43 @@ final class PetGenerationCoordinator {
                                 progress: @escaping SheetProgress,
                                 completion: @escaping SheetCompletion) {
         lock.lock(); cancelled.remove(requestID); lock.unlock()
-        guard let openAIKey = MimoSecret.openAI.read() else {
-            finishSheet(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
-            return
-        }
-        guard let imageData = Self.dataFromDataURI(sourceDataURI),
-              Self.isSupportedImageData(imageData), imageData.count <= 12 * 1024 * 1024 else {
-            finishSheet(completion, result: .failure(PetGenerationError.invalidImage)); return
-        }
-        emitSheet(progress, phase: "generating", detail: "\(quality.rawValue) · 1536×1024")
-        let request = Self.characterSheetRequest(imageData: imageData,
-                                                 personalityVisual: personalityVisual,
-                                                 likeness: likeness,
-                                                 apiKey: openAIKey,
-                                                 quality: quality)
-        performJSON(request, provider: "OpenAI", requestID: requestID) { result in
+        credentialQueue.async { [weak self] in
+            guard let self, !self.isCancelled(requestID) else { return }
+            guard let openAIKey = self.openAIKeyReader() else {
+                guard !self.isCancelled(requestID) else { return }
+                self.finishSheet(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+                return
+            }
             guard !self.isCancelled(requestID) else { return }
-            switch result {
-            case .failure(let error): self.finishSheet(completion, result: .failure(error))
-            case .success(let json):
-                guard let images = Self.imageStrings(in: json), let first = images.first else {
-                    self.finishSheet(completion, result: .failure(PetGenerationError.invalidResponse("OpenAI"))); return
-                }
-                self.resolveImage(first, requestID: requestID) { resolved in
-                    guard !self.isCancelled(requestID) else { return }
-                    let checked = resolved.flatMap { data -> Result<Data, Error> in
-                        guard let size = Self.pngPixelSize(data), size.0 == 1536, size.1 == 1024 else {
-                            return .failure(PetGenerationError.invalidResponse("OpenAI character sheet"))
-                        }
-                        return .success(data)
+            guard let imageData = Self.dataFromDataURI(sourceDataURI),
+                  Self.isSupportedImageData(imageData), imageData.count <= 12 * 1024 * 1024 else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.invalidImage)); return
+            }
+            self.emitSheet(progress, phase: "generating", detail: "\(quality.rawValue) · 1536×1024")
+            let request = Self.characterSheetRequest(imageData: imageData,
+                                                     personalityVisual: personalityVisual,
+                                                     likeness: likeness,
+                                                     apiKey: openAIKey,
+                                                     quality: quality)
+            guard !self.isCancelled(requestID) else { return }
+            self.performJSON(request, provider: "OpenAI", requestID: requestID) { result in
+                guard !self.isCancelled(requestID) else { return }
+                switch result {
+                case .failure(let error): self.finishSheet(completion, result: .failure(error))
+                case .success(let json):
+                    guard let images = Self.imageStrings(in: json), let first = images.first else {
+                        self.finishSheet(completion, result: .failure(PetGenerationError.invalidResponse("OpenAI"))); return
                     }
-                    self.finishSheet(completion, result: checked)
+                    self.resolveImage(first, requestID: requestID) { resolved in
+                        guard !self.isCancelled(requestID) else { return }
+                        let checked = resolved.flatMap { data -> Result<Data, Error> in
+                            guard let size = Self.pngPixelSize(data), size.0 == 1536, size.1 == 1024 else {
+                                return .failure(PetGenerationError.invalidResponse("OpenAI character sheet"))
+                            }
+                            return .success(data)
+                        }
+                        self.finishSheet(completion, result: checked)
+                    }
                 }
             }
         }

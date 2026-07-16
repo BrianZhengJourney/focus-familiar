@@ -97,6 +97,17 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .temperament-tile .temperament-ico{ flex:none; width:25px; height:25px; display:grid; place-items:center;
   border-radius:8px; background:#ffffff0a; font-size:14px; }
 .temperament-tile b{ display:block; font-size:9.5px; }.temperament-tile small{ display:block; margin-top:2px; font-size:7.5px; line-height:1.25; color:#89839f; }
+.quality-label{ display:flex; justify-content:space-between; align-items:baseline; margin:1px 1px 6px;
+  color:var(--dim); font-size:8px; }
+.quality-label b{ color:var(--accent); font-size:9px; font-weight:600; }
+.quality-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
+.quality-tile{ min-width:0; padding:7px 8px; display:flex; align-items:center; justify-content:space-between;
+  gap:6px; text-align:left; color:var(--dim); background:#17132f; border:1px solid var(--line); border-radius:10px; }
+.quality-tile:hover{ background:#201a3f; }.quality-tile.sel{ color:var(--ink); border-color:#ffd47988;
+  background:linear-gradient(135deg,#302448,#293143); box-shadow:0 0 0 1px #ffd4791e; }
+.quality-tile:disabled{ opacity:.48; cursor:default; }
+.quality-tile b{ font-size:9.5px; letter-spacing:.04em; }.quality-tile small{ display:block; margin-top:2px;
+  color:#918aa7; font-size:7.5px; white-space:nowrap; }.quality-price{ color:var(--warn); font:600 8px ui-monospace,monospace; }
 .sheet-result{ min-height:190px; padding:11px; border:1px solid #7df0cf32; border-radius:15px;
   background:linear-gradient(155deg,#1c1738,#15122c); }
 .sheet-result-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -209,7 +220,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </div>
 
 <div class="sec" id="petLab">
-  <h2><span class="ico">✦</span><span data-zh="Mimo Studio · DIY 伴灵" data-en="Mimo Studio · DIY familiar">Mimo Studio · DIY 伴灵</span> <span class="proto-tag">MEDIUM</span></h2>
+  <h2><span class="ico">✦</span><span data-zh="Mimo Studio · DIY 伴灵" data-en="Mimo Studio · DIY familiar">Mimo Studio · DIY 伴灵</span> <span class="proto-tag" id="qualityTag">MEDIUM</span></h2>
   <div class="petlab-intro">
     <div class="pet-source" id="petSourceDrop" onclick="send({type:'petUpload'})"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt="uploaded reference"><small data-zh="拖进来" data-en="drop here">拖进来</small></div>
     <div class="petlab-copy"><b data-zh="一张图，长成三段真正的角色形态" data-en="One image, three real character forms">一张图，长成三段真正的角色形态</b>
@@ -224,6 +235,8 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 
   <div class="temperament-label"><b data-zh="它是什么气质？" data-en="What is its temperament?">它是什么气质？</b><span data-zh="改变轮廓、表情和动作" data-en="shapes silhouette, expression &amp; motion">改变轮廓、表情和动作</span></div>
   <div class="temperament-grid" id="temperamentGrid"></div>
+  <div class="quality-label"><b data-zh="生成精度" data-en="Render quality">生成精度</b><span data-zh="输出估价 · 输入另计" data-en="output estimate · input extra">输出估价 · 输入另计</span></div>
+  <div class="quality-grid" id="qualityGrid" role="radiogroup" aria-label="生成精度"></div>
   <div class="pet-controls">
     <div class="pet-control"><label data-zh="更像谁？" data-en="What should it resemble?">更像谁？</label><div class="likeness-row"><span data-zh="伴灵" data-en="Mimo">伴灵</span><input id="petLikeness" type="range" min="0" max="100" value="58" onchange="invalidatePetDraft()"><span data-zh="原图" data-en="photo">原图</span></div></div>
     <button class="generate-both" id="petGenerate" type="button" onclick="generateCharacterSheet()" data-zh="生成三段成长" data-en="Generate 3 forms">生成三段成长</button>
@@ -239,7 +252,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
       <div class="api-field"><label><span>OpenAI</span><b id="openAIKeyState">未设置</b></label><input id="openAIKey" type="password" autocomplete="off" placeholder="OpenAI API key"></div>
     </div>
     <div class="api-actions"><button type="button" onclick="savePetKeys()" data-zh="安全保存" data-en="Save securely">安全保存</button><button type="button" onclick="clearPetKey('openai')" data-zh="清除 OpenAI" data-en="Clear OpenAI">清除 OpenAI</button></div>
-    <div class="note" data-zh="GPT Image 2 · Medium · 1536×1024 · 每次生成一张三阶段 sheet。" data-en="GPT Image 2 · Medium · 1536×1024 · one three-stage sheet per generation.">GPT Image 2 · Medium · 1536×1024 · 每次生成一张三阶段 sheet。</div>
+    <div class="note" data-zh="GPT Image 2 · 1536×1024 · Low / Medium / High · 每次生成一张三阶段 sheet。" data-en="GPT Image 2 · 1536×1024 · Low / Medium / High · one three-stage sheet per generation.">GPT Image 2 · 1536×1024 · Low / Medium / High · 每次生成一张三阶段 sheet。</div>
   </details>
 </div>
 </div>
@@ -414,8 +427,13 @@ const TEMPERAMENTS=[
   {id:'dreamy-mysterious',ico:'☾',zh:'梦幻神秘',en:'Dreamy & mysterious',subZh:'流动 · 慢慢漂浮',subEn:'flowing · levitates'},
   {id:'odd-whimsical',ico:'⌁',zh:'古怪可爱',en:'Odd & whimsical',subZh:'偏斜 · 轻轻摇摆',subEn:'offbeat · wobbles'}
 ];
+const IMAGE_QUALITIES=[
+  {id:'low',name:'Low',zh:'快速草图',en:'fast draft',cost:'$0.005'},
+  {id:'medium',name:'Medium',zh:'推荐平衡',en:'recommended',cost:'$0.041'},
+  {id:'high',name:'High',zh:'最终精修',en:'final detail',cost:'$0.165'}
+];
 const petLab={name:'我的小伴灵',source:null,sourceName:'',requestID:null,draftID:null,
-  temperamentID:'quiet-curious',status:'idle',phase:'',error:'',sheet:null,adoptedName:''};
+  temperamentID:'quiet-curious',quality:'medium',status:'idle',phase:'',error:'',sheet:null,adoptedName:''};
 
 function renderTemperaments(){
   const grid=document.getElementById('temperamentGrid');if(!grid)return;
@@ -426,6 +444,17 @@ function invalidatePetDraft(){
   petLab.requestID=null;petLab.draftID=null;petLab.sheet=null;petLab.error='';petLab.status='idle';petLab.phase='';petLab.adoptedName='';renderPetLab();
 }
 function selectTemperament(id){if(TEMPERAMENTS.some(t=>t.id===id)&&id!==petLab.temperamentID){invalidatePetDraft();petLab.temperamentID=id;renderTemperaments()}}
+function renderImageQualities(){
+  const grid=document.getElementById('qualityGrid');if(!grid)return;
+  const busy=['busy','installing'].includes(petLab.status);
+  grid.setAttribute('aria-label',tx('生成精度','Render quality'));
+  grid.innerHTML=IMAGE_QUALITIES.map(q=>`<button type="button" role="radio" class="quality-tile ${petLab.quality===q.id?'sel':''}" aria-checked="${petLab.quality===q.id}" ${busy?'disabled':''} onclick="selectImageQuality('${q.id}')"><span><b>${q.name}</b><small>${esc(LANG==='zh'?q.zh:q.en)}</small></span><span class="quality-price">${q.cost}</span></button>`).join('');
+  const tag=document.getElementById('qualityTag');if(tag)tag.textContent=petLab.quality.toUpperCase();
+}
+function selectImageQuality(id){
+  if(!IMAGE_QUALITIES.some(q=>q.id===id)||id===petLab.quality||['busy','installing'].includes(petLab.status))return;
+  petLab.quality=id;invalidatePetDraft();send({type:'petQuality',quality:id});
+}
 function renderKeyState(){
   const openai=document.getElementById('openAIKeyState');if(!openai)return;
   openai.textContent=S.openAIConfigured?tx('已连接','connected'):tx('未设置','not set');openai.className=S.openAIConfigured?'ok':'';
@@ -434,19 +463,21 @@ function sheetStages(sheet){
   return `<div class="sheet-stages">${[0,1,2].map((i)=>`<div class="sheet-stage"><div class="sheet-frame s${i}"><img src="${sheet}" alt="${['seed','bloom','radiant'][i]}"></div><span>${[tx('初生','Seed'),tx('绽放','Bloom'),tx('发光','Radiant')][i]}</span></div>`).join('')}</div>`;
 }
 function renderPetLab(){
-  renderTemperaments();renderKeyState();
+  renderTemperaments();renderImageQualities();renderKeyState();
   const busy=['busy','installing'].includes(petLab.status),generate=document.getElementById('petGenerate');
-  if(generate){generate.disabled=busy;generate.textContent=petLab.status==='busy'?tx('正在生成…','Generating…'):tx('生成三段成长','Generate 3 forms')}
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[1];
+  if(generate){generate.disabled=busy;generate.textContent=petLab.status==='busy'?tx(`正在以 ${quality.name} 生成…`,`Generating · ${quality.name}…`):tx(`以 ${quality.name} 生成三段成长`,`Generate 3 forms · ${quality.name}`)}
   const result=document.getElementById('petSheetResult'),state=document.getElementById('petLabState');if(!result||!state)return;
   if(petLab.status==='busy'){
-    const copy=petLab.phase==='extracting'?tx('正在本地去背景、对齐三段形态…','Removing the matte and aligning all forms locally…'):tx('正在画一张 Medium character sheet…','Drawing one Medium character sheet…');
-    result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta">${esc(copy)}</span></div><div class="sheet-empty"><div><div class="pulse"></div>${esc(copy)}<br><small>${tx('通常需要一两分钟','usually takes a minute or two')}</small></div></div>`;
+    const copy=petLab.phase==='extracting'?tx('正在本地去背景、对齐三段形态…','Removing the matte and aligning all forms locally…'):tx(`正在画一张 ${quality.name} character sheet…`,`Drawing one ${quality.name} character sheet…`);
+    const wait=quality.id==='high'?tx('High 可能需要几分钟','High can take several minutes'):tx('通常需要一两分钟','usually takes a minute or two');
+    result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta">${esc(copy)}</span></div><div class="sheet-empty"><div><div class="pulse"></div>${esc(copy)}<br><small>${esc(wait)}</small></div></div>`;
   }else if(petLab.status==='error'){
     result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta err">${tx('失败','failed')}</span></div><div class="sheet-empty">${esc(petLab.error)}<br><small>${tx('检查连接或设置后，可以手动再试一次','Check your connection or setup, then try again')}</small></div>`;
   }else if(petLab.status==='adopted'&&petLab.sheet){
     result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED ✦</span></div>${sheetStages(petLab.sheet)}`;
   }else if(petLab.sheet){
-    result.innerHTML=`<div class="sheet-result-head"><b>${tx('同一只伴灵 · 三段成长','One familiar · three forms')}</b><span class="sheet-meta">MEDIUM · READY</span></div>${sheetStages(petLab.sheet)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button><button type="button" onclick="generateCharacterSheet()">${tx('再画一版','Try another')}</button></div>`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('同一只伴灵 · 三段成长','One familiar · three forms')}</b><span class="sheet-meta">${quality.name.toUpperCase()} · READY</span></div>${sheetStages(petLab.sheet)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button><button type="button" onclick="generateCharacterSheet()">${tx('再画一版','Try another')}</button></div>`;
   }else{
     result.innerHTML=`<div class="sheet-result-head"><b>Character sheet</b><span class="sheet-meta">1536 × 1024</span></div><div class="sheet-empty">${tx('这里会出现初生、绽放、发光三个完整角色形态。','Seed, Bloom, and Radiant will appear here as three complete character forms.')}</div>`;
   }
@@ -471,11 +502,11 @@ function generateCharacterSheet(){
   if(petLab.requestID)send({type:'petCancel',requestID:petLab.requestID});
   petLab.requestID=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`;petLab.draftID=null;petLab.sheet=null;petLab.error='';petLab.status='busy';petLab.phase='generating';petLab.adoptedName='';renderPetLab();
   send({type:'petGenerateSheet',requestID:petLab.requestID,source:petLab.source,name:petLab.name,
-    temperamentID:petLab.temperamentID,likeness:+document.getElementById('petLikeness').value/100});
+    temperamentID:petLab.temperamentID,quality:petLab.quality,likeness:+document.getElementById('petLikeness').value/100});
 }
 function petSheetProgress(event){if(event.requestID!==petLab.requestID)return;petLab.status='busy';petLab.phase=event.phase||'generating';renderPetLab()}
 function petSheetResult(event){
-  if(event.requestID!==petLab.requestID)return;petLab.status='ready';petLab.phase='';petLab.sheet=event.sheet;petLab.draftID=event.draftID||event.requestID;petLab.adoptedName='';renderPetLab();
+  if(event.requestID!==petLab.requestID)return;if(IMAGE_QUALITIES.some(q=>q.id===event.quality))petLab.quality=event.quality;petLab.status='ready';petLab.phase='';petLab.sheet=event.sheet;petLab.draftID=event.draftID||event.requestID;petLab.adoptedName='';renderPetLab();
 }
 function petSheetError(event){
   if(event.requestID&&event.requestID!==petLab.requestID)return;petLab.status='error';petLab.phase='';petLab.error=event.message||tx('生成失败','Generation failed');petLab.sheet=null;petLab.draftID=null;renderPetLab();
@@ -574,6 +605,7 @@ function renderRules(){
 function initSettings(state){
   S = state;
   LANG = state.language === 'en' ? 'en' : 'zh';
+  if(IMAGE_QUALITIES.some(q=>q.id===state.imageQuality))petLab.quality=state.imageQuality;
   applyLanguage();
   renderCards();
   renderPetLab();

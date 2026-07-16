@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct PendingCharacterSheetDraft {
     let pngData: Data
     let temperamentID: String
+    let quality: PetGenerationQuality
     let createdAt: Date
 }
 
@@ -333,6 +334,7 @@ extension AppDelegate {
             "projects": GitWatcher.projectsDir().lastPathComponent,
             "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
             "openAIConfigured": MimoSecret.openAI.isConfigured,
+            "imageQuality": PetGenerationQuality.resolve(d.string(forKey: "petImageQuality")).rawValue,
         ]
         if let customPet = storedCustomPetSpec() { state["customPet"] = customPet }
         state["customPets"] = (try? customPetStore.listRuntimeSpecs()) ?? []
@@ -415,6 +417,9 @@ extension AppDelegate {
                     activePetGenerationID = nil
                 }
             }
+        case "petQuality":
+            let quality = PetGenerationQuality.resolve(body["quality"] as? String)
+            d.set(quality.rawValue, forKey: "petImageQuality")
         case "petGenerateSheet":
             let requestID = (body["requestID"] as? String) ?? UUID().uuidString
             guard let source = body["source"] as? String, source.hasPrefix("data:image/"),
@@ -431,6 +436,8 @@ extension AppDelegate {
             let temperamentID = body["temperamentID"] as? String
             let profile = CustomPetTemperaments.profile(for: temperamentID)
             let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
+            let quality = PetGenerationQuality.resolve(body["quality"] as? String)
+            d.set(quality.rawValue, forKey: "petImageQuality")
             if let previous = activePetGenerationID {
                 petGenerator.cancel(previous)
                 pendingCharacterSheets.removeValue(forKey: previous)
@@ -441,7 +448,8 @@ extension AppDelegate {
             activePetGenerationID = requestID
             petGenerator.generateCharacterSheet(requestID: requestID, sourceDataURI: source,
                                                 personalityVisual: profile.promptFragment,
-                                                likeness: likeness, progress: { [weak self] phase, detail in
+                                                likeness: likeness, quality: quality,
+                                                progress: { [weak self] phase, detail in
                 guard let self, self.activePetGenerationID == requestID else { return }
                 var payload: [String: Any] = ["requestID": requestID, "phase": phase]
                 if let detail { payload["detail"] = detail }
@@ -458,10 +466,12 @@ extension AppDelegate {
                             switch processed {
                             case .success(let sheet):
                                 self.pendingCharacterSheets[requestID] = PendingCharacterSheetDraft(
-                                    pngData: sheet.pngData, temperamentID: profile.id, createdAt: Date())
+                                    pngData: sheet.pngData, temperamentID: profile.id,
+                                    quality: quality, createdAt: Date())
                                 self.settingsCall("petSheetResult", [
                                     "requestID": requestID, "draftID": requestID,
                                     "sheet": PetGenerationCoordinator.dataURI(sheet.pngData),
+                                    "quality": quality.rawValue,
                                 ])
                             case .failure(let error):
                                 self.settingsCall("petSheetError", [

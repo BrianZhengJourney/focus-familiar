@@ -37,6 +37,11 @@ struct PetGenerationTests {
                "PNG signatures should be accepted")
         expect(!PetGenerationCoordinator.isSupportedImageData(Data("not an image".utf8)),
                "non-image provider payloads should be rejected")
+        expect(PetGenerationQuality.resolve("high") == .high, "high quality should be accepted")
+        expect(PetGenerationQuality.resolve(" LOW ") == .low, "quality lookup should normalize input")
+        expect(PetGenerationQuality.resolve("auto") == .medium, "unsupported auto quality should use the default")
+        expect(PetGenerationQuality.resolve("provider-injection") == .medium,
+               "unknown quality values must not reach the provider")
 
         let prompt = PetGenerationCoordinator.characterSheetPrompt(
             personalityVisual: "a quiet observant silhouette", likeness: 0.7)
@@ -52,6 +57,16 @@ struct PetGenerationTests {
         let multipart = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
         for field in ["gpt-image-2", "1536x1024", "medium", "opaque", "name=\"n\"\r\n\r\n1"] {
             expect(multipart.contains(field), "multipart request missing \(field)")
+        }
+        for quality in PetGenerationQuality.allCases {
+            let qualityRequest = PetGenerationCoordinator.characterSheetRequest(
+                imageData: Data([1, 2, 3]), personalityVisual: "test", likeness: 0.5,
+                apiKey: "test-key", quality: quality, boundary: "mimo-quality-\(quality.rawValue)")
+            let qualityBody = String(decoding: qualityRequest.httpBody ?? Data(), as: UTF8.self)
+            expect(qualityBody.contains("name=\"quality\"\r\n\r\n\(quality.rawValue)\r\n"),
+                   "multipart request must send exact \(quality.rawValue) quality")
+            expect(qualityRequest.timeoutInterval == (quality == .high ? 420 : 240),
+                   "\(quality.rawValue) quality should use the intended timeout")
         }
         expect(!multipart.contains("input_fidelity"), "GPT Image 2 must omit input_fidelity")
         expect(request.url?.absoluteString == "https://api.openai.com/v1/images/edits",

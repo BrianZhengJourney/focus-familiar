@@ -83,6 +83,20 @@ enum PetGenerationError: LocalizedError {
     }
 }
 
+enum PetGenerationQuality: String, CaseIterable {
+    case low
+    case medium
+    case high
+
+    /// WebView values never pass through to the provider unchecked. `auto` and
+    /// unknown future values deliberately resolve to the predictable default.
+    static func resolve(_ value: String?) -> PetGenerationQuality {
+        guard let value else { return .medium }
+        return PetGenerationQuality(rawValue: value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+            ?? .medium
+    }
+}
+
 final class PetGenerationCoordinator {
     typealias SheetProgress = (_ phase: String, _ detail: String?) -> Void
     typealias SheetCompletion = (Result<Data, Error>) -> Void
@@ -96,7 +110,7 @@ final class PetGenerationCoordinator {
     init() {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 180
-        config.timeoutIntervalForResource = 240
+        config.timeoutIntervalForResource = 420
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: config)
     }
@@ -115,6 +129,7 @@ final class PetGenerationCoordinator {
 
     func generateCharacterSheet(requestID: String, sourceDataURI: String,
                                 personalityVisual: String, likeness: Double,
+                                quality: PetGenerationQuality = .medium,
                                 progress: @escaping SheetProgress,
                                 completion: @escaping SheetCompletion) {
         lock.lock(); cancelled.remove(requestID); lock.unlock()
@@ -126,11 +141,12 @@ final class PetGenerationCoordinator {
               Self.isSupportedImageData(imageData), imageData.count <= 12 * 1024 * 1024 else {
             finishSheet(completion, result: .failure(PetGenerationError.invalidImage)); return
         }
-        emitSheet(progress, phase: "generating", detail: "medium · 1536×1024")
+        emitSheet(progress, phase: "generating", detail: "\(quality.rawValue) · 1536×1024")
         let request = Self.characterSheetRequest(imageData: imageData,
                                                  personalityVisual: personalityVisual,
                                                  likeness: likeness,
-                                                 apiKey: openAIKey)
+                                                 apiKey: openAIKey,
+                                                 quality: quality)
         performJSON(request, provider: "OpenAI", requestID: requestID) { result in
             guard !self.isCancelled(requestID) else { return }
             switch result {
@@ -155,6 +171,7 @@ final class PetGenerationCoordinator {
 
     static func characterSheetRequest(imageData: Data, personalityVisual: String,
                                       likeness: Double, apiKey: String,
+                                      quality: PetGenerationQuality = .medium,
                                       boundary: String = "mimo-\(UUID().uuidString)") -> URLRequest {
         let url = URL(string: "https://api.openai.com/v1/images/edits")!
         var body = Data()
@@ -165,7 +182,7 @@ final class PetGenerationCoordinator {
         }
         field("model", "gpt-image-2")
         field("size", "1536x1024")
-        field("quality", "medium")
+        field("quality", quality.rawValue)
         field("output_format", "png")
         field("background", "opaque")
         field("n", "1")
@@ -176,7 +193,8 @@ final class PetGenerationCoordinator {
         body.append(imageData)
         body.appendUTF8("\r\n--\(boundary)--\r\n")
 
-        var request = URLRequest(url: url, timeoutInterval: 240)
+        let timeout: TimeInterval = quality == .high ? 420 : 240
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")

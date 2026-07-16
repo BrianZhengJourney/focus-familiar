@@ -56,6 +56,8 @@ enum MimoReferenceWarning: String, Equatable {
     case multiplePeopleDetected
     case identityAmbiguous
     case lowerConfidenceReference
+    case visibleTextContamination
+    case probableUIOverlay
 }
 
 enum MimoReferenceView: String, Equatable {
@@ -165,6 +167,20 @@ struct MimoReferencePreprocessorConfiguration {
     var minimumPersonConfidence: Float = 0.32
     var minimumNormalizedPersonArea: CGFloat = 0.008
     var cropPaddingFraction: CGFloat = 0.18
+    /// Text is blurred locally for privacy, but a large blurred patch is still
+    /// a misleading visual feature for image generation. Once enough cleaner
+    /// uploads exist, keep these crops as evidence but hold them off the board.
+    var maximumCleanBoardTextOverlapRatio: Float = 0.03
+    /// Dense OCR is a conservative proxy for app/video chrome. It deliberately
+    /// does not claim to recognize a particular platform or play icon.
+    var probableUISourceTextRegionCount = 10
+    /// Do not sacrifice the only useful reference to aggressive cleanup. The
+    /// contamination guard activates only after this many distinct clean
+    /// uploads establish the subject.
+    var minimumCleanSourcesForBoardHardening = 3
+    /// A much weaker same-view face from the same collage is usually an
+    /// obstruction (phone, hand, sticker), not a useful extra identity angle.
+    var weakSameViewAlternateFaceConfidenceGap: Float = 0.12
 }
 
 // MARK: - Injectable Vision boundary
@@ -569,7 +585,8 @@ final class MimoReferencePreprocessor {
                                      textRegions: analysis.textRegions),
                rendered.png.count <= configuration.maximumPortraitBytes {
                 let warnings = warnings(for: candidate, rendered: rendered,
-                                        peopleCount: candidates.count)
+                                        peopleCount: candidates.count,
+                                        sourceTextRegionCount: analysis.textRegions.count)
                 let referenceID = "\(input.id):person:\(candidateIndex)"
                 people.append(MimoPersonReferenceEvidence(
                     id: referenceID,
@@ -789,13 +806,20 @@ final class MimoReferencePreprocessor {
     }
 
     private func warnings(for candidate: Candidate, rendered: RenderedPortrait,
-                          peopleCount: Int) -> [MimoReferenceWarning] {
+                          peopleCount: Int,
+                          sourceTextRegionCount: Int) -> [MimoReferenceWarning] {
         var warnings: [MimoReferenceWarning] = []
         if rendered.removedText { warnings.append(.textOverlayRemoved) }
         if !rendered.backgroundRemoved { warnings.append(.backgroundIsolationUnavailable) }
         if candidate.faceTextOverlapRatio > 0.12 { warnings.append(.facePartlyCoveredByText) }
         if peopleCount > 1 { warnings.append(.multiplePeopleDetected) }
         if candidate.qualityScore < 0.55 { warnings.append(.lowerConfidenceReference) }
+        if candidate.textOverlapRatio > configuration.maximumCleanBoardTextOverlapRatio {
+            warnings.append(.visibleTextContamination)
+        }
+        if sourceTextRegionCount >= configuration.probableUISourceTextRegionCount {
+            warnings.append(.probableUIOverlay)
+        }
         return warnings
     }
 
@@ -804,9 +828,35 @@ final class MimoReferencePreprocessor {
         identityFeatures: [String: MimoReferenceIdentityFeature]
     )
         -> [MimoPersonReferenceEvidence] {
-        let sorted = people.sorted {
+        let allSorted = people.sorted {
             if $0.qualityScore == $1.qualityScore { return $0.sourceIndex < $1.sourceIndex }
             return $0.qualityScore > $1.qualityScore
+        }
+        let cleanSourceIDs = Set(allSorted.filter(isCleanBoardReference).map(\.sourceInputID))
+        let shouldHarden = cleanSourceIDs.count >=
+            configuration.minimumCleanSourcesForBoardHardening
+        var sorted = shouldHarden
+            ? allSorted.filter(isCleanBoardReference)
+            : allSorted
+
+        // A phone-obscured face can still receive a plausible Vision face box.
+        // Suppress it only when a clearly stronger crop of the same view exists
+        // in the same upload and the batch already has enough clean sources.
+        // Sole low-confidence profiles are preserved because they often provide
+        // the most valuable complementary identity angle.
+        if shouldHarden {
+            sorted = sorted.filter { candidate in
+                guard let candidateFace = candidate.faceConfidence else { return true }
+                return !sorted.contains { stronger in
+                    guard stronger.id != candidate.id,
+                          stronger.sourceInputID == candidate.sourceInputID,
+                          let strongerFace = stronger.faceConfidence,
+                          strongerFace - candidateFace >=
+                            configuration.weakSameViewAlternateFaceConfidenceGap,
+                          stronger.qualityScore >= candidate.qualityScore else { return false }
+                    return stronger.view == candidate.view || candidate.view == .unknown
+                }
+            }
         }
         var selected: [MimoPersonReferenceEvidence] = []
         var perInput: [String: Int] = [:]
@@ -891,6 +941,12 @@ final class MimoReferencePreprocessor {
         return selected
     }
 
+    private func isCleanBoardReference(_ reference: MimoPersonReferenceEvidence) -> Bool {
+        !reference.warnings.contains(.visibleTextContamination) &&
+            !reference.warnings.contains(.probableUIOverlay) &&
+            !reference.warnings.contains(.facePartlyCoveredByText)
+    }
+
     private func isSpatiallyDistinct(
         _ candidate: MimoPersonReferenceEvidence,
         from existing: [MimoPersonReferenceEvidence]
@@ -942,6 +998,8 @@ final class MimoReferencePreprocessor {
                 "background_removed": reference.backgroundRemoved,
                 "text_removed": reference.warnings.contains(.textOverlayRemoved),
                 "face_text_warning": reference.warnings.contains(.facePartlyCoveredByText),
+                "visible_text_warning": reference.warnings.contains(.visibleTextContamination),
+                "probable_ui_warning": reference.warnings.contains(.probableUIOverlay),
             ]
         }
         let json: [String: Any] = [

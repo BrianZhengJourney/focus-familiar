@@ -239,6 +239,64 @@ struct ReferencePreprocessorTests {
         expect(ambiguous.images[0].warnings.contains(.identityAmbiguous),
                "missing identity evidence should be explicit")
 
+        // Once several clean uploads already establish the subject, noisy
+        // screenshots must not fill the remaining board cells merely because
+        // the board has spare capacity. This reproduces the real five-image
+        // failure: a phone-obscured alternate and a high-confidence video/UI
+        // frame displaced cleaner identity angles.
+        let cleanProfile = analysis(
+            people: [person(0.12, 0.08, 0.52, 0.82)],
+            faces: [face(0.24, 0.66, 0.17, 0.15, confidence: 0.78, yaw: 0.86)])
+        let cleanPlusPhoneAlternate = analysis(
+            people: [person(0.05, 0.08, 0.42, 0.82),
+                     person(0.58, 0.15, 0.34, 0.68, confidence: 0.78)],
+            faces: [face(0.16, 0.66, 0.16, 0.15, confidence: 0.94, yaw: 0.42),
+                    face(0.66, 0.66, 0.14, 0.13, confidence: 0.70, yaw: 0.42)],
+            collage: true)
+        let uiHeavy = analysis(
+            people: [person(0.04, 0.07, 0.88, 0.86, confidence: 0.98)],
+            faces: [face(0.34, 0.67, 0.18, 0.16, confidence: 0.96, yaw: 0.02)],
+            text: [
+                CGRect(x: 0.08, y: 0.08, width: 0.72, height: 0.08),
+                CGRect(x: 0.12, y: 0.19, width: 0.68, height: 0.08),
+                CGRect(x: 0.16, y: 0.30, width: 0.62, height: 0.08),
+                CGRect(x: 0.20, y: 0.41, width: 0.56, height: 0.08),
+                CGRect(x: 0.24, y: 0.52, width: 0.50, height: 0.08),
+                CGRect(x: 0.28, y: 0.63, width: 0.44, height: 0.08),
+                CGRect(x: 0.32, y: 0.74, width: 0.38, height: 0.08),
+                CGRect(x: 0.36, y: 0.85, width: 0.32, height: 0.05),
+                CGRect(x: 0.02, y: 0.92, width: 0.18, height: 0.04),
+                CGRect(x: 0.78, y: 0.92, width: 0.18, height: 0.04),
+            ], collage: true)
+        let cleanFront = analysis(
+            people: [person(0.18, 0.08, 0.56, 0.82)],
+            faces: [face(0.36, 0.67, 0.17, 0.15, confidence: 0.95, yaw: 0.02)])
+        let cleanThreeQuarter = analysis(
+            people: [person(0.20, 0.10, 0.52, 0.78)],
+            faces: [face(0.38, 0.66, 0.16, 0.14, confidence: 0.91, yaw: -0.44)])
+        let hardenedStub = StubAnalyzer(
+            analyses: [cleanProfile, cleanPlusPhoneAlternate, uiHeavy,
+                       cleanFront, cleanThreeQuarter],
+            featureValues: [0, 2, 3, 1, 4, 5])
+        let hardened = MimoReferencePreprocessor(analyzer: hardenedStub).process([
+            MimoReferenceInput(id: "clean-profile", data: source),
+            MimoReferenceInput(id: "clean-plus-phone", data: source),
+            MimoReferenceInput(id: "video-ui", data: source),
+            MimoReferenceInput(id: "clean-front", data: source),
+            MimoReferenceInput(id: "clean-three-quarter", data: source),
+        ])
+        expect(!hardened.recommendedReferences.contains(where: {
+            $0.sourceInputID == "video-ui"
+        }), "UI/OCR-contaminated frames should be held back when clean sources are sufficient")
+        expect(!hardened.recommendedReferences.contains(where: {
+            $0.sourceInputID == "clean-plus-phone" && $0.id.hasSuffix("person:1")
+        }), "a weaker same-view phone-obscured alternate should not dilute a clean board")
+        expect(Set(hardened.recommendedReferences.map(\.view)).isSuperset(of: [
+            .profile, .threeQuarter, .frontal,
+        ]), "hardening should preserve complementary clean views of the subject")
+        expect(hardened.recommendedReferences.count == 4,
+               "clean evidence should determine board size instead of padding to six slots")
+
         // Face-only fallback catches a portrait while rejecting tiny profile
         // avatars and decorative UI faces by normalized area.
         let facesOnlyStub = StubAnalyzer(analyses: [analysis(

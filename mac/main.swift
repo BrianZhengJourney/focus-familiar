@@ -537,6 +537,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         root.addItem(appItem)
         root.setSubmenu(appMenu, for: appItem)
+
+        let editMenu = makeStandardEditMenu(language: voiceLanguage())
+        let editItem = NSMenuItem(title: editMenu.title, action: nil, keyEquivalent: "")
+        root.addItem(editItem)
+        root.setSubmenu(editMenu, for: editItem)
         NSApp.mainMenu = root
     }
 

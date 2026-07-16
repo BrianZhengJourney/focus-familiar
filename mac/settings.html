@@ -15,6 +15,9 @@ body{
   background:linear-gradient(165deg,#1d1838 0%,#191534 55%,#141d33 100%);
   overflow-y:auto; padding:22px 30px 40px; -webkit-user-select:none;
 }
+input,textarea,[contenteditable="true"]{
+  -webkit-user-select:text; user-select:text;
+}
 h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .tagline{ color:var(--dim); font-size:13px; margin:4px 0 15px; }
 

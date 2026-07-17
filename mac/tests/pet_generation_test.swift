@@ -89,6 +89,15 @@ struct PetGenerationTests {
                "visual tuning notes over the scalar limit must be rejected")
         expect(PetVisualTuningNote.sanitize(String(repeating: "😀", count: 151)) == "",
                "visual tuning notes over the UTF-8 limit must be rejected")
+        let defaultPersonZh = PetVisualTuningNote.detectedPersonDefault(language: "zh")
+        let defaultPersonEn = PetVisualTuningNote.detectedPersonDefault(language: "en")
+        expect(defaultPersonZh.contains("年龄感") && defaultPersonZh.contains("不要幼态大头"),
+               "the Chinese person default should preserve apparent age and avoid unsupported infantilization")
+        expect(defaultPersonEn.contains("source age") && defaultPersonEn.contains("childlike"),
+               "the English person default should preserve apparent age and avoid unsupported infantilization")
+        expect(defaultPersonZh.unicodeScalars.count <= PetVisualTuningNote.maximumUnicodeScalars &&
+               defaultPersonEn.unicodeScalars.count <= PetVisualTuningNote.maximumUnicodeScalars,
+               "detected-person defaults must fit the same bounded tuning-note contract")
 
         let prompt = PetGenerationCoordinator.characterSheetPrompt(
             personalityVisual: "a quiet observant silhouette", likeness: 0.7)

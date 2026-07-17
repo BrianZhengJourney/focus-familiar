@@ -619,6 +619,9 @@ const STUDIO_STAGES=[
 ];
 const MAX_STYLE_TUNING=160;
 const STYLE_TUNING_SUGGESTIONS=[
+  {id:'mature-glam',zh:'御姐感',en:'mature glam',phraseZh:'明确成年主体：成熟自信、有御姐气场',phraseEn:'adult: mature, confident'},
+  {id:'alluring',zh:'性感一点',en:'more alluring',phraseZh:'明确成年主体：更性感有魅力，穿搭得体',phraseEn:'adult: alluring, tasteful'},
+  {id:'source-faithful',zh:'贴近原图',en:'closer to source',phraseZh:'整体更贴近原图',phraseEn:'closer to source'},
   {id:'slimmer',zh:'纤细一点',en:'slimmer build',phraseZh:'身形更纤细轻巧',phraseEn:'a slimmer, lighter silhouette'},
   {id:'longer',zh:'拉长比例',en:'longer proportions',phraseZh:'身体和四肢比例更修长',phraseEn:'longer body and limb proportions'},
   {id:'smaller-head',zh:'头小一点',en:'smaller head',phraseZh:'头部稍小，身体比例更自然',phraseEn:'a slightly smaller head with more natural body proportions'}
@@ -626,7 +629,7 @@ const STYLE_TUNING_SUGGESTIONS=[
 const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],primaryReferenceID:null,requestID:null,draftID:null,
   candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,candidateAutoStartToken:null,
   temperamentID:'quiet-curious',quality:'medium',
-  styleTuningNote:'',
+  styleTuningNote:'',styleTuningCustomized:false,
   sheetQuality:null,stageQualities:[null,null,null],preservedResult:false,
   status:'idle',operation:null,phase:'',phaseMessage:'',error:'',errorKind:'',errorCode:'',outputRetained:false,
   sheet:null,stageImages:[null,null,null],stageBusyIndex:null,providerSeconds:null,localSeconds:null,
@@ -778,7 +781,7 @@ function styleSuggestionApplied(suggestion){
 function renderStyleTuning(){
   const input=document.getElementById('petStyleTuning'),counter=document.getElementById('petStyleTuningCount'),chips=document.getElementById('petStyleTuningSuggestions'),hint=document.getElementById('petStyleTuningHint');
   if(!input||!counter||!chips||!hint)return;
-  const disabled=studioBusy()||petLab.status==='review'||referencesImporting();
+  const disabled=studioBusy()||referencesImporting();
   if(input.value!==petLab.styleTuningNote)input.value=petLab.styleTuningNote;
   input.disabled=disabled;
   input.placeholder=tx('例如：身形更纤细，四肢略长，头小一点','e.g. slimmer build, longer limbs, slightly smaller head');
@@ -788,13 +791,13 @@ function renderStyleTuning(){
   chips.dataset.label=tx('试试','try');
   chips.innerHTML=STYLE_TUNING_SUGGESTIONS.map(suggestion=>{const applied=styleSuggestionApplied(suggestion);return `<button type="button" class="style-tuning-chip ${applied?'applied':''}" ${disabled?'disabled':''} onclick="appendStyleTuningSuggestion('${suggestion.id}')">${applied?'✓':'＋'} ${esc(LANG==='zh'?suggestion.zh:suggestion.en)}</button>`}).join('');
 }
-function updateStyleTuning(value){
-  if(studioBusy()||petLab.status==='review'||referencesImporting())return;
+function updateStyleTuning(value,customized=true){
+  if(studioBusy()||referencesImporting())return;
   const next=String(value??'').slice(0,MAX_STYLE_TUNING);if(next===petLab.styleTuningNote){renderStyleTuning();return}
-  petLab.styleTuningNote=next;renderStyleTuning();
+  petLab.styleTuningNote=next;if(customized)petLab.styleTuningCustomized=true;renderStyleTuning();
 }
 function appendStyleTuningSuggestion(id){
-  if(studioBusy()||petLab.status==='review'||referencesImporting())return;
+  if(studioBusy()||referencesImporting())return;
   const suggestion=STYLE_TUNING_SUGGESTIONS.find(item=>item.id===id);if(!suggestion)return;
   const phrase=LANG==='zh'?suggestion.phraseZh:suggestion.phraseEn;
   if(styleSuggestionApplied(suggestion)){document.getElementById('petStyleTuning')?.focus();return}
@@ -1075,7 +1078,7 @@ function generateCandidates(){
   if(!canGenerate())return;const requestID=beginStudioOperation('candidates');
   send({type:'petGenerateCandidates',requestID,source:petLab.source,name:petLab.name,
     temperamentID:petLab.temperamentID,likeness:+document.getElementById('petLikeness').value/100,
-    styleTuningNote:styleTuningForBridge(),...buildReferenceBridgePayload()});
+    styleTuningNote:styleTuningForBridge(),styleTuningCustomized:!!petLab.styleTuningCustomized,...buildReferenceBridgePayload()});
 }
 function selectCandidate(index){
   if(studioBusy()||index<0||index>=petLab.candidates.length)return;
@@ -1176,6 +1179,7 @@ function petStudioProgress(event){
 }
 function petReferencePreview(event){
   if(event.requestID!==petLab.requestID||!event.board)return;
+  if(!petLab.styleTuningCustomized&&event.defaultStyleTuningNote)petLab.styleTuningNote=String(event.defaultStyleTuningNote).slice(0,MAX_STYLE_TUNING);
   recordStudioTelemetry(event);Object.assign(petLab,{status:'review',phase:'reference-review',partialImage:null,
     referencePreview:event.board,referenceMode:event.mode||'isolatedPeople',
     referenceEvidenceCount:Math.max(0,+event.evidenceCount||0),referenceUsedCount:Math.max(0,+event.usedSourceCount||0),
@@ -1185,7 +1189,7 @@ function petReferencePreview(event){
 function confirmPetReferences(){
   if(petLab.status!=='review'||!petLab.requestID||!petLab.referencePreview)return;
   petLab.status='busy';petLab.phase='connecting';petLab.phaseMessage='';petLab.partialImage=petLab.referencePreview;renderPetLab();
-  send({type:'petConfirmReferences',requestID:petLab.requestID});
+  send({type:'petConfirmReferences',requestID:petLab.requestID,styleTuningNote:styleTuningForBridge(),styleTuningCustomized:!!petLab.styleTuningCustomized});
 }
 function petCandidateResult(event){
   if(event.requestID!==petLab.requestID)return;const candidates=(event.candidates||event.images||[]).filter(candidate=>candidateImage(candidate));

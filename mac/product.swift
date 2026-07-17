@@ -858,7 +858,8 @@ extension AppDelegate {
                                             inputs: [MimoReferenceInput],
                                             profile: CustomPetTemperamentProfile,
                                             likeness: Double,
-                                            styleTuningNote: String) {
+                                            styleTuningNote: String,
+                                            useDetectedPersonDefault: Bool) {
         guard reserveProviderGeneration(requestID) else { return }
         let startedAt = Date()
         studioProgress(requestID: requestID, phase: "analyzing", startedAt: startedAt)
@@ -891,6 +892,12 @@ extension AppDelegate {
                                                   "The references need a clearer primary subject.")
                     return
                 }
+                let shouldUseDefault = useDetectedPersonDefault &&
+                    styleTuningNote.isEmpty &&
+                    payload.identityBoard.mode == .isolatedPeople
+                let effectiveStyleTuningNote = shouldUseDefault
+                    ? PetVisualTuningNote.detectedPersonDefault(language: voiceLanguage())
+                    : styleTuningNote
                 let boardURI = PetGenerationCoordinator.dataURI(payload.identityBoard.png)
                 self.studioProgress(requestID: requestID, phase: "analyzing",
                                     startedAt: startedAt,
@@ -901,7 +908,7 @@ extension AppDelegate {
                 self.pendingReferencePreflights[requestID] = PendingReferencePreflight(
                     sourceDataURI: boardURI,
                     referenceEvidenceJSON: payload.analysisJSON,
-                    styleTuningNote: styleTuningNote,
+                    styleTuningNote: effectiveStyleTuningNote,
                     profile: profile, likeness: likeness, createdAt: Date())
                 let ambiguous = result.images.contains {
                     $0.warnings.contains(.identityAmbiguous)
@@ -915,6 +922,7 @@ extension AppDelegate {
                     "evidenceCount": payload.identityBoard.referenceIDs.count,
                     "ambiguous": ambiguous,
                     "localSeconds": localSeconds,
+                    "defaultStyleTuningNote": shouldUseDefault ? effectiveStyleTuningNote : "",
                     "messageZh": ambiguous
                       ? "检测到不止一个可能的人物。请确认身份板里的主角正确；不对就取消并把最清楚的图设为主参考。"
                       : "请确认这就是你想做成伴灵的主角。确认前不会调用 OpenAI。",
@@ -1460,11 +1468,14 @@ extension AppDelegate {
                 ])
                 return
             }
+            let confirmedStyleTuningNote = (body["styleTuningNote"] as? String).map {
+                PetVisualTuningNote.sanitize($0)
+            } ?? prepared.styleTuningNote
             startCandidateGeneration(
                 requestID: requestID,
                 source: prepared.sourceDataURI,
                 referenceEvidenceJSON: prepared.referenceEvidenceJSON,
-                styleTuningNote: prepared.styleTuningNote,
+                styleTuningNote: confirmedStyleTuningNote,
                 profile: prepared.profile, likeness: prepared.likeness,
                 alreadyReserved: true)
         case "petCancel":
@@ -1534,9 +1545,11 @@ extension AppDelegate {
             let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
             let styleTuningNote = PetVisualTuningNote.sanitize(
                 body["styleTuningNote"] as? String)
+            let useDetectedPersonDefault = !(body["styleTuningCustomized"] as? Bool ?? false)
             prepareCandidateGeneration(requestID: requestID, inputs: inputs,
                                        profile: profile, likeness: likeness,
-                                       styleTuningNote: styleTuningNote)
+                                       styleTuningNote: styleTuningNote,
+                                       useDetectedPersonDefault: useDetectedPersonDefault)
         case "petGenerateEvolution":
             pruneStudioState()
             guard let requestID = generationRequestID(body["requestID"]),

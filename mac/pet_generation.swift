@@ -155,6 +155,13 @@ enum PetVisualTuningNote {
               collapsed.utf8.count <= maximumUTF8Bytes else { return "" }
         return collapsed
     }
+
+    static func detectedPersonDefault(language: String) -> String {
+        let note = language == "en"
+            ? "Match source age, face, build, hair, and outfit; avoid childlike roundness."
+            : "贴近主参考的年龄感、脸型、身形、发型和穿搭；不要幼态大头、圆胖化或乱加配饰"
+        return sanitize(note)
+    }
 }
 
 /// The final evolution pass deliberately excludes Low: Low is reserved for

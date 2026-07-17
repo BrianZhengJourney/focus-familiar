@@ -174,9 +174,13 @@ enum CharacterSheetProcessor {
     /// Source forms must have clear matte around them so a malformed layout is
     /// never silently cropped into a desktop sprite.
     static let requiredSourceMargin = 16
-    static let outputSidePadding = 32
-    static let outputTopPadding = 24
-    static let outputBottomPadding = 32
+    /// Keep output padding minimal so the figure fills its 512 cell — the
+    /// on-screen size comes straight from how much of the cell the art uses.
+    /// Must stay ≥ the 8 px transparent border CustomPetStore validates, plus
+    /// slack for the feathered edge.
+    static let outputSidePadding = 10
+    static let outputTopPadding = 10
+    static let outputBottomPadding = 12
     /// GPT may miss the requested thirds slightly. Search locally for the real
     /// transparent gutter, while staying conservative about badly merged art.
     static let boundarySearchRadius = 160
@@ -475,6 +479,27 @@ enum CharacterSheetProcessor {
         return changed ? try encodePNG(output) : pngData
     }
 
+    /// Extracts one normalized 512×512 stage frame from a 1536×512 runtime
+    /// sheet. Used as the identity reference for expression-sheet generation.
+    static func extractNormalizedStage(fromNormalizedSheet pngData: Data,
+                                       stageIndex: Int) throws -> Data {
+        guard hasPNGSignature(pngData) else { throw CharacterSheetProcessingError.notPNG }
+        guard let dimensions = pngPixelDimensions(pngData),
+              dimensions.width == outputWidth, dimensions.height == outputHeight else {
+            let dimensions = pngPixelDimensions(pngData) ?? (0, 0)
+            throw CharacterSheetProcessingError.invalidNormalizedSheetDimensions(
+                width: dimensions.0, height: dimensions.1)
+        }
+        guard (0..<CharacterSheetStageKind.allCases.count).contains(stageIndex) else {
+            throw CharacterSheetProcessingError.emptyStage(stageIndex)
+        }
+        let sheet = try decodePNG(pngData)
+        let frame = extractHorizontalRange(sheet,
+                                           from: stageIndex * outputStageSize,
+                                           to: (stageIndex + 1) * outputStageSize)
+        return try encodePNG(frame)
+    }
+
     /// Replaces exactly one normalized frame without regenerating or touching
     /// the other two paid outputs.
     static func replaceStage(in normalizedSheetPNGData: Data,
@@ -550,7 +575,7 @@ enum CharacterSheetProcessor {
                                           space: colorSpace,
                                           bitmapInfo: bitmapInfo) else { return false }
             // CGImage and the RGBA buffer both use top-first scanlines here.
-            context.interpolationQuality = .none
+            context.interpolationQuality = .high
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
             return true
         }
@@ -728,6 +753,27 @@ enum CharacterSheetProcessor {
             if y + 1 < height { seed(index + width) }
         }
 
+        // Foreground pixels touching the background get a feathered alpha ramp
+        // based on how matte-blended their color is, so raster portraits keep
+        // anti-aliased edges instead of a hard binary cut. Interior pixels stay
+        // fully opaque, which preserves crisp pixel-style art.
+        var boundaryBand = [UInt8](repeating: 0, count: width * height)
+        for index in 0..<(width * height) where background[index] == 0 {
+            let x = index % width
+            let y = index / width
+            var nearBackground = false
+            outer: for dy in -2...2 {
+                let ny = y + dy
+                guard ny >= 0, ny < height else { nearBackground = true; break }
+                for dx in -2...2 {
+                    let nx = x + dx
+                    guard nx >= 0, nx < width else { nearBackground = true; break outer }
+                    if background[ny * width + nx] == 1 { nearBackground = true; break outer }
+                }
+            }
+            if nearBackground { boundaryBand[index] = 1 }
+        }
+
         for index in 0..<(width * height) {
             let pixel = index * 4
             if background[index] == 1 || image.pixels[pixel + 3] < 16 {
@@ -735,8 +781,22 @@ enum CharacterSheetProcessor {
                 image.pixels[pixel + 1] = 0
                 image.pixels[pixel + 2] = 0
                 image.pixels[pixel + 3] = 0
+            } else if boundaryBand[index] == 1 {
+                let dr = Int(image.pixels[pixel]) - matte.0
+                let dg = Int(image.pixels[pixel + 1]) - matte.1
+                let db = Int(image.pixels[pixel + 2]) - matte.2
+                let distance = Double(dr * dr + dg * dg + db * db).squareRoot()
+                // Ramp from transparent at the matte threshold up to opaque at
+                // 3× the threshold, smoothstepped for gentle edges.
+                let t = max(0.0, min(1.0, (distance - Double(threshold)) / (2.0 * Double(threshold))))
+                let smooth = t * t * (3.0 - 2.0 * t)
+                let alpha = UInt8(max(0.0, min(255.0, (smooth * 255.0).rounded())))
+                // Buffers are premultiplied; scale color with the new alpha.
+                image.pixels[pixel] = UInt8(Int(image.pixels[pixel]) * Int(alpha) / 255)
+                image.pixels[pixel + 1] = UInt8(Int(image.pixels[pixel + 1]) * Int(alpha) / 255)
+                image.pixels[pixel + 2] = UInt8(Int(image.pixels[pixel + 2]) * Int(alpha) / 255)
+                image.pixels[pixel + 3] = alpha
             } else {
-                // Character sheets intentionally use crisp sprite edges.
                 image.pixels[pixel + 3] = 255
             }
         }
@@ -972,19 +1032,39 @@ enum CharacterSheetProcessor {
                            Int(ceil(yOffset + Double(bounds.y + bounds.height) * scale)) - 1)
         guard minimumX <= maximumX, minimumY <= maximumY else { return output }
 
+        // Bilinear sampling over the premultiplied buffer — a weighted average
+        // of premultiplied RGBA is compositing-correct and keeps raster
+        // portraits smooth (nearest-neighbor aliased them badly).
+        func channel(_ sx: Int, _ sy: Int, _ offset: Int) -> Double {
+            guard sx >= 0, sx < source.width, sy >= 0, sy < source.height else { return 0 }
+            return Double(source.pixels[(sy * source.width + sx) * 4 + offset])
+        }
         for y in minimumY...maximumY {
-            let sourceY = Int(floor((Double(y) + 0.5 - yOffset) / scale))
-            guard sourceY >= 0, sourceY < source.height else { continue }
+            let sourceYCenter = (Double(y) + 0.5 - yOffset) / scale - 0.5
+            let y0 = Int(floor(sourceYCenter))
+            let fy = sourceYCenter - Double(y0)
             for x in minimumX...maximumX {
-                let sourceX = Int(floor((Double(x) + 0.5 - xOffset) / scale))
-                guard sourceX >= 0, sourceX < source.width else { continue }
-                let inputIndex = (sourceY * source.width + sourceX) * 4
-                guard source.pixels[inputIndex + 3] > 0 else { continue }
+                let sourceXCenter = (Double(x) + 0.5 - xOffset) / scale - 0.5
+                let x0 = Int(floor(sourceXCenter))
+                let fx = sourceXCenter - Double(x0)
+                let w00 = (1 - fx) * (1 - fy)
+                let w10 = fx * (1 - fy)
+                let w01 = (1 - fx) * fy
+                let w11 = fx * fy
+                var rgba = [0.0, 0.0, 0.0, 0.0]
+                for offset in 0..<4 {
+                    rgba[offset] = channel(x0, y0, offset) * w00
+                        + channel(x0 + 1, y0, offset) * w10
+                        + channel(x0, y0 + 1, offset) * w01
+                        + channel(x0 + 1, y0 + 1, offset) * w11
+                }
+                let alpha = UInt8(max(0.0, min(255.0, rgba[3].rounded())))
+                guard alpha > 0 else { continue }
                 let outputIndex = (y * output.width + x) * 4
-                output.pixels[outputIndex] = source.pixels[inputIndex]
-                output.pixels[outputIndex + 1] = source.pixels[inputIndex + 1]
-                output.pixels[outputIndex + 2] = source.pixels[inputIndex + 2]
-                output.pixels[outputIndex + 3] = source.pixels[inputIndex + 3]
+                output.pixels[outputIndex] = UInt8(max(0.0, min(255.0, rgba[0].rounded())))
+                output.pixels[outputIndex + 1] = UInt8(max(0.0, min(255.0, rgba[1].rounded())))
+                output.pixels[outputIndex + 2] = UInt8(max(0.0, min(255.0, rgba[2].rounded())))
+                output.pixels[outputIndex + 3] = alpha
             }
         }
         return output

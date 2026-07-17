@@ -198,7 +198,7 @@ struct CharacterSheetTests {
         expect(result.stages.map(\.kind) == [.seed, .bloom, .radiant],
                "stage order must be Seed, Bloom, Radiant")
         expect(result.stagePNGs.count == 3, "processor should expose all three stage PNGs")
-        expect(result.baselineY == 480, "all stages should share the documented feet baseline")
+        expect(result.baselineY == 500, "all stages should share the documented feet baseline")
         expect(result.quality.resolvedBoundaries == [512, 1024]
                && result.quality.boundaryRecoveries.isEmpty,
                "a well-spaced sheet should retain nominal thirds without recovery warnings")
@@ -258,6 +258,72 @@ struct CharacterSheetTests {
         let repeated = try CharacterSheetProcessor.process(pngData: input)
         expect(result.pngData == repeated.pngData,
                "processing the same sheet should be byte-for-byte deterministic")
+
+        // Soft matte + bilinear: matte-blended edge pixels survive with a
+        // feathered alpha instead of the old binary cut, while the figure's
+        // interior stays fully opaque.
+        var haloInput = try CharacterSheetProcessor.decodePNG(input)
+        var inkMinX = Int.max, inkMinY = Int.max, inkMaxX = -1, inkMaxY = -1
+        for y in 0..<haloInput.height {
+            for x in 0..<512 {
+                let pixel = haloInput.rgba(x: x, y: y)
+                guard pixel.0 == ink.0, pixel.1 == ink.1, pixel.2 == ink.2 else { continue }
+                inkMinX = min(inkMinX, x); inkMinY = min(inkMinY, y)
+                inkMaxX = max(inkMaxX, x); inkMaxY = max(inkMaxY, y)
+            }
+        }
+        expect(inkMaxX >= inkMinX && inkMaxY >= inkMinY, "halo fixture needs the stage-one ink body")
+        let blendedHalo: (UInt8, UInt8, UInt8, UInt8) = (223, 218, 206, 255)
+        for x in (inkMinX - 1)...(inkMaxX + 1) {
+            haloInput.setRGBA(x: x, y: inkMinY - 1, blendedHalo)
+            haloInput.setRGBA(x: x, y: inkMaxY + 1, blendedHalo)
+        }
+        for y in (inkMinY - 1)...(inkMaxY + 1) {
+            haloInput.setRGBA(x: inkMinX - 1, y: y, blendedHalo)
+            haloInput.setRGBA(x: inkMaxX + 1, y: y, blendedHalo)
+        }
+        let feathered = try CharacterSheetProcessor.process(
+            pngData: CharacterSheetProcessor.encodePNG(haloInput))
+        let featheredStage = try CharacterSheetProcessor.decodePNG(feathered.stages[0].pngData)
+        var partialAlphaCount = 0
+        var opaqueCount = 0
+        for y in 0..<featheredStage.height {
+            for x in 0..<featheredStage.width {
+                let alpha = featheredStage.rgba(x: x, y: y).3
+                if alpha > 0 && alpha < 255 { partialAlphaCount += 1 }
+                if alpha == 255 { opaqueCount += 1 }
+            }
+        }
+        expect(partialAlphaCount > 0,
+               "matte-blended edges should keep a feathered alpha ramp")
+        expect(opaqueCount > 0, "figure interiors should stay fully opaque")
+
+        // Expression generation reuses one normalized stage as its identity
+        // reference; extraction must produce a clean single 512px frame.
+        let extractedStage = try CharacterSheetProcessor.extractNormalizedStage(
+            fromNormalizedSheet: result.pngData, stageIndex: 1)
+        let extractedImage = try CharacterSheetProcessor.decodePNG(extractedStage)
+        expect(extractedImage.width == 512 && extractedImage.height == 512,
+               "an extracted stage should be one 512px cell")
+        expect(extractedImage.rgba(x: 0, y: 0).3 == 0,
+               "extracted stage corners should stay transparent")
+        var extractedForeground = false
+        for y in 0..<extractedImage.height where !extractedForeground {
+            for x in 0..<extractedImage.width
+                where extractedImage.rgba(x: x, y: y).3 == 255 {
+                extractedForeground = true
+                break
+            }
+        }
+        expect(extractedForeground, "an extracted stage should carry its figure")
+        do {
+            _ = try CharacterSheetProcessor.extractNormalizedStage(
+                fromNormalizedSheet: result.pngData, stageIndex: 3)
+            expect(false, "extraction must reject out-of-range stage indices")
+        } catch {
+            expect(error as? CharacterSheetProcessingError == .emptyStage(3),
+                   "extraction should fail with a stage-scoped error")
+        }
 
         let candidateBoard = try CharacterSheetProcessor.processCandidateBoard(
             pngData: candidateBoardFixture())
@@ -347,7 +413,7 @@ struct CharacterSheetTests {
 
         let regenerated = try CharacterSheetProcessor.processSingleStage(
             pngData: singleStageFixture(), kind: .bloom)
-        expect(regenerated.stage.kind == .bloom && regenerated.baselineY == 480,
+        expect(regenerated.stage.kind == .bloom && regenerated.baselineY == 500,
                "single-form processing should preserve the selected evolution kind and baseline")
         let regeneratedPNG = try CharacterSheetProcessor.decodePNG(regenerated.stage.pngData)
         expect(regeneratedPNG.width == 512 && regeneratedPNG.height == 512,

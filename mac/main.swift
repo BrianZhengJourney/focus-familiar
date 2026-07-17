@@ -416,6 +416,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     var pendingEvolutionSheets: [String: PendingEvolutionSheetDraft] = [:]
     var pendingLocalRecoveries: [String: PendingLocalGenerationRecovery] = [:]
     var pendingReferencePreflights: [String: PendingReferencePreflight] = [:]
+    /// Character currently receiving post-adoption expression sheets (one
+    /// sequential run at a time; nil when idle).
+    var expressionRunCharacterID: String?
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
@@ -602,6 +605,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         menu.addItem(huntRoot)
         menu.setSubmenu(huntMenu, for: huntRoot)
 
+        menu.addItem(item(voice("预览成长形态", "Preview evolution"),
+                          #selector(previewEvolution), "", "sparkles"))
+
         menu.addItem(NSMenuItem.separator())
 
         menu.addItem(item(voice("设置…", "Settings…"), #selector(showSettings), ",", "gearshape"))
@@ -759,10 +765,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     }
 
     // ── hover hot-zone: click-through everywhere except over the creature ──
-    // the stage sits in the panel's bottom-right (right:10 bottom:6, ~150px)
+    // the stage sits in the panel's bottom-right (right:10 bottom:6); raster
+    // familiars render up to 240px, so the zone covers the larger footprint
     func creatureRect() -> NSRect {
         let f = panel.frame
-        return NSRect(x: f.maxX - 170, y: f.minY, width: 170, height: 175)
+        return NSRect(x: f.maxX - 260, y: f.minY, width: 260, height: 265)
     }
     func startHoverTracking() {
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
@@ -874,16 +881,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         }
     }
 
-    // show the level-up spectacle without granting XP
+    // walk through Seed → Bloom → Radiant on the desktop without granting XP
     @objc func previewEvolution() {
-        js("""
-        (() => { const ring = document.getElementById('ring') || (() => {
-            const r = document.createElement('div'); r.className='ring'; r.id='ring';
-            document.getElementById('stage').appendChild(r); return r; })();
-          ring.classList.remove('burst'); void ring.offsetWidth; ring.classList.add('burst');
-          Fam.sparkle(9); toast('✦ evolution preview ✦'); })()
-        """)
-        victoryWalk()
+        revealOverlay()
+        js("famPreviewEvolution()")
         if UserDefaults.standard.bool(forKey: "soundOn") { NSSound(named: "Glass")?.play() }
     }
     @objc func enableAX() {

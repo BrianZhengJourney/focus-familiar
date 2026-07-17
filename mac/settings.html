@@ -141,6 +141,27 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .temperament-tile .temperament-ico{ flex:none; width:25px; height:25px; display:grid; place-items:center;
   border-radius:8px; background:#ffffff0a; font-size:14px; }
 .temperament-tile b{ display:block; font-size:11px; }.temperament-tile small{ display:block; margin-top:2px; font-size:9.5px; line-height:1.25; color:#9992ad; }
+.style-tuning{ margin:0 0 10px; padding:9px 10px; border:1px solid #cabcf52c; border-radius:12px;
+  background:linear-gradient(145deg,#1d1839,#17142f); }
+.style-tuning-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.style-tuning-title{ min-width:0; color:var(--accent); font-size:10.5px; font-weight:600; }
+.style-tuning-title > span + span{ margin-left:5px; color:#817a96; font-size:9px; font-weight:400; }
+.style-tuning-count{ flex:none; color:#817a96; font:9px ui-monospace,monospace; }
+.style-tuning-count.near{ color:var(--warn); }
+.style-tuning-input{ display:block; width:100%; height:42px; padding:7px 8px; resize:none; color:var(--ink);
+  border:1px solid #ffffff16; border-radius:9px; outline:none; background:#14112b;
+  font-family:inherit; font-size:10.5px; line-height:1.35; }
+.style-tuning-input::placeholder{ color:#77708d; }
+.style-tuning-input:focus{ border-color:#7df0cf77; box-shadow:0 0 0 2px #7df0cf12; }
+.style-tuning-input:disabled{ opacity:.48; cursor:default; }
+.style-tuning-suggestions{ display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-top:6px; }
+.style-tuning-suggestions::before{ content:attr(data-label); color:#77708d; font-size:8.5px; }
+.style-tuning-chip{ min-height:24px; padding:3px 7px; color:#aaa3bd; border:1px solid #ffffff12;
+  border-radius:999px; background:#ffffff07; font-size:9.5px; }
+.style-tuning-chip:hover{ color:var(--ink); border-color:#cabcf544; background:#ffffff0c; }
+.style-tuning-chip.applied{ color:#b9f4e2; border-color:#7df0cf3b; background:#7df0cf0c; }
+.style-tuning-chip:disabled{ opacity:.38; cursor:default; }
+.style-tuning-disclosure{ margin-top:5px; color:#746e88; font-size:8.5px; line-height:1.35; }
 .final-controls{ display:none; padding:9px 10px; margin:0 0 9px; border:1px solid #cabcf533;
   border-radius:12px; background:linear-gradient(145deg,#211a3e,#17162f); }
 .final-controls.show{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; }
@@ -211,6 +232,9 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
   background:#f1ece2; border:1px solid #7df0cf44; }
 .reference-review-copy{ color:var(--dim); font-size:10.5px; line-height:1.5; }
 .reference-review-copy strong{ display:block; color:var(--ink); margin-bottom:3px; font:600 12px Georgia,serif; }
+.reference-review-tuning{ padding:7px 9px; color:#b9b2ca; border-left:2px solid #7df0cf88;
+  border-radius:0 8px 8px 0; background:#7df0cf08; font-size:9.5px; line-height:1.4; }
+.reference-review-tuning b{ color:#9ee9d4; margin-right:6px; font-weight:600; }
 .reference-review-meta{ display:flex; flex-wrap:wrap; gap:5px; }
 .reference-review-actions{ display:grid; grid-template-columns:1fr auto; gap:7px; }
 .reference-confirm{ color:#15112b; border:0; background:linear-gradient(120deg,#cabcf5,#7df0cf); font-weight:750; }
@@ -357,6 +381,18 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 
   <div class="temperament-label"><b data-zh="它是什么气质？" data-en="What is its temperament?">它是什么气质？</b><span data-zh="改变轮廓、表情和动作" data-en="shapes silhouette, expression &amp; motion">改变轮廓、表情和动作</span></div>
   <div class="temperament-grid" id="temperamentGrid" role="radiogroup" data-aria-zh="伴灵气质" data-aria-en="Familiar temperament"></div>
+
+  <div class="style-tuning">
+    <div class="style-tuning-head">
+      <label class="style-tuning-title" for="petStyleTuning"><span data-zh="风格微调" data-en="Style tuning">风格微调</span><span id="petStyleTuningHint">可选 · 调整下一次生成</span></label>
+      <span class="style-tuning-count" id="petStyleTuningCount" aria-live="polite">0 / 160</span>
+    </div>
+    <textarea class="style-tuning-input" id="petStyleTuning" maxlength="160" rows="2"
+      data-aria-zh="用文字微调伴灵的风格、轮廓与比例" data-aria-en="Tune the familiar's style, silhouette, and proportions with text"
+      oninput="updateStyleTuning(this.value)"></textarea>
+    <div class="style-tuning-suggestions" id="petStyleTuningSuggestions" data-label="试试"></div>
+    <div class="style-tuning-disclosure" data-zh="这句话会发给 OpenAI；保留现有结果，$0 本机恢复不会使用它。" data-en="Sent to OpenAI for the next generation; existing results stay, and $0 local recovery does not use it.">这句话会发给 OpenAI；保留现有结果，$0 本机恢复不会使用它。</div>
+  </div>
 
   <div class="studio-steps" id="studioSteps" role="list" aria-label="Mimo Studio progress"></div>
   <div class="pet-controls">
@@ -569,8 +605,15 @@ const STUDIO_STAGES=[
   {zh:'选定主角',en:'Pick a master',subZh:'锁住身份与气质',subEn:'lock identity & mood'},
   {zh:'三段成长',en:'3-form evolution',subZh:'Medium / High',subEn:'Medium / High'}
 ];
+const MAX_STYLE_TUNING=160;
+const STYLE_TUNING_SUGGESTIONS=[
+  {id:'slimmer',zh:'纤细一点',en:'slimmer build',phraseZh:'身形更纤细轻巧',phraseEn:'a slimmer, lighter silhouette'},
+  {id:'longer',zh:'拉长比例',en:'longer proportions',phraseZh:'身体和四肢比例更修长',phraseEn:'longer body and limb proportions'},
+  {id:'smaller-head',zh:'头小一点',en:'smaller head',phraseZh:'头部稍小，身体比例更自然',phraseEn:'a slightly smaller head with more natural body proportions'}
+];
 const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],primaryReferenceID:null,requestID:null,draftID:null,
   candidateDraftID:null,candidates:[],candidateIndex:null,temperamentID:'quiet-curious',quality:'medium',
+  styleTuningNote:'',
   sheetQuality:null,stageQualities:[null,null,null],preservedResult:false,
   status:'idle',operation:null,phase:'',phaseMessage:'',error:'',errorKind:'',errorCode:'',outputRetained:false,
   sheet:null,stageImages:[null,null,null],stageBusyIndex:null,providerSeconds:null,localSeconds:null,
@@ -703,6 +746,42 @@ function renderTemperaments(){
   grid.setAttribute('aria-label',tx('伴灵气质','Familiar temperament'));
   grid.innerHTML=TEMPERAMENTS.map(t=>`<button type="button" role="radio" aria-checked="${petLab.temperamentID===t.id}" class="temperament-tile ${petLab.temperamentID===t.id?'sel':''}" ${busy?'disabled':''} onclick="selectTemperament('${t.id}')"><span class="temperament-ico">${t.ico}</span><span><b>${esc(LANG==='zh'?t.zh:t.en)}</b><small>${esc(LANG==='zh'?t.subZh:t.subEn)}</small></span></button>`).join('');
 }
+function styleTuningForBridge(){
+  return String(petLab.styleTuningNote||'').replace(/\s+/g,' ').trim().slice(0,MAX_STYLE_TUNING);
+}
+function styleSuggestionApplied(suggestion){
+  const note=String(petLab.styleTuningNote||'');
+  return note.includes(suggestion.phraseZh)||note.toLocaleLowerCase().includes(suggestion.phraseEn.toLocaleLowerCase());
+}
+function renderStyleTuning(){
+  const input=document.getElementById('petStyleTuning'),counter=document.getElementById('petStyleTuningCount'),chips=document.getElementById('petStyleTuningSuggestions'),hint=document.getElementById('petStyleTuningHint');
+  if(!input||!counter||!chips||!hint)return;
+  const disabled=studioBusy()||petLab.status==='review'||referencesImporting();
+  if(input.value!==petLab.styleTuningNote)input.value=petLab.styleTuningNote;
+  input.disabled=disabled;
+  input.placeholder=tx('例如：身形更纤细，四肢略长，头小一点','e.g. slimmer build, longer limbs, slightly smaller head');
+  const length=String(petLab.styleTuningNote||'').length;
+  counter.textContent=`${length} / ${MAX_STYLE_TUNING}`;counter.classList.toggle('near',length>=MAX_STYLE_TUNING-20);
+  hint.textContent=tx('可选 · 调整下一次生成','optional · tune the next generation');
+  chips.dataset.label=tx('试试','try');
+  chips.innerHTML=STYLE_TUNING_SUGGESTIONS.map(suggestion=>{const applied=styleSuggestionApplied(suggestion);return `<button type="button" class="style-tuning-chip ${applied?'applied':''}" ${disabled?'disabled':''} onclick="appendStyleTuningSuggestion('${suggestion.id}')">${applied?'✓':'＋'} ${esc(LANG==='zh'?suggestion.zh:suggestion.en)}</button>`}).join('');
+}
+function updateStyleTuning(value){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;
+  const next=String(value??'').slice(0,MAX_STYLE_TUNING);if(next===petLab.styleTuningNote){renderStyleTuning();return}
+  petLab.styleTuningNote=next;renderStyleTuning();
+}
+function appendStyleTuningSuggestion(id){
+  if(studioBusy()||petLab.status==='review'||referencesImporting())return;
+  const suggestion=STYLE_TUNING_SUGGESTIONS.find(item=>item.id===id);if(!suggestion)return;
+  const phrase=LANG==='zh'?suggestion.phraseZh:suggestion.phraseEn;
+  if(styleSuggestionApplied(suggestion)){document.getElementById('petStyleTuning')?.focus();return}
+  const current=String(petLab.styleTuningNote||'').trim(),separator=current?(LANG==='zh'?'；':' · '):'';
+  const next=`${current}${separator}${phrase}`;
+  if(next.length>MAX_STYLE_TUNING){const hint=document.getElementById('petStyleTuningHint');if(hint)hint.textContent=tx('先删几个字，再添加这条','shorten the note to add this');document.getElementById('petStyleTuning')?.focus();setTimeout(renderStyleTuning,1800);return}
+  updateStyleTuning(next);
+  requestAnimationFrame(()=>{const input=document.getElementById('petStyleTuning');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length)}});
+}
 function invalidatePetDraft(){
   if(studioBusy())return;
   const keep=!!petLab.draftID&&!!petLab.sheet;
@@ -781,7 +860,8 @@ function progressHTML(){
 function referenceReviewHTML(){
   const mode=petLab.referenceMode==='sanitizedFullFrames'?tx('主体备用模式','subject fallback'):tx('人物多角度','matched person views');
   const message=LANG==='zh'?petLab.referenceReviewMessageZh:petLab.referenceReviewMessageEn;
-  return `<div class="reference-review"><img class="reference-review-preview" src="${esc(petLab.referencePreview||'')}" alt="${tx('米墨准备发送给 OpenAI 的身份板','Identity board Mimo is prepared to send to OpenAI')}"><div class="reference-review-copy"><strong>${tx('这就是将要发送的身份板','This is the identity board that will be sent')}</strong>${esc(message||tx('确认主角正确后，米墨才会调用 OpenAI。','Mimo calls OpenAI only after you confirm the subject.'))}</div><div class="reference-review-meta"><span class="diag good">${esc(mode)}</span><span class="diag">${tx(`采用 ${petLab.referenceUsedCount} 张原图`,`${petLab.referenceUsedCount} source images used`)}</span><span class="diag">${tx(`${petLab.referenceEvidenceCount} 个证据角度`,`${petLab.referenceEvidenceCount} evidence views`)}</span>${petLab.referenceAmbiguous?`<span class="diag warn">${tx('需要仔细确认主角','check subject carefully')}</span>`:''}</div><div class="reference-review-actions"><button type="button" class="reference-confirm" onclick="confirmPetReferences()">${tx('确认主角 · 开始 Low 生成','Confirm subject · start Low generation')}</button><button type="button" onclick="cancelStudioOperation()">${tx('返回调整参考图','Back to references')}</button></div></div>`;
+  const tuning=styleTuningForBridge(),tuningHTML=tuning?`<div class="reference-review-tuning"><b>${tx('同时调整','Also tune')}</b>${esc(tuning)}</div>`:'';
+  return `<div class="reference-review"><img class="reference-review-preview" src="${esc(petLab.referencePreview||'')}" alt="${tx('米墨准备发送给 OpenAI 的身份板','Identity board Mimo is prepared to send to OpenAI')}"><div class="reference-review-copy"><strong>${tx('这就是将要发送的身份板','This is the identity board that will be sent')}</strong>${esc(message||tx('确认主角正确后，米墨才会调用 OpenAI。','Mimo calls OpenAI only after you confirm the subject.'))}</div>${tuningHTML}<div class="reference-review-meta"><span class="diag good">${esc(mode)}</span><span class="diag">${tx(`采用 ${petLab.referenceUsedCount} 张原图`,`${petLab.referenceUsedCount} source images used`)}</span><span class="diag">${tx(`${petLab.referenceEvidenceCount} 个证据角度`,`${petLab.referenceEvidenceCount} evidence views`)}</span>${petLab.referenceAmbiguous?`<span class="diag warn">${tx('需要仔细确认主角','check subject carefully')}</span>`:''}</div><div class="reference-review-actions"><button type="button" class="reference-confirm" onclick="confirmPetReferences()">${tx('确认主角 · 开始 Low 生成','Confirm subject · start Low generation')}</button><button type="button" onclick="cancelStudioOperation()">${tx('返回调整参考图','Back to references')}</button></div></div>`;
 }
 function candidateGridHTML(){
   return `<div class="candidate-grid" role="radiogroup" aria-label="${tx('选择一个主角','Choose one master character')}">${petLab.candidates.map((candidate,i)=>`<button type="button" role="radio" aria-checked="${petLab.candidateIndex===i}" class="candidate ${petLab.candidateIndex===i?'sel':''}" onclick="selectCandidate(${i})"><img src="${esc(candidateImage(candidate))}" alt="${esc(tx(`草稿 ${i+1}`,`Draft ${i+1}`))}"><span>${petLab.candidateIndex===i?tx('选定的主角','selected master'):tx(`草稿 ${i+1}`,`draft ${i+1}`)}</span></button>`).join('')}</div>`;
@@ -819,7 +899,7 @@ function syncVisibleDrafts(){
   visibleDraftSignature=signature;send({type:'petVisibleDrafts',draftID,candidateDraftID});
 }
 function renderPetLab(){
-  renderTemperaments();renderImageQualities();renderKeyState();renderStudioSteps();renderReferenceSet();renderRecoveryArchive();
+  renderTemperaments();renderStyleTuning();renderImageQualities();renderKeyState();renderStudioSteps();renderReferenceSet();renderRecoveryArchive();
   const busy=studioBusy()||petLab.status==='review',importing=referencesImporting(),generate=document.getElementById('petGenerate'),evolve=document.getElementById('petEvolutionGenerate');
   document.querySelectorAll('[data-pet-upload]').forEach(button=>button.disabled=busy||importing||petLab.references.length>=MAX_PET_REFERENCES);
   const likeness=document.getElementById('petLikeness');if(likeness)likeness.disabled=busy||importing;
@@ -940,7 +1020,7 @@ function generateCandidates(){
   if(!canGenerate())return;const requestID=beginStudioOperation('candidates');
   send({type:'petGenerateCandidates',requestID,source:petLab.source,name:petLab.name,
     temperamentID:petLab.temperamentID,likeness:+document.getElementById('petLikeness').value/100,
-    ...buildReferenceBridgePayload()});
+    styleTuningNote:styleTuningForBridge(),...buildReferenceBridgePayload()});
 }
 function selectCandidate(index){
   if(studioBusy()||index<0||index>=petLab.candidates.length)return;
@@ -951,12 +1031,12 @@ function generateEvolution(){
   if(!canGenerate())return;if(!petLab.candidateDraftID||petLab.candidateIndex===null){setupStudioError(tx('先从三个草稿里选一个主角。','Choose a master from the three drafts first.'));return}
   const requestID=beginStudioOperation('evolution');
   send({type:'petGenerateEvolution',requestID,candidateDraftID:petLab.candidateDraftID,
-    candidateIndex:petLab.candidateIndex,quality:petLab.quality});
+    candidateIndex:petLab.candidateIndex,quality:petLab.quality,styleTuningNote:styleTuningForBridge()});
 }
 function regenerateStage(stageIndex){
   if(!canGenerate())return;if(!petLab.draftID||!petLab.sheet||stageIndex<0||stageIndex>2)return;
   const draftID=petLab.draftID,requestID=beginStudioOperation('stage',stageIndex);
-  send({type:'petRegenerateStage',requestID,draftID,stageIndex,quality:petLab.quality});
+  send({type:'petRegenerateStage',requestID,draftID,stageIndex,quality:petLab.quality,styleTuningNote:styleTuningForBridge()});
 }
 function retryStudioOperation(){
   const operation=petLab.operation,stage=petLab.stageBusyIndex;

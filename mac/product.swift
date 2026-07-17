@@ -12,6 +12,7 @@ struct PendingCandidateBoardDraft {
     let candidatePNGs: [Data]
     let sourceDataURI: String
     let referenceEvidenceJSON: String
+    let styleTuningNote: String
     let temperamentID: String
     let likeness: Double
     var lastTouchedAt: Date
@@ -23,6 +24,7 @@ struct PendingEvolutionSheetDraft {
     let masterPNG: Data
     let sourceDataURI: String
     let referenceEvidenceJSON: String
+    var styleTuningNote: String
     let temperamentID: String
     let likeness: Double
     let quality: PetFinalGenerationQuality
@@ -35,6 +37,7 @@ struct CandidateGenerationRecovery {
     let rawPNG: Data
     let sourceDataURI: String
     let referenceEvidenceJSON: String
+    let styleTuningNote: String
     let temperamentID: String
     let likeness: Double
     let providerSeconds: Double
@@ -48,6 +51,7 @@ struct EvolutionGenerationRecovery {
     let masterPNG: Data
     let sourceDataURI: String
     let referenceEvidenceJSON: String
+    let styleTuningNote: String
     let temperamentID: String
     let likeness: Double
     let quality: PetFinalGenerationQuality
@@ -61,6 +65,7 @@ struct EvolutionGenerationRecovery {
 struct PendingReferencePreflight {
     let sourceDataURI: String
     let referenceEvidenceJSON: String
+    let styleTuningNote: String
     let profile: CustomPetTemperamentProfile
     let likeness: Double
     let createdAt: Date
@@ -71,6 +76,7 @@ struct StageGenerationRecovery {
     let parentDraftID: String
     let stage: PetEvolutionStage
     let quality: PetFinalGenerationQuality
+    let styleTuningNote: String
     let providerSeconds: Double
     let usage: PetGenerationUsage
     let styleBoardUsed: Bool
@@ -838,7 +844,8 @@ extension AppDelegate {
     private func prepareCandidateGeneration(requestID: String,
                                             inputs: [MimoReferenceInput],
                                             profile: CustomPetTemperamentProfile,
-                                            likeness: Double) {
+                                            likeness: Double,
+                                            styleTuningNote: String) {
         guard reserveProviderGeneration(requestID) else { return }
         let startedAt = Date()
         studioProgress(requestID: requestID, phase: "analyzing", startedAt: startedAt)
@@ -881,6 +888,7 @@ extension AppDelegate {
                 self.pendingReferencePreflights[requestID] = PendingReferencePreflight(
                     sourceDataURI: boardURI,
                     referenceEvidenceJSON: payload.analysisJSON,
+                    styleTuningNote: styleTuningNote,
                     profile: profile, likeness: likeness, createdAt: Date())
                 let ambiguous = result.images.contains {
                     $0.warnings.contains(.identityAmbiguous)
@@ -907,6 +915,7 @@ extension AppDelegate {
 
     private func startCandidateGeneration(requestID: String, source: String,
                                           referenceEvidenceJSON: String,
+                                          styleTuningNote: String,
                                           profile: CustomPetTemperamentProfile,
                                           likeness: Double,
                                           alreadyReserved: Bool = false) {
@@ -916,6 +925,7 @@ extension AppDelegate {
         petGenerator.generateCandidateBoard(
             requestID: requestID, sourceDataURI: source, styleBoardData: style,
             referenceEvidenceJSON: referenceEvidenceJSON,
+            styleTuningNote: styleTuningNote,
             personalityVisual: profile.promptFragment, likeness: likeness,
             progress: { [weak self] phase, partial, _ in
                 guard let self, self.studioGenerationLedger.activeRequestID == requestID else { return }
@@ -936,6 +946,7 @@ extension AppDelegate {
                     let recovery = CandidateGenerationRecovery(
                         rawPNG: output.data, sourceDataURI: source,
                         referenceEvidenceJSON: referenceEvidenceJSON,
+                        styleTuningNote: styleTuningNote,
                         temperamentID: profile.id, likeness: likeness,
                         providerSeconds: providerSeconds, usage: output.usage,
                         styleBoardUsed: style != nil, createdAt: Date())
@@ -985,6 +996,7 @@ extension AppDelegate {
                         pngData: board.pngData, candidatePNGs: board.candidatePNGs,
                         sourceDataURI: recovery.sourceDataURI,
                         referenceEvidenceJSON: recovery.referenceEvidenceJSON,
+                        styleTuningNote: recovery.styleTuningNote,
                         temperamentID: recovery.temperamentID,
                         likeness: recovery.likeness, lastTouchedAt: Date())
                     self.visibleCandidateDraftID = requestID
@@ -1024,6 +1036,7 @@ extension AppDelegate {
                                           candidateDraftID: String,
                                           candidate: PendingCandidateBoardDraft,
                                           candidateIndex: Int,
+                                          styleTuningNote: String,
                                           quality: PetFinalGenerationQuality) {
         guard reserveProviderGeneration(requestID) else { return }
         let startedAt = Date()
@@ -1035,6 +1048,7 @@ extension AppDelegate {
             sourceDataURI: candidate.sourceDataURI,
             styleBoardData: style,
             referenceEvidenceJSON: candidate.referenceEvidenceJSON,
+            styleTuningNote: styleTuningNote,
             personalityVisual: profile.promptFragment,
             likeness: candidate.likeness, quality: quality,
             progress: { [weak self] phase, partial, _ in
@@ -1056,6 +1070,7 @@ extension AppDelegate {
                         rawPNG: output.data, masterPNG: master,
                         sourceDataURI: candidate.sourceDataURI,
                         referenceEvidenceJSON: candidate.referenceEvidenceJSON,
+                        styleTuningNote: styleTuningNote,
                         temperamentID: candidate.temperamentID,
                         likeness: candidate.likeness, quality: quality,
                         providerSeconds: providerSeconds, usage: output.usage,
@@ -1108,6 +1123,7 @@ extension AppDelegate {
                         masterPNG: recovery.masterPNG,
                         sourceDataURI: recovery.sourceDataURI,
                         referenceEvidenceJSON: recovery.referenceEvidenceJSON,
+                        styleTuningNote: recovery.styleTuningNote,
                         temperamentID: recovery.temperamentID,
                         likeness: recovery.likeness, quality: recovery.quality,
                         stageQualities: Array(repeating: recovery.quality, count: 3),
@@ -1148,6 +1164,7 @@ extension AppDelegate {
     private func startStageRegeneration(requestID: String, parentDraftID: String,
                                         stage: PetEvolutionStage,
                                         evolution: PendingEvolutionSheetDraft,
+                                        styleTuningNote: String,
                                         quality: PetFinalGenerationQuality) {
         guard reserveProviderGeneration(requestID) else { return }
         activeStageParents[requestID] = parentDraftID
@@ -1164,6 +1181,7 @@ extension AppDelegate {
             sourceDataURI: evolution.sourceDataURI,
             styleBoardData: style,
             referenceEvidenceJSON: evolution.referenceEvidenceJSON,
+            styleTuningNote: styleTuningNote,
             personalityVisual: profile.promptFragment, likeness: evolution.likeness,
             quality: quality,
             progress: { [weak self] phase, partial, _ in
@@ -1185,6 +1203,7 @@ extension AppDelegate {
                     let recovery = StageGenerationRecovery(
                         rawPNG: output.data, parentDraftID: parentDraftID,
                         stage: stage, quality: quality,
+                        styleTuningNote: styleTuningNote,
                         providerSeconds: providerSeconds,
                         usage: output.usage, styleBoardUsed: style != nil,
                         createdAt: Date())
@@ -1255,6 +1274,7 @@ extension AppDelegate {
                     updated.pngData = sheet
                     updated.stagePNGs[recovery.stage.sheetIndex] = stagePNG
                     updated.stageQualities[recovery.stage.sheetIndex] = recovery.quality
+                    updated.styleTuningNote = recovery.styleTuningNote
                     updated.lastTouchedAt = Date()
                     if !updated.relatedRequestIDs.contains(requestID) {
                         updated.relatedRequestIDs.append(requestID)
@@ -1431,6 +1451,7 @@ extension AppDelegate {
                 requestID: requestID,
                 source: prepared.sourceDataURI,
                 referenceEvidenceJSON: prepared.referenceEvidenceJSON,
+                styleTuningNote: prepared.styleTuningNote,
                 profile: prepared.profile, likeness: prepared.likeness,
                 alreadyReserved: true)
         case "petCancel":
@@ -1490,8 +1511,11 @@ extension AppDelegate {
             let profile = CustomPetTemperaments.profile(
                 for: body["temperamentID"] as? String)
             let likeness = max(0, min(1, body["likeness"] as? Double ?? 0.58))
+            let styleTuningNote = PetVisualTuningNote.sanitize(
+                body["styleTuningNote"] as? String)
             prepareCandidateGeneration(requestID: requestID, inputs: inputs,
-                                       profile: profile, likeness: likeness)
+                                       profile: profile, likeness: likeness,
+                                       styleTuningNote: styleTuningNote)
         case "petGenerateEvolution":
             pruneStudioState()
             guard let requestID = generationRequestID(body["requestID"]),
@@ -1510,6 +1534,9 @@ extension AppDelegate {
                 return
             }
             let quality = PetFinalGenerationQuality.resolve(body["quality"] as? String)
+            let styleTuningNote = (body["styleTuningNote"] as? String).map {
+                PetVisualTuningNote.sanitize($0)
+            } ?? candidate.styleTuningNote
             d.set(quality.rawValue, forKey: "petImageQuality")
             if var refreshed = pendingCandidateBoards[candidateDraftID] {
                 refreshed.lastTouchedAt = Date()
@@ -1518,7 +1545,9 @@ extension AppDelegate {
             startEvolutionGeneration(requestID: requestID,
                                      candidateDraftID: candidateDraftID,
                                      candidate: candidate,
-                                     candidateIndex: index, quality: quality)
+                                     candidateIndex: index,
+                                     styleTuningNote: styleTuningNote,
+                                     quality: quality)
         case "petRegenerateStage":
             pruneStudioState()
             guard let requestID = generationRequestID(body["requestID"]),
@@ -1539,8 +1568,12 @@ extension AppDelegate {
             let stageQuality = (body["quality"] as? String).map {
                 PetFinalGenerationQuality.resolve($0)
             } ?? evolution.quality
+            let styleTuningNote = (body["styleTuningNote"] as? String).map {
+                PetVisualTuningNote.sanitize($0)
+            } ?? evolution.styleTuningNote
             startStageRegeneration(requestID: requestID, parentDraftID: draftID,
                                    stage: stage, evolution: evolution,
+                                   styleTuningNote: styleTuningNote,
                                    quality: stageQuality)
         case "petRetryLocalProcessing":
             pruneStudioState()

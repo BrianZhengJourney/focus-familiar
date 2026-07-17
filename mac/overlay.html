@@ -70,6 +70,8 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 @keyframes ffp-raster-wobble {0%,100%{transform:translateY(0) rotate(-.45deg)}50%{transform:translateY(-1px) rotate(.45deg)}}
 @keyframes ffp-raster-dizzy {0%,100%{transform:translateX(0) rotate(0)}35%{transform:translateX(1.1px) rotate(.45deg)}70%{transform:translateX(-1.1px) rotate(-.45deg)}}
 @keyframes ffp-raster-celebrate {0%,100%{transform:translateY(0)}35%{transform:translateY(-4px)}62%{transform:translateY(-1px)}}
+/* focus states breathe the aura around raster familiars (abstract-lane energy) */
+@keyframes ffp-aura-pulse {0%,100%{opacity:var(--aura-base,.2)}50%{opacity:calc(var(--aura-base,.2)*2)}}
 .ffp-wrap{ width:100%; height:100%; transform-origin:50% 100%; }
 /* the mascot manages its own animation/filter/opacity/shadow — mute the
    generic state styling that would double-apply */
@@ -981,25 +983,29 @@ function rasterMascotPack(spec){
   const proudAnim=['dreamy-mysterious','dreamy-float'].includes(motion)?'ffp-raster-float 4.8s ease-in-out infinite':
     ['odd-whimsical','whimsical-wobble'].includes(motion)?'ffp-raster-wobble 2.8s ease-in-out infinite':'ffp-raster-celebrate 2.4s ease-in-out infinite';
   return {
-    name:spec.name||'My familiar',viewBox:'-1 -2 24 25',RASTER_SHEET:spec.assetURL,
+    name:spec.name||'My familiar',viewBox:'-1 -2 24 24',RASTER_SHEET:spec.assetURL,
+    EXPR_SHEETS:spec.expressionURLs||{},displaySize:240,
     shadow:{cx:11,cy:21.4,rx:5.4,fill:'#241b35',op:.25},
-    aura:{cx:11,cy:10.5,rx:9.2,ry:10},poseOrigin:'11px 16px',pawColor:accent,paws:[[6,18],[14,18]],
+    /* tight halo: mood tint hugs the body instead of flooding the corner */
+    aura:{cx:11,cy:11,rx:6,ry:7},poseOrigin:'11px 16px',pawColor:accent,paws:[[6,18],[14,18]],
     orb:{x:20.5,y:1},zzz:{fill:accent,pts:[[18,8],[20,5.5],[21.5,3]]},ring:{cx:11,cy:10.5,r:10.2},
     sparks:['M0,4 h.7 v-.7 h.7 v.7 h.7 v.7 h-.7 v.7 h-.7 v-.7 h-.7 Z',
       'M20,11 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z',
       'M4,0 h.6 v-.6 h.6 v.6 h.6 v.6 h-.6 v.6 h-.6 v-.6 h-.6 Z'],
     bubbles:[[2,10,.8],[1,12,.6],[3,8,.5]],motes:[[2,6,.7,accent],[20,7,.6,'#b9a8ff'],[5,19,.5,'#fff0c4']],
     PAL:{A:accent,L:accent,P:accent,D:'#241b35',K:'#241b35',W:'#ffffff',M:'#6f4d68'},EYES:{},MOUTHS:{},
+    /* State moods live in the SURROUNDINGS (aura, motes, bubbles, opacity) —
+       never hue-rotate the portrait itself; faces go sickly. */
     CFG:{
-      idle:{anim:idleAnim,filter:'drop-shadow(0 5px 7px rgba(28,18,48,.24))',op:1,orb:accent,eye:'',mouth:'',aura:.08,auraColor:accent,motes:0},
-      focused:{anim:'ffp-raster-breathe 4.1s ease-in-out infinite',filter:`drop-shadow(0 5px 11px ${accent}55)`,op:1,orb:accent,eye:'',mouth:'',aura:.18,auraColor:accent,motes:0},
-      deepWork:{anim:'ffp-raster-float 6.2s ease-in-out infinite',filter:`drop-shadow(0 0 16px ${accent}88)`,op:1,orb:'#b9a8ff',eye:'',mouth:'',aura:.34,auraColor:accent,motes:1},
+      idle:{anim:idleAnim,filter:'drop-shadow(0 5px 7px rgba(28,18,48,.24))',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0},
+      focused:{anim:'ffp-raster-breathe 4.1s ease-in-out infinite',filter:`drop-shadow(0 5px 11px ${accent}55)`,op:1,orb:accent,eye:'',mouth:'',aura:.12,auraColor:accent,motes:0,auraPulse:3.6},
+      deepWork:{anim:'ffp-raster-float 6.2s ease-in-out infinite',filter:`drop-shadow(0 0 16px ${accent}88)`,op:1,orb:'#b9a8ff',eye:'',mouth:'',aura:.2,auraColor:accent,motes:1,auraPulse:5.2},
       dizzy:{anim:'ffp-raster-dizzy 2.2s ease-in-out infinite',filter:'saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0},
-      poisoned:{anim:'ffp-raster-wobble 3.6s ease-in-out infinite',filter:'saturate(.58) hue-rotate(45deg) brightness(.92)',op:1,orb:'#8ee07a',eye:'',mouth:'',aura:.26,auraColor:'#7cb85c',motes:0,bubbles:1},
-      ghost:{anim:'ffp-raster-float 5.2s ease-in-out infinite',filter:'saturate(.25) hue-rotate(175deg) brightness(1.12)',op:.7,orb:'#dfe9ff',eye:'',mouth:'',aura:.25,auraColor:'#7fa8ff',motes:1},
-      levelUp:{anim:'ffp-raster-celebrate 2.1s ease-in-out infinite',filter:`drop-shadow(0 0 15px ${accent})`,op:1,orb:'#ffe07a',eye:'',mouth:'',aura:.25,auraColor:'#ffb02e',motes:0,ring:1,spark:1},
-      sleeping:{pose:'translateY(1.5px)',anim:'ffp-raster-breathe 6.4s ease-in-out infinite',filter:'brightness(.9) saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0,zzz:1},
-      proud:{anim:proudAnim,filter:`drop-shadow(0 5px 13px ${accent}66)`,op:1,orb:'#ffe28a',eye:'',mouth:'',aura:.12,auraColor:accent,motes:1,spark:1}
+      poisoned:{anim:'ffp-raster-wobble 3.6s ease-in-out infinite',filter:'saturate(.72) brightness(.9)',op:1,orb:'#8ee07a',eye:'',mouth:'',aura:.18,auraColor:'#7cb85c',motes:0,bubbles:1},
+      ghost:{anim:'ffp-raster-float 5.2s ease-in-out infinite',filter:'saturate(.5) brightness(1.06)',op:.65,orb:'#dfe9ff',eye:'',mouth:'',aura:.15,auraColor:'#7fa8ff',motes:1},
+      levelUp:{anim:'ffp-raster-celebrate 2.1s ease-in-out infinite',filter:`drop-shadow(0 0 15px ${accent})`,op:1,orb:'#ffe07a',eye:'',mouth:'',aura:.18,auraColor:'#ffb02e',motes:0,ring:1,spark:1,exprFrame:1},
+      sleeping:{pose:'translateY(1.5px)',anim:'ffp-raster-breathe 6.4s ease-in-out infinite',filter:'brightness(.9) saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0,zzz:1,exprFrame:2},
+      proud:{anim:proudAnim,filter:`drop-shadow(0 5px 13px ${accent}66)`,op:1,orb:'#ffe28a',eye:'',mouth:'',aura:.08,auraColor:accent,motes:1,spark:1,exprFrame:1}
     }
   };
 }
@@ -1034,16 +1040,57 @@ const Mascot = (() => {
   };
   const artForLevel = (pack, level) => {
     if (pack.RASTER_SHEET) {
-      const frame=level>=4?2:level>=2?1:0;
-      return {body:`<g clip-path="url(#ffpRasterClip)"><image href="${esc(pack.RASTER_SHEET)}" x="${-22*frame}" y="0" width="66" height="22" preserveAspectRatio="none" style="image-rendering:auto"/></g>`,depth:''};
+      const stage=level>=4?2:level>=2?1:0;
+      // A stage with an expression sheet uses ONLY that sheet: frame 0
+      // (NEUTRAL) is its idle art, 1 = JOY, 2 = REST. All three frames share
+      // one normalized scale + baseline, so swaps can't jitter.
+      const exprSheet=pack.EXPR_SHEETS&&pack.EXPR_SHEETS[String(stage)];
+      const sheet=exprSheet||pack.RASTER_SHEET;
+      const frame=exprSheet?0:stage;
+      return {body:`<g clip-path="url(#ffpRasterClip)"><image id="ffpRasterImg" href="${esc(sheet)}" x="${-22*frame}" y="0" width="66" height="22" preserveAspectRatio="none" style="image-rendering:auto"/></g>`,depth:'',hasExpressions:!!exprSheet};
     }
     return bodyFor(pack,rowsForLevel(pack,level));
   };
 
   let pack = null, refs = null, current = null, walking = false;
+  let blinkTimer = null;
+
+  /* Expression frame-swap for raster packs with an expression sheet:
+     0 = NEUTRAL (idle art), 1 = JOY, 2 = REST (doubles as the blink frame). */
+  function setExpression(frame){
+    const img = document.getElementById('ffpRasterImg');
+    if (!img || !refs || !refs._full || !refs._full.hasExpressions) return;
+    img.setAttribute('x', String(-22 * frame));
+  }
+  function stopBlink(){
+    clearTimeout(blinkTimer);
+    blinkTimer = null;
+  }
+  function scheduleBlink(){
+    stopBlink();
+    if (!refs || !refs._full || !refs._full.hasExpressions || !pack) return;
+    const c = pack.CFG[current] || pack.CFG.idle;
+    if ((c.exprFrame || 0) !== 0) return;   // a held expression owns the face
+    blinkTimer = setTimeout(() => {
+      setExpression(2);                      // eyes closed
+      blinkTimer = setTimeout(() => {
+        setExpression(0);
+        scheduleBlink();
+      }, 140);
+    }, 3000 + Math.random() * 4000);
+  }
 
   function mount(holder, id){
     pack = MASCOTS[id] || MASCOTS.lulu;
+    stopBlink();
+    // Raster packs render larger than the pixel mascots' 150px box so a
+    // full-body figure keeps a readable face.
+    const displaySize = pack.displaySize || 150;
+    holder.style.width = holder.style.height = displaySize + 'px';
+    const stageEl = document.getElementById('stage');
+    if (stageEl) stageEl.style.width = displaySize + 'px';
+    const badge = document.getElementById('statusBadge');
+    if (badge) badge.style.bottom = (displaySize + 8) + 'px';
     const aura=pack.aura || {cx:8,cy:8,rx:9,ry:8};
     const paws=pack.paws || [[3,11],[9,11]];
     const level=+(document.body.dataset.famLevel||1);
@@ -1118,6 +1165,11 @@ const Mascot = (() => {
     const src = c.walk && refs._walkRows ? refs._walkRows : refs._full;
     refs.ffpBody.innerHTML = src.body;
     refs.ffpDepth.innerHTML = src.depth;
+    // the rebuilt raster image starts at frame 0; re-apply the state's face
+    if (pack.RASTER_SHEET) {
+      setExpression(c.exprFrame || 0);
+      scheduleBlink();
+    }
   }
 
   function setState(s){
@@ -1131,6 +1183,10 @@ const Mascot = (() => {
     w.style.opacity = c.op;
     refs.ffpAura.setAttribute('fill', c.auraColor);
     refs.ffpAura.setAttribute('opacity', c.aura);
+    // focus states breathe the aura (abstract-lane energy around the body)
+    refs.ffpAura.style.setProperty('--aura-base', c.aura);
+    refs.ffpAura.style.animation = c.auraPulse
+      ? `ffp-aura-pulse ${c.auraPulse}s ease-in-out infinite` : 'none';
     refs.ffpPose.style.transform = c.pose || 'none';
     refs.ffpEyes.innerHTML = rectsFor(pack, pack.EYES[c.eye] || []);
     refs.ffpEyes.style.animation = c.blink ? 'ffp-blink 4.6s linear infinite' : 'none';
@@ -1152,6 +1208,11 @@ const Mascot = (() => {
       refs.ffpBody.innerHTML = src.body;
       refs.ffpDepth.innerHTML = src.depth;
     }
+    // raster expression frames: hold the state's face, blink while neutral
+    if (pack.RASTER_SHEET) {
+      setExpression(c.exprFrame || 0);
+      scheduleBlink();
+    }
   }
 
   return {
@@ -1160,6 +1221,34 @@ const Mascot = (() => {
     id: () => pack ? Object.keys(MASCOTS).find(k => MASCOTS[k] === pack) : null,
   };
 })();
+
+/* evolution preview: briefly walk through Seed → Bloom → Radiant on the
+   desktop, then return to the pet's real level. Menu-triggered from Swift. */
+let evoPreviewTimer = null;
+function famPreviewEvolution(){
+  if (evoPreviewTimer) return;                       // one preview at a time
+  const actualLevel = +(document.body.dataset.famLevel || 1);
+  const steps = [
+    { level: 1, zh: '初生', en: 'Seed' },
+    { level: 2, zh: '绽放', en: 'Bloom' },
+    { level: 4, zh: '发光', en: 'Radiant' },
+  ];
+  let index = 0;
+  const show = () => {
+    if (index >= steps.length) {
+      Mascot.setEvolution(actualLevel);
+      evoPreviewTimer = null;
+      toast(tx('回到现在的它 ✦', 'Back to today ✦'));
+      return;
+    }
+    const step = steps[index++];
+    Mascot.setEvolution(step.level);
+    toast(tx(`成长预览 · ${step.zh}`, `Preview · ${step.en}`));
+    Fam.sparkle(4);
+    evoPreviewTimer = setTimeout(show, 1800);
+  };
+  show();
+}
 
 /* victory walk (Swift moves the panel): Clawd paces with animated legs,
    the others do the generic waddle */

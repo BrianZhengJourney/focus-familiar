@@ -1053,6 +1053,133 @@ extension AppDelegate {
         }
     }
 
+    // MARK: - Expression sheets (post-adoption blink/joy/rest frames)
+
+    /// Sequentially generates one expression sheet per requested stage.
+    /// Deliberately outside the studio ledger: adoption already succeeded, and
+    /// each stage failing only costs that stage its expressions.
+    func startExpressionRun(characterID: String, stagePNGs: [Data],
+                            temperamentID: String, stages: [Int]) {
+        guard expressionRunCharacterID == nil else {
+            settingsCall("petExpressionError", [
+                "characterID": characterID, "stageIndex": stages.first ?? 0,
+                "code": "busy",
+                "messageZh": "另一套表情正在生成，请稍候。",
+                "messageEn": "Another expression run is in progress; try again soon.",
+            ])
+            return
+        }
+        let valid = stages.filter { (0..<stagePNGs.count).contains($0) }
+        guard !valid.isEmpty else { return }
+        expressionRunCharacterID = characterID
+        stepExpressionRun(characterID: characterID, stagePNGs: stagePNGs,
+                          temperamentID: temperamentID, remaining: valid,
+                          total: valid.count, completed: 0)
+    }
+
+    private func stepExpressionRun(characterID: String, stagePNGs: [Data],
+                                   temperamentID: String, remaining: [Int],
+                                   total: Int, completed: Int) {
+        guard expressionRunCharacterID == characterID else { return }
+        guard let stageIndex = remaining.first else {
+            expressionRunCharacterID = nil
+            settingsCall("petExpressionDone", [
+                "characterID": characterID, "completed": completed, "total": total,
+            ])
+            return
+        }
+        let rest = Array(remaining.dropFirst())
+        let profile = CustomPetTemperaments.profile(for: temperamentID)
+        let style = MimoStyleReference.requestData()
+        let requestID = "expr-\(UUID().uuidString)"
+        let stageFrame = stagePNGs[stageIndex]
+        let stageKinds: [PetEvolutionStage] = [.seed, .bloom, .radiant]
+        let advance: (Bool) -> Void = { [weak self] succeeded in
+            self?.stepExpressionRun(characterID: characterID, stagePNGs: stagePNGs,
+                                    temperamentID: temperamentID, remaining: rest,
+                                    total: total,
+                                    completed: completed + (succeeded ? 1 : 0))
+        }
+        settingsCall("petExpressionProgress", [
+            "characterID": characterID, "stageIndex": stageIndex,
+            "phase": "generating", "completed": completed, "total": total,
+        ])
+        petGenerator.generateExpressionSheet(
+            requestID: requestID, stage: stageKinds[stageIndex],
+            stageFrameData: stageFrame,
+            sourceDataURI: PetGenerationCoordinator.dataURI(stageFrame),
+            styleBoardData: style,
+            personalityVisual: profile.promptFragment,
+            quality: .medium,
+            progress: { [weak self] phase, _, _ in
+                guard let self, self.expressionRunCharacterID == characterID else { return }
+                self.settingsCall("petExpressionProgress", [
+                    "characterID": characterID, "stageIndex": stageIndex,
+                    "phase": phase, "completed": completed, "total": total,
+                ])
+            }, completion: { [weak self] result in
+                guard let self, self.expressionRunCharacterID == characterID else { return }
+                switch result {
+                case .failure(let error):
+                    self.settingsCall("petExpressionError", [
+                        "characterID": characterID, "stageIndex": stageIndex,
+                        "code": "provider_failed",
+                        "messageZh": "第 \(stageIndex + 1) 段的表情生成失败：\(error.localizedDescription)",
+                        "messageEn": "Expressions for form \(stageIndex + 1) failed: \(error.localizedDescription)",
+                    ])
+                    advance(false)
+                case .success(let output):
+                    self.installExpressionSheet(characterID: characterID,
+                                                stageIndex: stageIndex,
+                                                rawPNG: output.data,
+                                                completed: completed, total: total,
+                                                advance: advance)
+                }
+            }
+        )
+    }
+
+    private func installExpressionSheet(characterID: String, stageIndex: Int,
+                                        rawPNG: Data, completed: Int, total: Int,
+                                        advance: @escaping (Bool) -> Void) {
+        settingsCall("petExpressionProgress", [
+            "characterID": characterID, "stageIndex": stageIndex,
+            "phase": "processing", "completed": completed, "total": total,
+        ])
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result { try CharacterSheetProcessor.process(pngData: rawPNG) }
+            DispatchQueue.main.async {
+                guard let self, self.expressionRunCharacterID == characterID else { return }
+                do {
+                    let sheet = try result.get()
+                    let spec = try self.customPetStore.installExpressionSheet(
+                        characterID: characterID, stageIndex: stageIndex,
+                        pngData: sheet.pngData)
+                    if JSONSerialization.isValidJSONObject(spec),
+                       let data = try? JSONSerialization.data(withJSONObject: spec),
+                       let json = String(data: data, encoding: .utf8) {
+                        let isCurrent = UserDefaults.standard.string(forKey: "character") == characterID
+                        self.js("famRegisterCustomPet(\(json), \(isCurrent))")
+                        self.settingsCall("petExpressionResult", [
+                            "characterID": characterID, "stageIndex": stageIndex,
+                            "spec": spec, "completed": completed + 1, "total": total,
+                        ])
+                        self.pushSettingsState()
+                    }
+                    advance(true)
+                } catch {
+                    self.settingsCall("petExpressionError", [
+                        "characterID": characterID, "stageIndex": stageIndex,
+                        "code": "local_failed",
+                        "messageZh": "第 \(stageIndex + 1) 段的表情处理失败：\(error.localizedDescription)",
+                        "messageEn": "Expressions for form \(stageIndex + 1) could not be processed: \(error.localizedDescription)",
+                    ])
+                    advance(false)
+                }
+            }
+        }
+    }
+
     private func startEvolutionGeneration(requestID: String,
                                           candidateDraftID: String,
                                           candidate: PendingCandidateBoardDraft,
@@ -1650,6 +1777,7 @@ extension AppDelegate {
             do {
                 let spec = try customPetStore.install(pngData: evolution.pngData, name: name,
                                                       temperamentID: profile.id, accent: profile.accent)
+                let expressionStagePNGs = evolution.stagePNGs
                 pendingEvolutionSheets.removeValue(forKey: draftID)
                 visibleEvolutionDraftID = nil
                 visibleCandidateDraftID = nil
@@ -1669,11 +1797,50 @@ extension AppDelegate {
                 settingsCall("customPetAdopted", ["spec": spec])
                 pushSettingsState()
                 revealOverlay()
+                // Expression sheets ride along after adoption: blink/joy/rest
+                // frames per stage. Optional — failures leave a static stage.
+                if body["skipExpressions"] as? Bool != true {
+                    startExpressionRun(characterID: characterID,
+                                       stagePNGs: expressionStagePNGs,
+                                       temperamentID: profile.id,
+                                       stages: [0, 1, 2])
+                }
             } catch {
                 settingsCall("petInstallError", [
                     "draftID": draftID, "code": "install_failed",
                     "messageZh": "无法把这套伴灵保存到本机：\(error.localizedDescription)",
                     "messageEn": "Could not save this familiar on the Mac: \(error.localizedDescription)",
+                ])
+            }
+        case "petRegenerateExpressions":
+            guard let characterID = body["characterID"] as? String else { return }
+            do {
+                let spec = try customPetStore.runtimeSpec(characterID: characterID)
+                guard let assetURLString = spec["assetURL"] as? String,
+                      let assetURL = URL(string: assetURLString) else {
+                    throw CustomPetStoreError.corruptManifest
+                }
+                let sheetData = try customPetStore.assetData(for: assetURL)
+                let stagePNGs = try (0..<3).map {
+                    try CharacterSheetProcessor.extractNormalizedStage(
+                        fromNormalizedSheet: sheetData, stageIndex: $0)
+                }
+                // Default to filling the gaps; an explicit stageIndex redraws
+                // just that stage; “redraw” with none missing redoes all three.
+                let existing = Set((spec["expressionURLs"] as? [String: String])?.keys
+                    .compactMap { Int($0) } ?? [])
+                var stages = (0..<3).filter { !existing.contains($0) }
+                if let index = body["stageIndex"] as? Int { stages = [index] }
+                else if stages.isEmpty { stages = [0, 1, 2] }
+                startExpressionRun(characterID: characterID, stagePNGs: stagePNGs,
+                                   temperamentID: spec["temperamentID"] as? String ?? "",
+                                   stages: stages)
+            } catch {
+                settingsCall("petExpressionError", [
+                    "characterID": characterID, "stageIndex": body["stageIndex"] as? Int ?? 0,
+                    "code": "setup_failed",
+                    "messageZh": "无法准备表情生成：\(error.localizedDescription)",
+                    "messageEn": "Could not prepare expression generation: \(error.localizedDescription)",
                 ])
             }
         case "petDelete":

@@ -226,6 +226,14 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .preserved-result > b{ display:block; margin-bottom:7px; color:var(--warn); font:600 10.5px Georgia,serif; }
 .form-quality{ display:block; margin-top:2px; color:#77718e; font:8px ui-monospace,monospace; }
 .sheet-meta.err{ color:var(--bad); }
+.expr-status{ display:flex; align-items:center; gap:7px; margin-top:9px; padding-top:8px;
+  border-top:1px dashed #ffffff14; color:var(--ink-dim,#9a92ae); font-size:10.5px; }
+.expr-status .dot{ width:6px; height:6px; border-radius:50%; background:var(--warn);
+  animation:route-spin 1.2s linear infinite; }
+.expr-status.ok{ color:var(--good); }
+.expr-status.err{ color:var(--bad); }
+.expr-status button{ flex:0 0 auto; padding:3px 9px; font-size:9.5px; }
+.expr-note{ margin-top:7px; color:#77718e; font-size:9.5px; }
 .studio-progress{ position:relative; min-height:139px; display:grid; grid-template-columns:minmax(0,1fr) auto;
   align-items:center; gap:12px; padding:13px; overflow:hidden; border:1px dashed #ffffff14; border-radius:11px; }
 .studio-progress.has-preview{ grid-template-columns:minmax(0,1fr) 92px; }
@@ -639,7 +647,8 @@ const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],pri
   startedAt:null,finishedElapsed:null,cancelArmedUntil:0,adoptedName:'',referenceNoticeZh:'',referenceNoticeEn:'',
   importing:0,referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,
   referenceAmbiguous:false,referenceReviewMessageZh:'',referenceReviewMessageEn:'',
-  evolutionQueue:[],activeCandidateIndex:null,batchTotal:0,batchCompleted:0,batchResults:[],installingBatchIndex:null};
+  evolutionQueue:[],activeCandidateIndex:null,batchTotal:0,batchCompleted:0,batchResults:[],installingBatchIndex:null,
+  expr:null};
 
 const studioBusy=()=>petLab.status==='busy'||petLab.status==='installing';
 const referencesImporting=()=>Math.max(0,+petLab.importing||0)>0;
@@ -977,13 +986,13 @@ function renderPetLab(){
   }else if(petLab.batchResults.length){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('已生成的主角方案','Generated character options')}</b><span class="sheet-meta">${petLab.batchResults.length} / ${petLab.batchTotal||petLab.batchResults.length}</span></div>${batchResultsHTML()}`;
   }else if(petLab.status==='adopted'&&petLab.sheet){
-    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,false)}${diagnosticsHTML()}`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,false)}${expressionStatusHTML()}${diagnosticsHTML()}`;
   }else if(petLab.candidates.length&&petLab.preservedResult&&petLab.sheet){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选新的主角','Step 2 · Pick the new master')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}<div class="preserved-result"><b>${tx('上一套成长图仍安全保留','Previous finished evolution is still safe')}</b>${sheetStages(petLab.sheet,false)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('仍然使用上一套 ✦','Use previous result ✦')}</button></div></div>`;
   }else if(petLab.sheet){
     const redo=petLab.candidateDraftID&&petLab.candidateIndex!==null?`<button type="button" onclick="generateEvolution()">${tx(`用 ${quality.name} 整套再画 · ~${quality.cost}+`,`Redo all at ${quality.name} · ~${quality.cost}+`)}</button>`:'';
     const title=petLab.preservedResult?tx('上一套成长图 · 新设置尚未生成','Previous evolution · new settings not generated'):tx('同一个主角 · 三段成长','One master · three forms');
-    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div>`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div><div class="expr-note">${tx('住进后会自动补画表情帧（眨眼 / 开心 / 睡着）· 3 × ~$0.045','Adoption also draws expression frames (blink / joy / rest) · 3 × ~$0.045')}</div>`;
   }else if(petLab.candidates.length){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 可以多选','Step 2 · Choose one or more')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}`;
   }else{
@@ -1271,6 +1280,47 @@ function customPetAdopted(event){
     petLab.installingBatchIndex=null;petLab.status='ready';petLab.requestID=null;petLab.startedAt=null;renderCards();renderPetLab();return;
   }
   petLab.status='adopted';petLab.requestID=null;petLab.draftID=null;petLab.preservedResult=false;petLab.adoptedName=spec.name||tx('新伴灵','New familiar');petLab.sheet=spec.assetURL||petLab.sheet;petLab.startedAt=null;renderCards();renderPetLab();
+}
+/* Expression sheets: post-adoption blink/joy/rest frames, one run per pet. */
+function petExpressionProgress(event){
+  petLab.expr={status:'busy',characterID:event.characterID,stageIndex:event.stageIndex||0,
+    phase:event.phase||'',completed:event.completed||0,total:event.total||3,error:null};
+  renderPetLab();
+}
+function petExpressionResult(event){
+  if(event.spec)S.customPets=(S.customPets||[]).filter(p=>p.characterID!==event.spec.characterID).concat([event.spec]);
+  petLab.expr={status:'busy',characterID:event.characterID,stageIndex:event.stageIndex||0,
+    phase:'stage-done',completed:event.completed||0,total:event.total||3,error:null};
+  renderPetLab();
+}
+function petExpressionError(event){
+  petLab.expr={status:'error',characterID:event.characterID,stageIndex:event.stageIndex||0,
+    completed:petLab.expr?.completed||0,total:petLab.expr?.total||3,
+    error:(LANG==='zh'?event.messageZh:event.messageEn)||event.message||tx('表情生成失败','Expression generation failed')};
+  renderPetLab();
+}
+function petExpressionDone(event){
+  petLab.expr={status:'done',characterID:event.characterID,stageIndex:0,
+    completed:event.completed||0,total:event.total||3,error:null};
+  renderPetLab();
+}
+function regenerateExpressions(){
+  const characterID=petLab.expr?.characterID||S.character;
+  if(!characterID||!String(characterID).startsWith('custom:'))return;
+  send({type:'petRegenerateExpressions',characterID});
+}
+function expressionStatusHTML(){
+  const ex=petLab.expr;if(!ex)return '';
+  const stageNames=[tx('初生','Seed'),tx('绽放','Bloom'),tx('发光','Radiant')];
+  if(ex.status==='busy')return `<div class="expr-status"><span class="dot"></span>${esc(tx(
+    `表情 ${ex.completed}/${ex.total} · 正在为「${stageNames[ex.stageIndex]}」画表情（眨眼 / 开心 / 睡着）…`,
+    `Expressions ${ex.completed}/${ex.total} · drawing ${stageNames[ex.stageIndex]} faces (blink / joy / rest)…`))}</div>`;
+  if(ex.status==='error')return `<div class="expr-status err">${esc(ex.error||'')} <button type="button" onclick="regenerateExpressions()">${tx('重试表情','Retry expressions')}</button></div>`;
+  if(ex.status==='done'){
+    if(ex.completed>=ex.total)return `<div class="expr-status ok">${tx('表情已接上 · 它会眨眼了 ✦','Expressions connected · it blinks now ✦')}</div>`;
+    return `<div class="expr-status err">${tx(`表情完成 ${ex.completed}/${ex.total}`,`Expressions ${ex.completed}/${ex.total}`)} <button type="button" onclick="regenerateExpressions()">${tx('补画缺的表情','Draw the missing ones')}</button></div>`;
+  }
+  return '';
 }
 function removeCustomPet(characterID){send({type:'petDelete',characterID})}
 function petDeleteFailed(event){petLab.error=event.message||tx('无法删除角色','Could not delete familiar');petLab.errorKind='setup';petLab.status='error';renderPetLab()}

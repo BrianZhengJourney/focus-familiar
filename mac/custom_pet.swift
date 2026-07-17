@@ -81,6 +81,9 @@ struct CustomPetManifest: Codable, Equatable, Sendable {
     let temperamentID: String
     let accent: String
     let asset: String
+    /// Evolution-stage indices (0…2) that have an installed expression sheet
+    /// (`expr-<index>.png`). Absent in legacy v2 manifests.
+    let expressions: [Int]?
 }
 
 struct CustomPetRuntimeSpec: Equatable, Sendable {
@@ -93,6 +96,8 @@ struct CustomPetRuntimeSpec: Equatable, Sendable {
     let accent: String
     let assetURL: String
     let motionProfile: String
+    /// Stage index ("0"…"2") → asset URL for that stage's expression sheet.
+    let expressionURLs: [String: String]
 
     var dictionary: [String: Any] {
         [
@@ -105,6 +110,7 @@ struct CustomPetRuntimeSpec: Equatable, Sendable {
             "accent": accent,
             "assetURL": assetURL,
             "motionProfile": motionProfile,
+            "expressionURLs": expressionURLs,
         ]
     }
 }
@@ -122,6 +128,7 @@ enum CustomPetStoreError: LocalizedError {
     case missingPet
     case corruptManifest
     case unsafeAssetPath
+    case invalidExpressionStage
 
     var errorDescription: String? {
         switch self {
@@ -137,19 +144,27 @@ enum CustomPetStoreError: LocalizedError {
         case .missingPet: return "The custom familiar could not be found."
         case .corruptManifest: return "The custom familiar manifest is invalid."
         case .unsafeAssetPath: return "The custom familiar asset path is unsafe."
+        case .invalidExpressionStage: return "The expression sheet stage index is invalid."
         }
     }
 }
 
 final class CustomPetStore: @unchecked Sendable {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
+    /// v2 manifests (no expression sheets) remain fully readable.
+    static let legacySchemaVersions: Set<Int> = [2]
     static let kind = "raster-sheet"
     static let characterPrefix = "custom:"
     static let scheme = "mimo-pet"
     static let schemeHost = "asset"
-    static let assetRevision = "3"
+    static let assetRevision = "4"
     static let sheetFilename = "sheet.png"
     static let manifestFilename = "manifest.json"
+    static let expressionStageCount = 3
+
+    static func expressionFilename(stageIndex: Int) -> String {
+        "expr-\(stageIndex).png"
+    }
     static let sheetWidth = 1536
     static let sheetHeight = 512
     static let frameWidth = 512
@@ -211,11 +226,10 @@ final class CustomPetStore: @unchecked Sendable {
                 name: name,
                 temperamentID: temperamentID,
                 accent: accent.uppercased(),
-                asset: Self.sheetFilename
+                asset: Self.sheetFilename,
+                expressions: []
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            let manifestData = try encoder.encode(manifest)
+            let manifestData = try Self.encodeManifest(manifest)
 
             let sheetURL = temporary.appendingPathComponent(Self.sheetFilename, isDirectory: false)
             let manifestURL = temporary.appendingPathComponent(Self.manifestFilename, isDirectory: false)
@@ -228,6 +242,59 @@ final class CustomPetStore: @unchecked Sendable {
             shouldRemoveTemporary = false
             return runtimeSpec(for: manifest).dictionary
         }
+    }
+
+    /// Installs (or replaces) one stage's expression sheet — a normalized
+    /// 1536 × 512 PNG whose three frames are NEUTRAL / JOY / REST of that
+    /// stage's design. Optional: a familiar without expression sheets keeps
+    /// the exact pre-expression behavior.
+    @discardableResult
+    func installExpressionSheet(characterID: String, stageIndex: Int,
+                                pngData: Data) throws -> [String: Any] {
+        try synchronized {
+            try ensureStorageReady()
+            guard (0..<Self.expressionStageCount).contains(stageIndex) else {
+                throw CustomPetStoreError.invalidExpressionStage
+            }
+            let uuidString = try Self.uuidString(fromCharacterID: characterID)
+            let manifest = try loadManifest(uuidString: uuidString)
+            let sanitized = try CharacterSheetProcessor.sanitizeNormalizedSheet(pngData: pngData)
+            try Self.validateNormalizedPNG(sanitized)
+
+            let directory = petDirectory(uuidString)
+            let expressionURL = directory.appendingPathComponent(
+                Self.expressionFilename(stageIndex: stageIndex), isDirectory: false)
+            guard Self.isDescendant(expressionURL, of: petsURL) else {
+                throw CustomPetStoreError.unsafeAssetPath
+            }
+            try sanitized.write(to: expressionURL, options: [.atomic])
+            try? fileManager.setAttributes([.posixPermissions: 0o600],
+                                           ofItemAtPath: expressionURL.path)
+
+            let indices = Set(manifest.expressions ?? []).union([stageIndex]).sorted()
+            let updated = CustomPetManifest(
+                schemaVersion: Self.schemaVersion,
+                kind: manifest.kind,
+                id: manifest.id,
+                name: manifest.name,
+                temperamentID: manifest.temperamentID,
+                accent: manifest.accent,
+                asset: manifest.asset,
+                expressions: indices
+            )
+            let manifestURL = directory.appendingPathComponent(Self.manifestFilename,
+                                                               isDirectory: false)
+            try Self.encodeManifest(updated).write(to: manifestURL, options: [.atomic])
+            try? fileManager.setAttributes([.posixPermissions: 0o600],
+                                           ofItemAtPath: manifestURL.path)
+            return runtimeSpec(for: updated).dictionary
+        }
+    }
+
+    private static func encodeManifest(_ manifest: CustomPetManifest) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(manifest)
     }
 
     /// Invalid or incomplete pet directories are ignored so one interrupted
@@ -301,14 +368,23 @@ final class CustomPetStore: @unchecked Sendable {
     func assetData(for url: URL) throws -> Data {
         try synchronized {
             try ensureStorageReady()
-            let uuidString = try Self.uuidString(fromAssetURL: url)
-            let manifest = try loadManifest(uuidString: uuidString)
-            let sheetURL = petDirectory(uuidString).appendingPathComponent(Self.sheetFilename)
-            guard manifest.asset == Self.sheetFilename,
-                  Self.isDescendant(sheetURL, of: petsURL) else {
+            let location = try Self.assetLocation(fromAssetURL: url)
+            let manifest = try loadManifest(uuidString: location.uuidString)
+            if let stageIndex = location.expressionStageIndex {
+                guard (manifest.expressions ?? []).contains(stageIndex) else {
+                    throw CustomPetStoreError.unsafeAssetPath
+                }
+            } else {
+                guard manifest.asset == Self.sheetFilename else {
+                    throw CustomPetStoreError.unsafeAssetPath
+                }
+            }
+            let fileURL = petDirectory(location.uuidString)
+                .appendingPathComponent(location.filename, isDirectory: false)
+            guard Self.isDescendant(fileURL, of: petsURL) else {
                 throw CustomPetStoreError.unsafeAssetPath
             }
-            return try sanitizedSheetData(at: sheetURL)
+            return try sanitizedSheetData(at: fileURL)
         }
     }
 
@@ -352,7 +428,8 @@ final class CustomPetStore: @unchecked Sendable {
               Self.isDescendant(manifestURL, of: petsURL),
               let data = try? Data(contentsOf: manifestURL),
               let manifest = try? JSONDecoder().decode(CustomPetManifest.self, from: data),
-              manifest.schemaVersion == Self.schemaVersion,
+              manifest.schemaVersion == Self.schemaVersion
+                  || Self.legacySchemaVersions.contains(manifest.schemaVersion),
               manifest.kind == Self.kind,
               manifest.id == canonicalID,
               manifest.asset == Self.sheetFilename,
@@ -361,11 +438,30 @@ final class CustomPetStore: @unchecked Sendable {
               Self.isAccent(manifest.accent) else {
             throw CustomPetStoreError.corruptManifest
         }
+        if let expressions = manifest.expressions {
+            guard Set(expressions).count == expressions.count,
+                  expressions.allSatisfy({ (0..<Self.expressionStageCount).contains($0) }) else {
+                throw CustomPetStoreError.corruptManifest
+            }
+        }
         return manifest
     }
 
     private func runtimeSpec(for manifest: CustomPetManifest) -> CustomPetRuntimeSpec {
         let profile = CustomPetTemperaments.profile(for: manifest.temperamentID)
+        // Only advertise expression sheets whose file is actually present and
+        // sane, so a half-written asset can never break the overlay.
+        var expressionURLs: [String: String] = [:]
+        for stageIndex in manifest.expressions ?? [] {
+            let filename = Self.expressionFilename(stageIndex: stageIndex)
+            let fileURL = petDirectory(manifest.id).appendingPathComponent(filename,
+                                                                           isDirectory: false)
+            guard Self.isSafeRegularFile(fileURL, maximumBytes: Self.maximumPNGBytes,
+                                         fileManager: fileManager),
+                  Self.isDescendant(fileURL, of: petsURL) else { continue }
+            expressionURLs[String(stageIndex)] =
+                "\(Self.scheme)://\(Self.schemeHost)/\(manifest.id)/\(filename)?v=\(Self.assetRevision)"
+        }
         return CustomPetRuntimeSpec(
             schemaVersion: Self.schemaVersion,
             kind: Self.kind,
@@ -375,7 +471,8 @@ final class CustomPetStore: @unchecked Sendable {
             temperamentID: manifest.temperamentID,
             accent: manifest.accent,
             assetURL: "\(Self.scheme)://\(Self.schemeHost)/\(manifest.id)/\(Self.sheetFilename)?v=\(Self.assetRevision)",
-            motionProfile: profile.motionID
+            motionProfile: profile.motionID,
+            expressionURLs: expressionURLs
         )
     }
 
@@ -442,7 +539,14 @@ final class CustomPetStore: @unchecked Sendable {
         return canonical(uuid)
     }
 
-    private static func uuidString(fromAssetURL url: URL) throws -> String {
+    struct AssetLocation {
+        let uuidString: String
+        let filename: String
+        /// Non-nil when the URL names an expression sheet instead of sheet.png.
+        let expressionStageIndex: Int?
+    }
+
+    static func assetLocation(fromAssetURL url: URL) throws -> AssetLocation {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme?.lowercased() == scheme,
               components.host?.lowercased() == schemeHost,
@@ -452,13 +556,26 @@ final class CustomPetStore: @unchecked Sendable {
             throw CustomPetStoreError.unsafeAssetPath
         }
         let path = components.percentEncodedPath.split(separator: "/", omittingEmptySubsequences: true)
-        guard path.count == 2, path[1] == Substring(sheetFilename),
+        guard path.count == 2,
               let uuid = UUID(uuidString: String(path[0])),
-              String(path[0]).caseInsensitiveCompare(uuid.uuidString) == .orderedSame,
-              components.percentEncodedPath == "/\(canonical(uuid))/\(sheetFilename)" else {
+              String(path[0]).caseInsensitiveCompare(uuid.uuidString) == .orderedSame else {
             throw CustomPetStoreError.unsafeAssetPath
         }
-        return canonical(uuid)
+        let filename = String(path[1])
+        var stageIndex: Int?
+        if filename != sheetFilename {
+            guard let match = (0..<expressionStageCount).first(where: {
+                expressionFilename(stageIndex: $0) == filename
+            }) else {
+                throw CustomPetStoreError.unsafeAssetPath
+            }
+            stageIndex = match
+        }
+        guard components.percentEncodedPath == "/\(canonical(uuid))/\(filename)" else {
+            throw CustomPetStoreError.unsafeAssetPath
+        }
+        return AssetLocation(uuidString: canonical(uuid), filename: filename,
+                             expressionStageIndex: stageIndex)
     }
 
     private static func isAccent(_ value: String) -> Bool {

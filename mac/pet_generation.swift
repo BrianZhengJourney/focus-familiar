@@ -690,6 +690,8 @@ final class PetGenerationCoordinator {
         not evolution stages. Each is one isolated, front-facing, full-body neutral standing pose with eyes open and feet
         visible. Keep every character entirely within the middle 72% of its column height and leave at least 12% clear
         matte on every outer side. No touching edges, overlapping, dividers, labels, numbers, captions, or extra figures.
+        The selected subject is the familiar itself: no companion, pet, sidekick, mini mascot, secondary creature, toy,
+        doll, duplicate, or separate character may appear beside it.
 
         MIMO STYLE
         Premium handcrafted pixel-inspired sprite art readable at 96–160 px tall: cute chibi proportions, expressive
@@ -776,6 +778,8 @@ final class PetGenerationCoordinator {
         center, and ground baseline. Keep the complete silhouette inside the central 76% of each panel's height and the
         central 72% of its width, with feet fully visible and generous unbroken matte around it. No character, hair,
         flourish, or accessory may touch a panel or canvas edge. No dividers or labels.
+        The approved subject is the familiar itself: no companion, pet, sidekick, mini mascot, secondary creature, toy,
+        doll, duplicate, or separate character may appear beside any stage.
 
         EVOLUTION
         LEFT — SEED: youngest and smallest; simplest silhouette and fewest details; rounded only when consistent with
@@ -863,6 +867,8 @@ final class PetGenerationCoordinator {
         face, species, hairstyle or markings, primary palette, outfit, outline weight, shading, pose, ground baseline,
         perceived scale for this stage, and signature-feature logic. Apply the user visual tuning note to the rejected
         stage's soft stylized proportions and details; vary only that rejected stage design.
+        The approved subject is the familiar itself: no companion, pet, sidekick, mini mascot, secondary creature, toy,
+        doll, duplicate, or separate character may appear beside it.
 
         Keep the complete silhouette inside the central 72% of canvas width and 76% of canvas height, with open eyes,
         feet fully visible, and unbroken matte on every side. Use one flat opaque #F1ECE2 background. No edge contact,

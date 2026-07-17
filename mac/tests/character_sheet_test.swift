@@ -10,6 +10,7 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
 private let matte: (UInt8, UInt8, UInt8, UInt8) = (241, 236, 226, 255)
 private let ink: (UInt8, UInt8, UInt8, UInt8) = (71, 43, 45, 255)
 private let nearMatte: (UInt8, UInt8, UInt8, UInt8) = (232, 227, 217, 255)
+private let sidecarInk: (UInt8, UInt8, UInt8, UInt8) = (194, 82, 96, 255)
 
 private func paintRect(_ image: inout CharacterSheetRGBAImage,
                        x: Int, y: Int, width: Int, height: Int,
@@ -23,7 +24,8 @@ private func fixture(emptyStage: Int? = nil,
                      middleFormOverride: (x: Int, width: Int)? = nil,
                      canvasClippedStage: Int? = nil,
                      canvasTouchStage: Int? = nil,
-                     mergedBoundary: Int? = nil) throws -> Data {
+                     mergedBoundary: Int? = nil,
+                     sidecarStages: Set<Int> = []) throws -> Data {
     var image = CharacterSheetRGBAImage(width: 1536, height: 1024, fill: matte)
     // Give the inferred matte a little deterministic border variance.
     for x in 0..<image.width {
@@ -65,6 +67,13 @@ private func fixture(emptyStage: Int? = nil,
         // border-connected to the matte.
         paintRect(&image, x: globalX + 20, y: y + 30,
                   width: 20, height: 20, color: nearMatte)
+        if sidecarStages.contains(index) {
+            // A model may interpret “familiar” as a person plus a small pet.
+            // This grounded, disconnected secondary subject must not survive
+            // into the desktop sprite.
+            paintRect(&image, x: panelX + 35, y: y + form.height - 115,
+                      width: 80, height: 115, color: sidecarInk)
+        }
         // Provider dust should not expand the character bounds.
         paintRect(&image, x: panelX + 50, y: 50, width: 2, height: 2,
                   color: (130, 40, 170, 255))
@@ -220,6 +229,31 @@ struct CharacterSheetTests {
         expect(result.stages[0].normalizedBounds.height < result.stages[1].normalizedBounds.height
                && result.stages[1].normalizedBounds.height < result.stages[2].normalizedBounds.height,
                "one shared scale must preserve evolution size differences")
+
+        let withoutSidecars = try CharacterSheetProcessor.process(
+            pngData: fixture(sidecarStages: [0, 1, 2]))
+        expect(withoutSidecars.stages.map(\.sourceBounds.width) == expectedWidths,
+               "grounded disconnected companion characters must not expand stage bounds")
+        for stage in withoutSidecars.stages {
+            let decoded = try CharacterSheetProcessor.decodePNG(stage.pngData)
+            expect(!containsColor(decoded, sidecarInk),
+                   "grounded disconnected companion characters must be removed locally")
+        }
+
+        var legacySheet = try CharacterSheetProcessor.decodePNG(result.pngData)
+        for index in 0..<3 {
+            paintRect(&legacySheet, x: index * 512 + 20, y: 400,
+                      width: 70, height: 80, color: sidecarInk)
+        }
+        let sanitizedLegacyData = try CharacterSheetProcessor.sanitizeNormalizedSheet(
+            pngData: CharacterSheetProcessor.encodePNG(legacySheet))
+        let sanitizedLegacy = try CharacterSheetProcessor.decodePNG(sanitizedLegacyData)
+        expect(!containsColor(sanitizedLegacy, sidecarInk),
+               "existing normalized sheets should be cleaned without another generation")
+        let sanitizedCleanData = try CharacterSheetProcessor.sanitizeNormalizedSheet(
+            pngData: result.pngData)
+        expect(sanitizedCleanData == result.pngData,
+               "clean normalized sheets should remain byte-for-byte unchanged")
 
         let repeated = try CharacterSheetProcessor.process(pngData: input)
         expect(result.pngData == repeated.pngData,

@@ -170,6 +170,8 @@ struct PetGenerationTests {
                candidateBody.contains("CENTER emphasizes the strongest readable silhouette") &&
                candidateBody.contains("RIGHT emphasizes one real signature marking or accessory"),
                "candidate prompt must give each alternative a controlled, identity-preserving design lens")
+        expect(candidateBody.contains("no companion, pet, sidekick, mini mascot"),
+               "candidate prompt must forbid a separate companion character")
         expect(candidateBody.contains("background products and collage objects are never identity features"),
                "candidate prompt must not promote collage products into character design")
         expect(candidateBody.contains("\"board_mode\":\"isolatedPeople\"") &&
@@ -230,6 +232,8 @@ struct PetGenerationTests {
         }
         expect(finalBody.contains("approved master identity > persistent identity-board traits > style-board rendering language"),
                "final prompt must make reference priority legible instead of black-box")
+        expect(finalBody.contains("no companion, pet, sidekick, mini mascot"),
+               "evolution prompt must forbid a separate companion character")
         expect(finalBody.contains("No character, hair") && finalBody.contains("touch a panel or canvas edge"),
                "final prompt must explicitly prevent clipped extraction failures")
         expect(occurrences(of: tuningNote, in: finalBody) == 1,
@@ -275,6 +279,8 @@ struct PetGenerationTests {
         expect(replacementBody.contains("stage index 1 locally") &&
                replacementBody.contains("preserving both other stages pixel-for-pixel"),
                "repair contract must keep accepted stages out of model rewrites")
+        expect(replacementBody.contains("no companion, pet, sidekick, mini mascot"),
+               "single-stage prompt must forbid a separate companion character")
         expect(occurrences(of: tuningNote, in: replacementBody) == 1,
                "single-stage prompt should carry the same visual tuning note exactly once")
         expectOrdered([tuningNote, "AUTHORITATIVE INVARIANTS AFTER THE USER NOTE",

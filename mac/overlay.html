@@ -61,6 +61,15 @@ body{ font-family:var(--font-ui); -webkit-user-select:none; }
 @keyframes ffp-stepA {0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
 @keyframes ffp-stepB {0%,100%{transform:translateY(-1.5px)}50%{transform:translateY(0)}}
 @keyframes ffp-eyeCycle {0%{opacity:1}33.34%{opacity:0}100%{opacity:0}}
+/* Raster familiars are complete illustrations. Keep fallback motion subtle;
+   large squash/rotation makes a full human silhouette feel rubbery. */
+@keyframes ffp-raster-breathe {0%,100%{transform:translateY(0)}50%{transform:translateY(-1.2px)}}
+@keyframes ffp-raster-peek {0%,100%{transform:translate(0,0)}45%{transform:translate(1px,-.8px)}70%{transform:translate(0,-.4px)}}
+@keyframes ffp-raster-bounce {0%,100%{transform:translateY(0)}45%{transform:translateY(-2.6px)}65%{transform:translateY(-.5px)}}
+@keyframes ffp-raster-float {0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes ffp-raster-wobble {0%,100%{transform:translateY(0) rotate(-.45deg)}50%{transform:translateY(-1px) rotate(.45deg)}}
+@keyframes ffp-raster-dizzy {0%,100%{transform:translateX(0) rotate(0)}35%{transform:translateX(1.1px) rotate(.45deg)}70%{transform:translateX(-1.1px) rotate(-.45deg)}}
+@keyframes ffp-raster-celebrate {0%,100%{transform:translateY(0)}35%{transform:translateY(-4px)}62%{transform:translateY(-1px)}}
 .ffp-wrap{ width:100%; height:100%; transform-origin:50% 100%; }
 /* the mascot manages its own animation/filter/opacity/shadow — mute the
    generic state styling that would double-apply */
@@ -962,16 +971,15 @@ function rasterMascotPack(spec){
   const accent=/^#[0-9a-f]{6}$/i.test(spec.accent||'')?spec.accent:'#7df0cf';
   const motion=spec.motionProfile||spec.temperamentID||'quiet-curious';
   const idleAnim={
-    'calm-breathe':'ffp-sleepbob 5.4s ease-in-out infinite','gentle-cozy':'ffp-sleepbob 5.4s ease-in-out infinite',
-    'curious-peek':'ffp-bob 4.1s ease-in-out infinite','quiet-curious':'ffp-bob 4.1s ease-in-out infinite',
-    'playful-bounce':'ffp-bob 2.35s ease-in-out infinite','bright-playful':'ffp-bob 2.35s ease-in-out infinite',
-    'proud-hop':'ffp-bob 3.2s ease-in-out infinite','brave-loyal':'ffp-bob 3.2s ease-in-out infinite',
-    'dreamy-float':'ffp-levitate 6.4s ease-in-out infinite','dreamy-mysterious':'ffp-levitate 6.4s ease-in-out infinite',
-    'whimsical-wobble':'ffp-wobble 3.1s ease-in-out infinite','odd-whimsical':'ffp-wobble 3.1s ease-in-out infinite'
-  }[motion]||'ffp-bob 3.6s ease-in-out infinite';
-  const proudAnim=['bright-playful','playful-bounce'].includes(motion)?'ffp-proudhop 1.25s ease-in-out infinite':
-    ['dreamy-mysterious','dreamy-float'].includes(motion)?'ffp-levitate 4.4s ease-in-out infinite':
-    ['odd-whimsical','whimsical-wobble'].includes(motion)?'ffp-wobble 1.8s ease-in-out infinite':'ffp-proudhop 1.7s ease-in-out infinite';
+    'calm-breathe':'ffp-raster-breathe 5.8s ease-in-out infinite','gentle-cozy':'ffp-raster-breathe 5.8s ease-in-out infinite',
+    'curious-peek':'ffp-raster-peek 5.2s ease-in-out infinite','quiet-curious':'ffp-raster-peek 5.2s ease-in-out infinite',
+    'playful-bounce':'ffp-raster-bounce 3.4s ease-in-out infinite','bright-playful':'ffp-raster-bounce 3.4s ease-in-out infinite',
+    'proud-hop':'ffp-raster-breathe 4.6s ease-in-out infinite','brave-loyal':'ffp-raster-breathe 4.6s ease-in-out infinite',
+    'dreamy-float':'ffp-raster-float 6.8s ease-in-out infinite','dreamy-mysterious':'ffp-raster-float 6.8s ease-in-out infinite',
+    'whimsical-wobble':'ffp-raster-wobble 4.4s ease-in-out infinite','odd-whimsical':'ffp-raster-wobble 4.4s ease-in-out infinite'
+  }[motion]||'ffp-raster-breathe 5.2s ease-in-out infinite';
+  const proudAnim=['dreamy-mysterious','dreamy-float'].includes(motion)?'ffp-raster-float 4.8s ease-in-out infinite':
+    ['odd-whimsical','whimsical-wobble'].includes(motion)?'ffp-raster-wobble 2.8s ease-in-out infinite':'ffp-raster-celebrate 2.4s ease-in-out infinite';
   return {
     name:spec.name||'My familiar',viewBox:'-1 -2 24 25',RASTER_SHEET:spec.assetURL,
     shadow:{cx:11,cy:21.4,rx:5.4,fill:'#241b35',op:.25},
@@ -984,13 +992,13 @@ function rasterMascotPack(spec){
     PAL:{A:accent,L:accent,P:accent,D:'#241b35',K:'#241b35',W:'#ffffff',M:'#6f4d68'},EYES:{},MOUTHS:{},
     CFG:{
       idle:{anim:idleAnim,filter:'drop-shadow(0 5px 7px rgba(28,18,48,.24))',op:1,orb:accent,eye:'',mouth:'',aura:.08,auraColor:accent,motes:0},
-      focused:{anim:'ffp-bob 2.7s ease-in-out infinite',filter:`drop-shadow(0 5px 11px ${accent}55)`,op:1,orb:accent,eye:'',mouth:'',aura:.18,auraColor:accent,motes:0},
-      deepWork:{anim:'ffp-levitate 5.5s ease-in-out infinite',filter:`drop-shadow(0 0 16px ${accent}88)`,op:1,orb:'#b9a8ff',eye:'',mouth:'',aura:.34,auraColor:accent,motes:1},
-      dizzy:{anim:'ffp-dizzy 1.1s linear infinite',filter:'saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0},
-      poisoned:{anim:'ffp-queasy 2.1s ease-in-out infinite',filter:'saturate(.58) hue-rotate(45deg) brightness(.92)',op:1,orb:'#8ee07a',eye:'',mouth:'',aura:.26,auraColor:'#7cb85c',motes:0,bubbles:1},
-      ghost:{anim:'ffp-float 3.8s ease-in-out infinite',filter:'saturate(.25) hue-rotate(175deg) brightness(1.12)',op:.7,orb:'#dfe9ff',eye:'',mouth:'',aura:.25,auraColor:'#7fa8ff',motes:1},
-      levelUp:{anim:'ffp-pop 1.3s ease-in-out infinite',filter:`drop-shadow(0 0 15px ${accent})`,op:1,orb:'#ffe07a',eye:'',mouth:'',aura:.25,auraColor:'#ffb02e',motes:0,ring:1,spark:1},
-      sleeping:{pose:'rotate(82deg) translate(0px,2px)',anim:'ffp-sleepbob 4.8s ease-in-out infinite',filter:'brightness(.9) saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0,zzz:1},
+      focused:{anim:'ffp-raster-breathe 4.1s ease-in-out infinite',filter:`drop-shadow(0 5px 11px ${accent}55)`,op:1,orb:accent,eye:'',mouth:'',aura:.18,auraColor:accent,motes:0},
+      deepWork:{anim:'ffp-raster-float 6.2s ease-in-out infinite',filter:`drop-shadow(0 0 16px ${accent}88)`,op:1,orb:'#b9a8ff',eye:'',mouth:'',aura:.34,auraColor:accent,motes:1},
+      dizzy:{anim:'ffp-raster-dizzy 2.2s ease-in-out infinite',filter:'saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0},
+      poisoned:{anim:'ffp-raster-wobble 3.6s ease-in-out infinite',filter:'saturate(.58) hue-rotate(45deg) brightness(.92)',op:1,orb:'#8ee07a',eye:'',mouth:'',aura:.26,auraColor:'#7cb85c',motes:0,bubbles:1},
+      ghost:{anim:'ffp-raster-float 5.2s ease-in-out infinite',filter:'saturate(.25) hue-rotate(175deg) brightness(1.12)',op:.7,orb:'#dfe9ff',eye:'',mouth:'',aura:.25,auraColor:'#7fa8ff',motes:1},
+      levelUp:{anim:'ffp-raster-celebrate 2.1s ease-in-out infinite',filter:`drop-shadow(0 0 15px ${accent})`,op:1,orb:'#ffe07a',eye:'',mouth:'',aura:.25,auraColor:'#ffb02e',motes:0,ring:1,spark:1},
+      sleeping:{pose:'translateY(1.5px)',anim:'ffp-raster-breathe 6.4s ease-in-out infinite',filter:'brightness(.9) saturate(.82)',op:1,orb:accent,eye:'',mouth:'',aura:0,auraColor:accent,motes:0,zzz:1},
       proud:{anim:proudAnim,filter:`drop-shadow(0 5px 13px ${accent}66)`,op:1,orb:'#ffe28a',eye:'',mouth:'',aura:.12,auraColor:accent,motes:1,spark:1}
     }
   };
@@ -1180,10 +1188,14 @@ function mascotStateFor(s){
 }
 
 /* ═══ creature + state ═══ */
+function xpStorageKeyFor(characterID){
+  return String(characterID||'').startsWith('custom:')?`ff-xp:${characterID}`:'ff-xp';
+}
+
 const Fam = {
   char: 'wisp', state: 'idle',
   focus: 55, streakStart: null,
-  xp: 0, level: 1, _deepXPsec: 0,
+  xp: 0, level: 1, _deepXPsec: 0, _xpLoaded: false,
   resources: { protein:0, iron:0, spellbook:0, fragment:0 },
   history: [],          // {app, kind, t0, t1}
   cur: null,            // {app, kind, t0}
@@ -1192,7 +1204,9 @@ const Fam = {
 
   setCharacter(id, persist = true){
     if (!MASCOTS[id]) id = 'lulu';
+    if (this._xpLoaded && id !== this.char) this.saveXP();
     this.char = id;
+    if (this._xpLoaded) this.readXP();
     document.body.dataset.char = 'pixel';
     const holder = document.getElementById('familiar');
     holder.innerHTML = '';
@@ -1200,7 +1214,7 @@ const Fam = {
     Mascot.mount(holder, id);
     Mascot.setState(mascotStateFor(this.state));
     if (persist) localStorage.setItem('ff-char', id);
-    this.applyLevel();
+    this.applyLevel(); this.renderXP();
   },
 
   setState(s){
@@ -1259,15 +1273,17 @@ const Fam = {
      sources: +1/deep-minute, +5/resource, +25 streak bonus.
      level n → n+1 costs 250·n XP (lv.2 ≈ one honest deep-work day). */
   xpToNext(){ return 250 * this.level; },
+  readXP(){
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(xpStorageKeyFor(this.char)) || '{}'); } catch(e) {}
+    this.xp = Number.isFinite(+saved.xp) ? Math.max(0,+saved.xp) : 0;
+    this.level = Number.isFinite(+saved.level) ? Math.max(1,Math.floor(+saved.level)) : 1;
+  },
   loadXP(){
-    try {
-      const s = JSON.parse(localStorage.getItem('ff-xp') || '{}');
-      this.xp = s.xp || 0;
-      this.level = s.level || 1;
-    } catch(e) {}
+    this.readXP(); this._xpLoaded = true;
     this.applyLevel(); this.renderXP();
   },
-  saveXP(){ localStorage.setItem('ff-xp', JSON.stringify({ xp: this.xp, level: this.level })); },
+  saveXP(){ localStorage.setItem(xpStorageKeyFor(this.char), JSON.stringify({ xp: this.xp, level: this.level })); },
   addXP(n){
     this.xp += n;
     while (this.xp >= this.xpToNext()) { this.xp -= this.xpToNext(); this.levelUp(); }

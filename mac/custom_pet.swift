@@ -147,6 +147,7 @@ final class CustomPetStore: @unchecked Sendable {
     static let characterPrefix = "custom:"
     static let scheme = "mimo-pet"
     static let schemeHost = "asset"
+    static let assetRevision = "3"
     static let sheetFilename = "sheet.png"
     static let manifestFilename = "manifest.json"
     static let sheetWidth = 1536
@@ -182,7 +183,9 @@ final class CustomPetStore: @unchecked Sendable {
                 throw CustomPetStoreError.unsupportedTemperament
             }
             guard Self.isAccent(accent) else { throw CustomPetStoreError.invalidAccent }
-            try Self.validateNormalizedPNG(pngData)
+            let sanitizedPNGData = try CharacterSheetProcessor.sanitizeNormalizedSheet(
+                pngData: pngData)
+            try Self.validateNormalizedPNG(sanitizedPNGData)
 
             let idString = Self.canonical(id)
             let destination = petDirectory(idString)
@@ -216,7 +219,7 @@ final class CustomPetStore: @unchecked Sendable {
 
             let sheetURL = temporary.appendingPathComponent(Self.sheetFilename, isDirectory: false)
             let manifestURL = temporary.appendingPathComponent(Self.manifestFilename, isDirectory: false)
-            try pngData.write(to: sheetURL, options: [.atomic])
+            try sanitizedPNGData.write(to: sheetURL, options: [.atomic])
             try manifestData.write(to: manifestURL, options: [.atomic])
             try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: sheetURL.path)
             try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: manifestURL.path)
@@ -302,13 +305,10 @@ final class CustomPetStore: @unchecked Sendable {
             let manifest = try loadManifest(uuidString: uuidString)
             let sheetURL = petDirectory(uuidString).appendingPathComponent(Self.sheetFilename)
             guard manifest.asset == Self.sheetFilename,
-                  Self.isSafeRegularFile(sheetURL, maximumBytes: Self.maximumPNGBytes, fileManager: fileManager),
                   Self.isDescendant(sheetURL, of: petsURL) else {
                 throw CustomPetStoreError.unsafeAssetPath
             }
-            let data = try Data(contentsOf: sheetURL, options: [.mappedIfSafe])
-            try Self.validateNormalizedPNG(data)
-            return data
+            return try sanitizedSheetData(at: sheetURL)
         }
     }
 
@@ -319,9 +319,25 @@ final class CustomPetStore: @unchecked Sendable {
               Self.isDescendant(sheetURL, of: petsURL) else {
             throw CustomPetStoreError.unsafeAssetPath
         }
-        let data = try Data(contentsOf: sheetURL, options: [.mappedIfSafe])
-        try Self.validatePNGMetadata(data)
+        _ = try sanitizedSheetData(at: sheetURL)
         return runtimeSpec(for: manifest)
+    }
+
+    private func sanitizedSheetData(at sheetURL: URL) throws -> Data {
+        guard Self.isSafeRegularFile(sheetURL, maximumBytes: Self.maximumPNGBytes,
+                                     fileManager: fileManager),
+              Self.isDescendant(sheetURL, of: petsURL) else {
+            throw CustomPetStoreError.unsafeAssetPath
+        }
+        let data = try Data(contentsOf: sheetURL, options: [.mappedIfSafe])
+        let sanitized = try CharacterSheetProcessor.sanitizeNormalizedSheet(pngData: data)
+        try Self.validateNormalizedPNG(sanitized)
+        if sanitized != data {
+            try sanitized.write(to: sheetURL, options: [.atomic])
+            try? fileManager.setAttributes([.posixPermissions: 0o600],
+                                           ofItemAtPath: sheetURL.path)
+        }
+        return sanitized
     }
 
     private func loadManifest(uuidString: String) throws -> CustomPetManifest {
@@ -358,7 +374,7 @@ final class CustomPetStore: @unchecked Sendable {
             name: manifest.name,
             temperamentID: manifest.temperamentID,
             accent: manifest.accent,
-            assetURL: "\(Self.scheme)://\(Self.schemeHost)/\(manifest.id)/\(Self.sheetFilename)",
+            assetURL: "\(Self.scheme)://\(Self.schemeHost)/\(manifest.id)/\(Self.sheetFilename)?v=\(Self.assetRevision)",
             motionProfile: profile.motionID
         )
     }
@@ -431,7 +447,7 @@ final class CustomPetStore: @unchecked Sendable {
               components.scheme?.lowercased() == scheme,
               components.host?.lowercased() == schemeHost,
               components.user == nil, components.password == nil, components.port == nil,
-              components.query == nil, components.fragment == nil,
+              components.percentEncodedQuery == "v=\(assetRevision)", components.fragment == nil,
               !components.percentEncodedPath.contains("%") else {
             throw CustomPetStoreError.unsafeAssetPath
         }

@@ -63,8 +63,8 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 /* Mimo Studio — a visible three-step path: sketch, choose, evolve. */
 .proto-tag{ margin-left:auto; color:#15112b; background:#ffd479; border-radius:9px;
   padding:2px 7px; font-size:9.5px; font-weight:800; letter-spacing:.08em; }
-.petlab-intro{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-.pet-source{ width:72px; height:72px; padding:0; border-radius:15px; border:1px dashed #cabcf566;
+.petlab-intro{ display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+.pet-source{ width:58px; height:58px; padding:0; border-radius:13px; border:1px dashed #cabcf566;
   display:grid; place-items:center; color:var(--dim); font-size:22px; overflow:hidden; flex:none;
   background:#17132f; cursor:pointer; position:relative; transition:.16s; }
 .pet-source:hover,.pet-source.drag{ border-color:var(--good); background:#1c2540; transform:translateY(-1px); }
@@ -109,7 +109,7 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .reference-note{ margin-top:7px; color:#8f88a5; font-size:9px; line-height:1.4; }
 .reference-note strong{ color:#b9b1ca; font-weight:600; }
 .reference-status{ min-height:0; margin-top:4px; color:var(--warn); font-size:8.5px; }
-.studio-steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin:0 0 10px; }
+.studio-steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin:0 0 7px; }
 .studio-step{ position:relative; min-width:0; min-height:43px; padding:7px 7px 7px 28px;
   color:#77718d; border:1px solid var(--line); border-radius:10px; background:#17132f; }
 .studio-step::before{ content:attr(data-step); position:absolute; left:8px; top:8px; width:14px; height:14px;
@@ -121,6 +121,10 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .studio-step.cur{ color:var(--ink); border-color:#cabcf566; background:linear-gradient(135deg,#292248,#1d2740); }
 .studio-step.cur::before{ color:#152820; background:var(--good); box-shadow:0 0 9px #7df0cf55; }
 .studio-step.done{ color:#b6afca; }.studio-step.done::before{ content:'✓'; color:#152820; background:#75cdb5; }
+.studio-price{ display:flex; align-items:baseline; gap:7px; padding:7px 9px; margin:0 0 8px;
+  border-radius:10px; color:#9992ab; background:#ffd47909; border:1px solid #ffd47922; font-size:9.5px; }
+.studio-price span{ flex:1; }.studio-price b{ color:var(--warn); font:700 12px ui-monospace,monospace; }
+.studio-price small{ color:#77718d; font-size:8.5px; }
 .pet-controls{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;
   padding:9px 10px; margin:0 0 8px; border-radius:12px; background:#1a1635; border:1px solid var(--line); }
 .pet-control label{ display:block; color:var(--dim); font-size:10px; margin:0 0 5px; }
@@ -133,14 +137,14 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .temperament-label{ display:flex; justify-content:space-between; align-items:baseline; margin:2px 1px 7px;
   color:var(--dim); font-size:9px; }
 .temperament-label b{ color:var(--accent); font-weight:600; }
-.temperament-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
-.temperament-tile{ min-height:55px; padding:7px 6px; display:flex; align-items:center; gap:7px; text-align:left;
+.temperament-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:9px; }
+.temperament-tile{ min-height:42px; padding:6px; display:flex; align-items:center; gap:7px; text-align:left;
   color:var(--dim); border:1px solid var(--line); border-radius:11px; background:#17132f; }
 .temperament-tile:hover{ background:#201a3f; }.temperament-tile.sel{ color:var(--ink); border-color:#7df0cf88;
   background:linear-gradient(135deg,#262048,#1b2c40); box-shadow:0 0 0 1px #7df0cf22; }
 .temperament-tile .temperament-ico{ flex:none; width:25px; height:25px; display:grid; place-items:center;
   border-radius:8px; background:#ffffff0a; font-size:14px; }
-.temperament-tile b{ display:block; font-size:11px; }.temperament-tile small{ display:block; margin-top:2px; font-size:9.5px; line-height:1.25; color:#9992ad; }
+.temperament-tile b{ display:block; font-size:10.5px; }.temperament-tile small{ display:none; }
 .style-tuning{ margin:0 0 10px; padding:9px 10px; border:1px solid #cabcf52c; border-radius:12px;
   background:linear-gradient(145deg,#1d1839,#17142f); }
 .style-tuning-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:6px; }
@@ -181,7 +185,7 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
   background:linear-gradient(155deg,#1c1738,#15122c); }
 .sheet-result-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .sheet-result-head b{ font:600 12px Georgia,serif; }.sheet-meta{ color:var(--good); font-size:9.5px; }
-.sheet-empty{ min-height:139px; display:grid; place-items:center; text-align:center; color:var(--dim);
+.sheet-empty{ min-height:76px; display:grid; place-items:center; text-align:center; color:var(--dim);
   border:1px dashed var(--line); border-radius:11px; font-size:9.5px; line-height:1.55; padding:16px; }
 .candidate-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
 .candidate{ position:relative; min-width:0; padding:4px; color:var(--dim); border:1px solid var(--line);
@@ -244,7 +248,7 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .diag{ padding:3px 6px; color:#918aa7; border:1px solid #ffffff10; border-radius:7px;
   background:#ffffff06; font:9.5px ui-monospace,monospace; }
 .diag.good{ color:var(--good); }.diag.warn{ color:var(--warn); }
-.warning-list{ margin-top:7px; padding:6px 8px; color:#c7b98e; border-left:2px solid #ffd47977;
+.warning-list{ margin-top:5px; padding:6px 8px; color:#c7b98e; border-left:2px solid #ffd47977;
   background:#ffd47908; border-radius:0 7px 7px 0; font-size:10px; line-height:1.45; }
 .generation-details{ margin-top:7px; color:#8f88a3; font-size:9.5px; }
 .generation-details summary{ cursor:pointer; color:#aaa3ba; }.generation-details div{ margin-top:5px; line-height:1.55; }
@@ -264,7 +268,8 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
 .petlab-state{ display:flex; align-items:center; gap:7px; min-height:18px; margin-top:9px;
   color:var(--dim); font-size:10px; }
 .petlab-state .dot{ width:6px; height:6px; border-radius:50%; background:#7df0cf; box-shadow:0 0 7px #7df0cf88; }
-.pet-privacy{ margin-top:8px; color:#938ca9; font-size:10px; line-height:1.45; }
+.pet-privacy{ margin-top:8px; color:#8e879f; font-size:9.5px; }
+.pet-privacy summary{ cursor:pointer; color:#aaa3ba; }.pet-privacy p{ margin-top:6px; line-height:1.45; }
 .recovery-archive{ display:none; align-items:center; justify-content:space-between; gap:8px; margin-top:8px;
   padding:7px 8px; border:1px solid #ffd47924; border-radius:8px; color:#a59db6; font-size:10px; }
 .recovery-archive.show{ display:flex; }.recovery-archive button{ padding:4px 7px; font-size:10px; }
@@ -361,8 +366,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
   <h2><span class="ico">✦</span><span data-zh="Mimo Studio · DIY 伴灵" data-en="Mimo Studio · DIY familiar">Mimo Studio · DIY 伴灵</span> <span class="proto-tag">3 STEPS</span></h2>
   <div class="petlab-intro">
     <button type="button" class="pet-source" id="petSourceDrop" data-pet-upload onclick="requestPetReference()" data-aria-zh="添加伴灵参考图片" data-aria-en="Add a familiar reference image"><span id="petSourceGlyph">＋</span><img id="petSourceImg" alt=""><small data-zh="添加图片" data-en="add image">添加图片</small></button>
-    <div class="petlab-copy"><b data-zh="先认出它，再让同一个角色长大" data-en="Find the character first, then let it grow">先认出它，再让同一个角色长大</b>
-      <span data-zh="先用 Low 画 3 个轻量草稿；选定主角后，再生成初生、绽放、发光。每一步都看得见，也能只重画不满意的一段。" data-en="Start with 3 lightweight Low drafts. Pick one master, then create Seed, Bloom, and Radiant. Every step stays visible, and any one form can be redrawn.">先用 Low 画 3 个轻量草稿；选定主角后，再生成初生、绽放、发光。每一步都看得见，也能只重画不满意的一段。</span>
+    <div class="petlab-copy"><b data-zh="上传 → 选主角 → 三段成长" data-en="Upload → choose → evolve">上传 → 选主角 → 三段成长</b>
       <div class="petlab-actions">
         <button type="button" data-pet-upload onclick="requestPetReference()" data-zh="添加参考图…" data-en="Add references…">添加参考图…</button>
         <input class="pet-name" id="petName" value="我的小伴灵" maxlength="28"
@@ -375,7 +379,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
   <section class="reference-set" id="petReferenceSet" aria-labelledby="petReferenceTitle">
     <div class="reference-set-head"><b id="petReferenceTitle" data-zh="主角参考集" data-en="Subject reference set">主角参考集</b><span id="petReferenceCount">0 / 8</span></div>
     <div class="reference-tray" id="petReferenceTray" role="list"></div>
-    <p class="reference-note" id="petReferenceNote" data-zh="可以放截图、拼图和不同角度。点缩略图设为<strong>主参考</strong>，把它作为寻找主角的首要线索；其他图片补充脸、发型、体型和穿搭。米墨会在本机尽量隔离检测到的文字、按钮与背景，并让你确认身份板后才发送。" data-en="Screenshots, collages, and different angles are welcome. Click a thumbnail to make it the <strong>primary</strong> clue for finding the subject; supporting images add face, hair, build, and outfit cues. Mimo locally isolates detected text, controls, and backgrounds where possible, then asks you to confirm the identity board before sending.">可以放截图、拼图和不同角度。点缩略图设为<strong>主参考</strong>，把它作为寻找主角的首要线索；其他图片补充脸、发型、体型和穿搭。米墨会在本机尽量隔离检测到的文字、按钮与背景，并让你确认身份板后才发送。</p>
+    <p class="reference-note" id="petReferenceNote" data-zh="截图、拼图都可以。点一下设为<strong>主参考</strong>；生成前会先让你确认。" data-en="Screenshots and collages are welcome. Click to set the <strong>primary</strong> reference; you confirm before generation.">截图、拼图都可以。点一下设为<strong>主参考</strong>；生成前会先让你确认。</p>
     <div class="reference-status" id="petReferenceStatus" aria-live="polite"></div>
   </section>
 
@@ -391,10 +395,11 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
       data-aria-zh="用文字微调伴灵的风格、轮廓与比例" data-aria-en="Tune the familiar's style, silhouette, and proportions with text"
       oninput="updateStyleTuning(this.value)"></textarea>
     <div class="style-tuning-suggestions" id="petStyleTuningSuggestions" data-label="试试"></div>
-    <div class="style-tuning-disclosure" data-zh="这句话会发给 OpenAI；保留现有结果，$0 本机恢复不会使用它。" data-en="Sent to OpenAI for the next generation; existing results stay, and $0 local recovery does not use it.">这句话会发给 OpenAI；保留现有结果，$0 本机恢复不会使用它。</div>
+    <div class="style-tuning-disclosure" data-zh="下一次生成生效 · 不会清掉已有结果" data-en="Applies to the next generation · existing results stay">下一次生成生效 · 不会清掉已有结果</div>
   </div>
 
   <div class="studio-steps" id="studioSteps" role="list" aria-label="Mimo Studio progress"></div>
+  <div class="studio-price"><span data-zh="预计完整生成" data-en="Estimated full creation">预计完整生成</span><b id="studioTotalPrice">~$0.055</b><small id="studioPriceBreakdown">Low + Medium</small></div>
   <div class="pet-controls">
     <div class="pet-control"><label for="petLikeness" data-zh="更像谁？" data-en="What should it resemble?">更像谁？</label><div class="likeness-row"><span data-zh="伴灵" data-en="Mimo">伴灵</span><input id="petLikeness" type="range" min="0" max="100" value="58" data-aria-zh="主角与主参考的相似程度" data-aria-en="Likeness to the primary reference" onchange="invalidatePetDraft()"><span data-zh="主参考" data-en="primary">主参考</span></div></div>
     <button class="generate-both" id="petGenerate" type="button" onclick="generateCandidates()" data-zh="画 3 个 Low 草稿" data-en="Make 3 Low drafts">画 3 个 Low 草稿</button>
@@ -411,7 +416,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
   <div class="petlab-state" id="petLabState" aria-live="polite"><span class="dot"></span>
     先添加一组参考图，再生成一套三段成长
   </div>
-  <div class="pet-privacy" data-zh="费用与隐私：主角、拼图与文字分析都在这台 Mac 上完成。你会先看到并确认身份板；确认后，OpenAI 收到 1 张本机整理的身份板和米墨内置风格板，不会收到整组原截图。检测到的文字、UI 与背景会尽量隔离，未能可靠分析时不会发送。原始上传图不会写入恢复缓存。" data-en="Cost & privacy: subject, collage, and text analysis runs on this Mac. You see and confirm the identity board first. After confirmation, OpenAI receives one locally prepared identity board plus Mimo's internal style board—not the full screenshot set. Detected text, UI, and backgrounds are isolated where possible; nothing is sent when analysis is unreliable. Original uploads never enter the recovery cache.">费用与隐私：主角、拼图与文字分析都在这台 Mac 上完成。你会先看到并确认身份板；确认后，OpenAI 收到 1 张本机整理的身份板和米墨内置风格板，不会收到整组原截图。检测到的文字、UI 与背景会尽量隔离，未能可靠分析时不会发送。原始上传图不会写入恢复缓存。</div>
+  <details class="pet-privacy"><summary data-zh="隐私说明" data-en="Privacy">隐私说明</summary><p data-zh="原图留在本机。确认后只发送整理过的身份板、风格板和你的风格文字。" data-en="Originals stay local. After confirmation, only the prepared identity board, style board, and your tuning note are sent.">原图留在本机。确认后只发送整理过的身份板、风格板和你的风格文字。</p></details>
   <div class="recovery-archive" id="generationRecoveryArchive"><span id="generationRecoveryText"></span><button type="button" onclick="send({type:'petRevealGenerationDrafts'})" data-zh="在 Finder 查看" data-en="Show in Finder">在 Finder 查看</button></div>
   <details class="api-setup" id="apiSetup"><summary data-zh="API 连接 · Key 只存进这台 Mac 的 Keychain" data-en="API connections · keys stay in this Mac's Keychain">API 连接 · Key 只存进这台 Mac 的 Keychain</summary>
     <div class="api-grid">
@@ -641,6 +646,13 @@ function operationCost(operation=petLab.operation){
   const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
   return operation==='candidates'?'~$0.010':operation==='stage'?`~${quality.stageCost}`:`~${quality.cost}`;
 }
+function renderStudioPrice(){
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
+  const total=(0.010+Number(quality.cost.replace('$',''))).toFixed(3);
+  const price=document.getElementById('studioTotalPrice'),breakdown=document.getElementById('studioPriceBreakdown');
+  if(price)price.textContent=`~$${total}`;
+  if(breakdown)breakdown.textContent=`Low $0.010 + ${quality.name} ${quality.cost}`;
+}
 function currentStudioStep(){
   if(petLab.operation==='evolution'||petLab.operation==='stage'||petLab.status==='adopted')return 2;
   if(petLab.candidates.length||petLab.candidateIndex!==null)return 1;
@@ -817,8 +829,9 @@ function candidateImage(candidate){return typeof candidate==='string'?candidate:
 function diagnosticsHTML(){
   const items=[];const provider=durationText(petLab.providerSeconds),local=durationText(petLab.localSeconds),total=durationText(elapsedSeconds());
   if(provider)items.push(`<span class="diag good">OpenAI ${provider}</span>`);
-  if(local)items.push(`<span class="diag">${tx('本机','local')} ${local}</span>`);
-  if(total)items.push(`<span class="diag">${tx('总计','total')} ${total}</span>`);
+  else if(total)items.push(`<span class="diag">${tx('耗时','time')} ${total}</span>`);
+  if(local&&+petLab.localSeconds>=1)items.push(`<span class="diag">${tx('本机','local')} ${local}</span>`);
+  if(petLab.operation)items.push(`<span class="diag">${esc(operationCost())}</span>`);
   const warnings=(petLab.warnings||[]).filter(Boolean);
   const details=[];
   if(petLab.model)details.push(`${petLab.model}${petLab.size?` · ${petLab.size}`:''}`);
@@ -828,8 +841,9 @@ function diagnosticsHTML(){
   const usage=petLab.usage||{};if(Number.isFinite(+usage.totalTokens))details.push(`${tx('总 tokens','total tokens')} ${usage.totalTokens}`);
   if(Number.isFinite(+usage.inputTokens)||Number.isFinite(+usage.outputTokens))details.push(`in ${usage.inputTokens??'—'} · out ${usage.outputTokens??'—'}`);
   if(petLab.providerDetail)details.push(`${tx('服务原始信息','provider detail')}: ${petLab.providerDetail}`);
-  const disclosure=details.length?`<details class="generation-details"><summary>${tx('生成详情','Generation details')}</summary><div>${details.map(esc).join('<br>')}</div></details>`:'';
-  return `${items.length?`<div class="diagnostics">${items.join('')}</div>`:''}${warnings.length?`<div class="warning-list">${warnings.map(w=>`⚠ ${esc(typeof w==='string'?w:(LANG==='zh'?(w.zh||w.message):(w.en||w.message)))}`).join('<br>')}</div>`:''}${disclosure}`;
+  const summary=warnings.length?tx(`本机修正 ${warnings.length} 处 · 详情`,`${warnings.length} local fix${warnings.length===1?'':'es'} · details`):tx('生成详情','Generation details');
+  const disclosure=(details.length||warnings.length)?`<details class="generation-details"><summary>${summary}</summary>${warnings.length?`<div class="warning-list">${warnings.map(w=>`⚠ ${esc(typeof w==='string'?w:(LANG==='zh'?(w.zh||w.message):(w.en||w.message)))}`).join('<br>')}</div>`:''}${details.length?`<div>${details.map(esc).join('<br>')}</div>`:''}</details>`:'';
+  return `${items.length?`<div class="diagnostics">${items.join('')}</div>`:''}${disclosure}`;
 }
 function sheetStages(sheet,allowRedo=true){
   const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
@@ -899,7 +913,7 @@ function syncVisibleDrafts(){
   visibleDraftSignature=signature;send({type:'petVisibleDrafts',draftID,candidateDraftID});
 }
 function renderPetLab(){
-  renderTemperaments();renderStyleTuning();renderImageQualities();renderKeyState();renderStudioSteps();renderReferenceSet();renderRecoveryArchive();
+  renderTemperaments();renderStyleTuning();renderImageQualities();renderKeyState();renderStudioSteps();renderStudioPrice();renderReferenceSet();renderRecoveryArchive();
   const busy=studioBusy()||petLab.status==='review',importing=referencesImporting(),generate=document.getElementById('petGenerate'),evolve=document.getElementById('petEvolutionGenerate');
   document.querySelectorAll('[data-pet-upload]').forEach(button=>button.disabled=busy||importing||petLab.references.length>=MAX_PET_REFERENCES);
   const likeness=document.getElementById('petLikeness');if(likeness)likeness.disabled=busy||importing;
@@ -923,17 +937,17 @@ function renderPetLab(){
     const preserved=petLab.sheet?`${sheetStages(petLab.sheet,!petLab.preservedResult)}<div style="height:8px"></div>`:petLab.candidates.length?`${candidateGridHTML()}<div style="height:8px"></div>`:'';
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('这一步没有完成','This step did not finish')}</b><span class="sheet-meta err">${petLab.errorKind==='local'?'LOCAL':petLab.errorKind==='setup'?'SETUP':'OPENAI'} · ${tx('失败','FAILED')}</span></div>${preserved}${errorHTML()}`;
   }else if(petLab.status==='adopted'&&petLab.sheet){
-    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED ✦</span></div>${sheetStages(petLab.sheet,false)}${diagnosticsHTML()}`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,false)}${diagnosticsHTML()}`;
   }else if(petLab.candidates.length&&petLab.preservedResult&&petLab.sheet){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选新的主角','Step 2 · Pick the new master')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}<div class="preserved-result"><b>${tx('上一套成长图仍安全保留','Previous finished evolution is still safe')}</b>${sheetStages(petLab.sheet,false)}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('仍然使用上一套 ✦','Use previous result ✦')}</button></div></div>`;
   }else if(petLab.sheet){
     const redo=petLab.candidateDraftID&&petLab.candidateIndex!==null?`<button type="button" onclick="generateEvolution()">${tx(`用 ${quality.name} 整套再画 · ~${quality.cost}+`,`Redo all at ${quality.name} · ~${quality.cost}+`)}</button>`:'';
     const title=petLab.preservedResult?tx('上一套成长图 · 新设置尚未生成','Previous evolution · new settings not generated'):tx('同一个主角 · 三段成长','One master · three forms');
-    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · READY</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div>`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div>`;
   }else if(petLab.candidates.length){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选一个最像它的主角','Step 2 · Pick the master that feels right')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}`;
   }else{
-    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 1 · 先找出它是谁','Step 1 · Find who it is')}</b><span class="sheet-meta">LOW · ~ $0.010</span></div><div class="sheet-empty">${tx('先生成 3 个快速方形草稿。估价含 1 张流式预览，参考图输入另计。选中主角后，才会花费 Medium / High 成长图费用。','Generate 3 quick square drafts first. Estimate includes one streamed partial; reference input is extra. Medium / High evolution is only spent after you choose a master.')}</div>`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 1 · 先找出它是谁','Step 1 · Find who it is')}</b><span class="sheet-meta">LOW · ~$0.010</span></div><div class="sheet-empty">${tx('先画 3 个草稿，再决定要不要生成成长图。','Make 3 drafts first, then decide whether to create the evolution.')}</div>`;
   }
   if(!petLab.source)state.innerHTML=`<span class="dot"></span>${tx('先添加至少一张参考图；不会自动发送','Add at least one reference; nothing is sent automatically')}`;
   else if(petLab.status==='review')state.innerHTML=`<span class="dot"></span>${tx('身份板只在本机预览 · 确认后才发送','Identity board is local-only · sent only after confirmation')}`;
@@ -958,6 +972,7 @@ function petKeysSaved(state){
   S.openAIConfigured=!!state.openAIConfigured;const input=document.getElementById('openAIKey');
   if(input&&(state.cleared==='OpenAI'||!(state.failed||[]).includes('OpenAI')))input.value='';
   renderKeyState();if(state.error){document.getElementById('apiSetup').open=true;petLab.error=state.error;petLab.errorKind='setup';petLab.status='error';renderPetLab()}
+  else if(S.openAIConfigured)document.getElementById('apiSetup').open=false;
 }
 function newRequestID(){
   if(globalThis.crypto?.randomUUID)return crypto.randomUUID();

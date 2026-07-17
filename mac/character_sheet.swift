@@ -217,9 +217,10 @@ enum CharacterSheetProcessor {
         var sourceBounds: [CharacterSheetPixelBounds] = []
         var nearEdgeRecoveries: [Int] = []
         for index in 0..<CharacterSheetStageKind.allCases.count {
-            let panel = extractHorizontalRange(cleanedSource,
+            var panel = extractHorizontalRange(cleanedSource,
                                                from: boundaries[index],
                                                to: boundaries[index + 1])
+            removeGroundedSidecars(from: &panel)
             let bounds = try validatedBounds(
                 of: panel,
                 stageIndex: index,
@@ -329,8 +330,9 @@ enum CharacterSheetProcessor {
         var bounds: [CharacterSheetPixelBounds] = []
         var nearEdgeRecoveries: [Int] = []
         for index in 0..<3 {
-            let panel = extractHorizontalRange(source, from: boundaries[index],
+            var panel = extractHorizontalRange(source, from: boundaries[index],
                                                to: boundaries[index + 1])
+            removeGroundedSidecars(from: &panel)
             let candidateBounds = try validatedBounds(
                 of: panel, stageIndex: index,
                 requireLeftCanvasMargin: index == 0,
@@ -416,6 +418,7 @@ enum CharacterSheetProcessor {
         }
         removeBorderConnectedMatte(from: &source)
         removeSmallSpecks(from: &source)
+        removeGroundedSidecars(from: &source)
         let stageIndex = CharacterSheetStageKind.allCases.firstIndex(of: kind) ?? 0
         let bounds = try validatedBounds(of: source,
                                          stageIndex: stageIndex,
@@ -443,6 +446,33 @@ enum CharacterSheetProcessor {
             baselineY: baselineY,
             recoveredNearEdge: recoveredNearEdge
         )
+    }
+
+    /// Removes model-invented grounded companion creatures from an already
+    /// normalized runtime sheet. Older v2 assets pass through here on load, so
+    /// the cleanup fixes existing pets without another paid generation.
+    static func sanitizeNormalizedSheet(pngData: Data) throws -> Data {
+        guard hasPNGSignature(pngData) else { throw CharacterSheetProcessingError.notPNG }
+        guard let dimensions = pngPixelDimensions(pngData),
+              dimensions.width == outputWidth, dimensions.height == outputHeight else {
+            let dimensions = pngPixelDimensions(pngData) ?? (0, 0)
+            throw CharacterSheetProcessingError.invalidNormalizedSheetDimensions(
+                width: dimensions.width, height: dimensions.height)
+        }
+        let source = try decodePNG(pngData)
+        var output = CharacterSheetRGBAImage(width: outputWidth, height: outputHeight)
+        var changed = false
+        for index in 0..<3 {
+            var frame = extractHorizontalRange(source,
+                                               from: index * outputStageSize,
+                                               to: (index + 1) * outputStageSize)
+            if removeGroundedSidecars(from: &frame) > 0 {
+                centerForegroundHorizontally(in: &frame)
+                changed = true
+            }
+            copy(frame, into: &output, destinationX: index * outputStageSize)
+        }
+        return changed ? try encodePNG(output) : pngData
     }
 
     /// Replaces exactly one normalized frame without regenerating or touching
@@ -767,11 +797,16 @@ enum CharacterSheetProcessor {
         return min(44, max(18, percentile + 10))
     }
 
-    private static func removeSmallSpecks(from image: inout CharacterSheetRGBAImage) {
+    private struct AlphaComponent {
+        let pixels: [Int]
+        let bounds: CharacterSheetPixelBounds
+    }
+
+    private static func alphaComponents(in image: CharacterSheetRGBAImage) -> [AlphaComponent] {
         let width = image.width
         let height = image.height
         var labels = [Int](repeating: -1, count: width * height)
-        var components: [[Int]] = []
+        var components: [AlphaComponent] = []
         var queue: [Int] = []
 
         for start in 0..<(width * height) {
@@ -781,6 +816,7 @@ enum CharacterSheetProcessor {
             queue.removeAll(keepingCapacity: true)
             queue.append(start)
             var component: [Int] = []
+            var minimumX = width, minimumY = height, maximumX = 0, maximumY = 0
             var cursor = 0
             while cursor < queue.count {
                 let index = queue[cursor]
@@ -788,6 +824,8 @@ enum CharacterSheetProcessor {
                 component.append(index)
                 let x = index % width
                 let y = index / width
+                minimumX = min(minimumX, x); maximumX = max(maximumX, x)
+                minimumY = min(minimumY, y); maximumY = max(maximumY, y)
                 for oy in -1...1 {
                     for ox in -1...1 where ox != 0 || oy != 0 {
                         let nx = x + ox, ny = y + oy
@@ -800,13 +838,22 @@ enum CharacterSheetProcessor {
                     }
                 }
             }
-            components.append(component)
+            components.append(AlphaComponent(
+                pixels: component,
+                bounds: CharacterSheetPixelBounds(
+                    x: minimumX, y: minimumY,
+                    width: maximumX - minimumX + 1,
+                    height: maximumY - minimumY + 1)))
         }
+        return components
+    }
 
-        guard let largest = components.map(\.count).max(), largest > 0 else { return }
+    private static func removeSmallSpecks(from image: inout CharacterSheetRGBAImage) {
+        let components = alphaComponents(in: image)
+        guard let largest = components.map({ $0.pixels.count }).max(), largest > 0 else { return }
         let minimumArea = max(16, min(256, largest / 500))
-        for component in components where component.count < minimumArea {
-            for index in component {
+        for component in components where component.pixels.count < minimumArea {
+            for index in component.pixels {
                 let pixel = index * 4
                 image.pixels[pixel] = 0
                 image.pixels[pixel + 1] = 0
@@ -814,6 +861,59 @@ enum CharacterSheetProcessor {
                 image.pixels[pixel + 3] = 0
             }
         }
+    }
+
+    /// A generated human familiar can be misread as “person plus familiar”,
+    /// producing a second little creature beside the feet. Keep the largest
+    /// character and remove only substantial subordinate components that are
+    /// entirely in its lower half and share its ground line. Detached wings,
+    /// sparkles, hair flourishes, and tiny edge pixels remain untouched.
+    @discardableResult
+    private static func removeGroundedSidecars(from image: inout CharacterSheetRGBAImage) -> Int {
+        let components = alphaComponents(in: image)
+        guard let main = components.max(by: { $0.pixels.count < $1.pixels.count }),
+              main.pixels.count > 0 else { return 0 }
+        let mainBottom = main.bounds.y + main.bounds.height
+        let minimumArea = max(384, main.pixels.count / 20)
+        let lowerHalf = main.bounds.y + main.bounds.height * 45 / 100
+        let groundTolerance = max(12, main.bounds.height * 8 / 100)
+        var removed = 0
+        for component in components where component.pixels != main.pixels {
+            let bounds = component.bounds
+            let bottom = bounds.y + bounds.height
+            guard component.pixels.count >= minimumArea,
+                  bounds.y >= lowerHalf,
+                  bounds.height * 100 <= main.bounds.height * 55,
+                  abs(bottom - mainBottom) <= groundTolerance else { continue }
+            for index in component.pixels {
+                let pixel = index * 4
+                image.pixels[pixel] = 0
+                image.pixels[pixel + 1] = 0
+                image.pixels[pixel + 2] = 0
+                image.pixels[pixel + 3] = 0
+            }
+            removed += 1
+        }
+        return removed
+    }
+
+    private static func centerForegroundHorizontally(in image: inout CharacterSheetRGBAImage) {
+        guard let bounds = alphaBounds(of: image) else { return }
+        let targetX = (image.width - bounds.width) / 2
+        let shift = targetX - bounds.x
+        guard shift != 0 else { return }
+        var centered = CharacterSheetRGBAImage(width: image.width, height: image.height)
+        for y in 0..<image.height {
+            for x in 0..<image.width where image.pixels[(y * image.width + x) * 4 + 3] > 0 {
+                let destinationX = x + shift
+                guard destinationX >= 0, destinationX < image.width else { continue }
+                let sourcePixel = (y * image.width + x) * 4
+                let destinationPixel = (y * image.width + destinationX) * 4
+                centered.pixels[destinationPixel..<(destinationPixel + 4)] =
+                    image.pixels[sourcePixel..<(sourcePixel + 4)]
+            }
+        }
+        image = centered
     }
 
     private static func validatedBounds(of image: CharacterSheetRGBAImage,

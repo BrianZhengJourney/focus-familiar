@@ -140,7 +140,7 @@ struct CustomPetTests {
         expect(runtime["characterID"] as? String == "custom:\(canonicalID)", "selection ID should be namespaced")
         expect(runtime["accent"] as? String == "#7DF0CF", "accent should be canonicalized")
         expect(runtime["motionProfile"] as? String == "dreamy-float", "motion should derive from temperament")
-        let assetURLString = "mimo-pet://asset/\(canonicalID)/sheet.png"
+        let assetURLString = "mimo-pet://asset/\(canonicalID)/sheet.png?v=3"
         expect(runtime["assetURL"] as? String == assetURLString, "asset URL should be computed, not persisted input")
 
         let petDirectory = root.appendingPathComponent("Pets/\(canonicalID)")

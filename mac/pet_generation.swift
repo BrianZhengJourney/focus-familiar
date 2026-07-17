@@ -246,11 +246,12 @@ enum PetGenerationArtifact: Equatable {
     case candidateBoard
     case evolutionSheet
     case replacement(PetEvolutionStage)
+    case expressionSheet(PetEvolutionStage)
 
     var outputSize: PetImageOutputSize {
         switch self {
         case .candidateBoard, .replacement: return .square
-        case .evolutionSheet: return .landscape
+        case .evolutionSheet, .expressionSheet: return .landscape
         }
     }
 }
@@ -525,6 +526,46 @@ final class PetGenerationCoordinator {
         }
     }
 
+    /// Expression pass: three facial expressions of ONE locked stage design so
+    /// the overlay can blink and emote by frame-swapping. Runs once per stage
+    /// at adoption; a failure only costs that stage its expressions.
+    func generateExpressionSheet(requestID: String, stage: PetEvolutionStage,
+                                 stageFrameData: Data, sourceDataURI: String,
+                                 styleBoardData: Data?,
+                                 personalityVisual: String,
+                                 quality: PetFinalGenerationQuality,
+                                 progress: @escaping StagedProgress,
+                                 completion: @escaping StagedCompletion) {
+        begin(requestID)
+        credentialQueue.async { [weak self] in
+            guard let self, !self.isCancelled(requestID) else { return }
+            guard let key = self.openAIKeyReader() else {
+                guard !self.isCancelled(requestID) else { return }
+                self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
+                return
+            }
+            guard !self.isCancelled(requestID) else { return }
+            guard Self.validReference(stageFrameData),
+                  let reference = Self.validatedDataURI(sourceDataURI),
+                  Self.validReference(styleBoardData) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
+            self.emitStaged(progress, phase: "connecting", partialImage: nil, partialIndex: nil)
+            let request = Self.expressionSheetRequest(
+                stage: stage, stageFrameData: stageFrameData,
+                referenceData: reference, styleBoardData: styleBoardData,
+                personalityVisual: personalityVisual,
+                quality: quality, apiKey: key,
+                delivery: .streaming(.one)
+            )
+            guard !self.isCancelled(requestID) else { return }
+            self.performImageStream(request, provider: "OpenAI", requestID: requestID,
+                                    artifact: .expressionSheet(stage), progress: progress,
+                                    completion: completion)
+        }
+    }
+
     func generateCharacterSheet(requestID: String, sourceDataURI: String,
                                 personalityVisual: String, likeness: Double,
                                 quality: PetGenerationQuality = .medium,
@@ -605,7 +646,7 @@ final class PetGenerationCoordinator {
         Temperament: \(personalityVisual)
 
         PURPOSE AND STYLE
-        Create one original tiny desktop familiar that remains charming and readable at roughly 96–160 px tall on macOS.
+        Create one original tiny desktop familiar that remains charming and readable at roughly 140–220 px tall on macOS.
         Use premium handcrafted pixel-inspired sprite art: cute chibi proportions, large expressive head, tiny full body,
         crisp stepped edges, restrained dark-cocoa outline, a coherent 10–14 color palette, warm selective shading, and a
         strong readable silhouette. Avoid photorealism, 3D rendering, painterly brushwork, smooth vector art, or emoji style.
@@ -701,7 +742,7 @@ final class PetGenerationCoordinator {
         doll, duplicate, or separate character may appear beside it.
 
         MIMO STYLE
-        Premium handcrafted pixel-inspired sprite art readable at 96–160 px tall: cute chibi proportions, expressive
+        Premium handcrafted pixel-inspired sprite art readable at 140–220 px tall: cute chibi proportions, expressive
         head, tiny full body, crisp stepped edges, restrained dark-cocoa outline, coherent 10–14 color palette, warm
         selective shading, strong silhouette. Avoid photorealism, 3D, painterly art, smooth vector art, and emoji style.
         Treat roundedness, body width, and head-to-body ratio as soft defaults that the user visual tuning note may
@@ -797,7 +838,7 @@ final class PetGenerationCoordinator {
         Evolve silhouette and internal markings only. Never change identity, species, pose, outfit, or primary palette.
 
         MIMO STYLE AND MATTE
-        Premium handcrafted pixel-inspired sprite art readable at 96–160 px tall: crisp stepped edges, restrained
+        Premium handcrafted pixel-inspired sprite art readable at 140–220 px tall: crisp stepped edges, restrained
         dark-cocoa outline, coherent 10–14 color palette, warm selective shading, strong readable silhouette.
         Use one flat opaque background of exact color #F1ECE2. No gradient, texture, floor, cast shadow, halo, external
         glow, particles, props, scenery, frame, UI, text, logo, watermark, extra figures, or cropped limbs. Mimo adds FX.
@@ -881,6 +922,77 @@ final class PetGenerationCoordinator {
         feet fully visible, and unbroken matte on every side. Use one flat opaque #F1ECE2 background. No edge contact,
         gradient, texture, floor, cast shadow, halo, glow, particles, props, scenery, UI, text, logo, watermark, or crop.
         Mimo will replace only stage index \(stage.sheetIndex) locally, preserving both other stages pixel-for-pixel.
+        """
+    }
+
+    /// Expression pass request. Image 1 is the locked stage design; the model
+    /// repeats it three times changing ONLY the facial expression, so all
+    /// frames share one silhouette and frame-swaps cannot jitter.
+    static func expressionSheetRequest(stage: PetEvolutionStage,
+                                       stageFrameData: Data, referenceData: Data,
+                                       styleBoardData: Data? = nil,
+                                       personalityVisual: String,
+                                       quality: PetFinalGenerationQuality = .medium,
+                                       apiKey: String,
+                                       delivery: PetGenerationDelivery = .blocking,
+                                       boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest {
+        var references = [
+            PetMultipartImage(filename: "locked-stage-design.png", data: stageFrameData),
+            PetMultipartImage(filename: "identity-reference.png", data: referenceData),
+        ]
+        if let styleBoardData {
+            references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
+        }
+        return imageEditRequest(
+            references: references,
+            prompt: expressionSheetPrompt(stage: stage,
+                                          personalityVisual: personalityVisual,
+                                          hasStyleBoard: styleBoardData != nil),
+            size: PetGenerationArtifact.expressionSheet(stage).outputSize,
+            quality: quality.providerQuality,
+            apiKey: apiKey,
+            delivery: delivery,
+            timeout: quality == .high ? 420 : 300,
+            boundary: boundary
+        )
+    }
+
+    static func expressionSheetPrompt(stage: PetEvolutionStage,
+                                      personalityVisual: String,
+                                      hasStyleBoard: Bool) -> String {
+        let styleReference = hasStyleBoard
+            ? "Image 3 is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
+            : "No style-board image is supplied; preserve the established rendering language from Image 1 exactly."
+        return """
+        MIMO ASSET PASS 3 — EXPRESSION SHEET FOR THE \(stage.rawValue.uppercased()) STAGE
+
+        REFERENCES
+        Image 1 is the LOCKED \(stage.rawValue.uppercased()) STAGE DESIGN and the absolute identity, pose, and scale
+        lock. Reproduce its species, face structure, hairstyle or markings, palette, outfit, outline weight, shading,
+        proportions, and silhouette EXACTLY in every panel.
+        Image 2 is the locally prepared identity evidence board; consult it only to keep facial features on-model.
+        \(styleReference)
+        Temperament: \(personalityVisual)
+
+        OUTPUT CONTRACT
+        Create one 1536×1024 landscape sheet with exactly THREE copies of the SAME character arranged LEFT, CENTER,
+        RIGHT—one centered in each equal third. Every copy uses the identical front-facing neutral standing pose,
+        identical body, outfit, scale, horizontal center, and ground baseline as Image 1. ONLY the facial expression
+        changes between panels; the body silhouette must be pixel-equivalent across all three.
+        Keep the complete silhouette inside the central 76% of each panel's height and the central 72% of its width,
+        with feet fully visible and generous unbroken matte around it. No character, hair, flourish, or accessory may
+        touch a panel or canvas edge. No dividers or labels. No companion, duplicate beside a panel, or extra figure.
+
+        EXPRESSIONS
+        LEFT — NEUTRAL: calm, eyes open, relaxed mouth; matches Image 1's expression as closely as possible.
+        CENTER — JOY: warm genuine smile, eyes gently curved with happiness; keep it subtle and in-character.
+        RIGHT — REST: both eyes fully closed as if peacefully asleep, serene relaxed face; nothing else changes.
+
+        MIMO STYLE AND MATTE
+        Premium handcrafted pixel-inspired sprite art readable at 140–220 px tall: crisp stepped edges, restrained
+        dark-cocoa outline, coherent 10–14 color palette, warm selective shading, strong readable silhouette.
+        Use one flat opaque background of exact color #F1ECE2. No gradient, texture, floor, cast shadow, halo, external
+        glow, particles, props, scenery, frame, UI, text, logo, watermark, extra figures, or cropped limbs. Mimo adds FX.
         """
     }
 

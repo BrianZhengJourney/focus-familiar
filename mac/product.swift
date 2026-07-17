@@ -371,8 +371,7 @@ extension AppDelegate {
         statusItem?.button?.toolTip = "Mimo"
         if let w = settingsWin {
             pushSettingsState()
-            NSApp.activate(ignoringOtherApps: true)
-            w.makeKeyAndOrderFront(nil)
+            presentSettingsWindow(w)
             return
         }
         let cfg = WKWebViewConfiguration()
@@ -393,8 +392,22 @@ extension AppDelegate {
         win.center()
         settingsWeb = web
         settingsWin = win
+        presentSettingsWindow(win)
+    }
+
+    private func presentSettingsWindow(_ window: NSWindow) {
+        // Mimo is an accessory app and its ambient overlay joins every Space.
+        // A normal Settings window does not, so reopening it can otherwise
+        // order the window on its previous Space while leaving it invisible on
+        // the Space where the user invoked Settings.
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        NSApp.unhide(nil)
         NSApp.activate(ignoringOtherApps: true)
-        win.makeKeyAndOrderFront(nil)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     func windowWillClose(_ notification: Notification) {

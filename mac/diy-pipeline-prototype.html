@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimo DNA · DIY pipeline prototype</title>
+<!--
+  THROWAWAY PROTOTYPE — not production UI.
+  Question: which image-to-Mimo pipeline should we build first?
+  Default is a side-by-side board; ?variant=A|B|C focuses one route.
+-->
+<style>
+  :root{
+    --night:#17132f; --night2:#201a3c; --ink:#33231d; --muted:#78685f;
+    --paper:#fff8e8; --paper2:#f7e8c8; --line:#ddc894; --violet:#8e7bc7;
+    --mint:#67c8ab; --rose:#d77d97; --gold:#d99e43;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC",sans-serif}
+  body{
+    color:#f7f1ff;
+    background:
+      radial-gradient(circle at 12% 8%,#433665 0,transparent 27%),
+      radial-gradient(circle at 88% 18%,#263f50 0,transparent 25%),
+      linear-gradient(155deg,var(--night2),var(--night));
+    padding:34px 38px 92px;
+  }
+  .shell{max-width:1510px;margin:0 auto}
+  header{display:flex;align-items:flex-end;gap:24px;margin:0 4px 24px}
+  .eyebrow{font-size:11px;letter-spacing:.17em;text-transform:uppercase;color:#bfb0e5;margin-bottom:8px}
+  h1{font:600 34px/1.05 Georgia,"Songti SC",serif;margin:0;letter-spacing:-.02em}
+  .sub{color:#b8afca;font-size:13px;line-height:1.5;margin-top:8px}
+  .header-note{margin-left:auto;text-align:right;color:#9e95b5;font-size:11px;line-height:1.5}
+  .header-note b{color:#f0c66f;font-weight:650}
+
+  .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;align-items:stretch}
+  .route{
+    min-width:0;position:relative;overflow:hidden;color:var(--ink);
+    background:linear-gradient(180deg,#fffaf0,var(--paper));
+    border:1px solid #f7e4ad;border-radius:25px;padding:20px 18px 18px;
+    box-shadow:0 20px 55px #0806175c, inset 0 0 0 1px #fff9;
+    transition:.22s ease;
+  }
+  .route.recommended{border-color:#8fe4c6;box-shadow:0 22px 65px #08061766,0 0 0 2px #67c8ab26,inset 0 0 0 1px #fff9}
+  .route.recommended::after{content:"建议先做";position:absolute;right:14px;top:13px;background:#234e43;color:#c7f8e7;border-radius:999px;padding:5px 9px;font-size:9px;font-weight:700;letter-spacing:.08em}
+  .route-id{display:inline-grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#34264b;color:#fff;font:700 12px Georgia,serif;margin-right:8px}
+  .route h2{display:flex;align-items:center;margin:0 0 5px;font:600 19px/1.2 Georgia,"Songti SC",serif}
+  .route h2 span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .route-kicker{font-size:10px;color:#88776c;margin:0 0 15px;padding-left:37px}
+
+  .flow{display:grid;grid-template-columns:67px 14px 1fr 14px 82px;align-items:center;min-height:102px;margin-bottom:13px}
+  .arrow{text-align:center;color:#b99c65;font:18px Georgia,serif}
+  .source{height:74px;border-radius:14px;border:1px dashed #c9ad75;background:linear-gradient(145deg,#d9c1a2,#8a9b8a);padding:6px;position:relative;overflow:hidden}
+  .source::before{content:"";position:absolute;width:32px;height:32px;border-radius:50%;background:#d5ab79;left:17px;top:11px;box-shadow:-12px 23px 0 10px #755c4d,13px 23px 0 9px #584f46}
+  .source::after{content:"你的图片";position:absolute;inset:auto 4px 4px;background:#fff9;border-radius:6px;color:#44342e;text-align:center;font-size:8px;padding:3px 0;backdrop-filter:blur(4px)}
+  .steps{display:flex;flex-direction:column;gap:5px}
+  .step{display:flex;align-items:center;gap:6px;border:1px solid #decba2;background:#fbefd5;border-radius:8px;padding:5px 7px;font-size:9px;line-height:1.15;color:#66564d}
+  .step i{width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 3px #8e7bc719;flex:none}
+  .step.api i{background:var(--rose)} .step.compile i{background:var(--mint)}
+  .pet-frame{height:83px;border-radius:17px;border:1px solid #d8c18c;background:radial-gradient(circle at 50% 34%,#fff,#f0dfb8);display:grid;place-items:center;position:relative}
+  .pet-frame::after{content:"candidate";position:absolute;bottom:4px;color:#98836b;font-size:7px;letter-spacing:.12em;text-transform:uppercase}
+  .pet{width:72px;height:63px;image-rendering:pixelated;filter:drop-shadow(4px 5px 0 #573f322c)}
+
+  .evo{border-top:1px solid #e5d5af;padding-top:12px}
+  .evo-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;font-size:9px;color:#8c796b;text-transform:uppercase;letter-spacing:.09em}
+  .evo-title b{color:#44332d;font-size:10px;text-transform:none;letter-spacing:0}
+  .evo-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .stage{background:#f4e6ca;border-radius:11px;min-height:72px;padding:4px;text-align:center;position:relative}
+  .stage svg{width:55px;height:49px;image-rendering:pixelated;filter:drop-shadow(3px 3px 0 #6a4e3d22)}
+  .stage label{display:block;color:#756258;font-size:8px;margin-top:-1px}
+  .stage .lock{position:absolute;right:5px;top:5px;width:14px;height:14px;border-radius:50%;display:grid;place-items:center;background:#ffffffb5;color:#7c6c62;font-size:7px}
+
+  .scores{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:13px}
+  .score{border-top:1px solid #e8d9bb;padding-top:7px}
+  .score-head{display:flex;justify-content:space-between;color:#76665e;font-size:8px;margin-bottom:5px}
+  .score-head b{color:#4c3932;font-weight:650}
+  .meter{height:4px;background:#eadab8;border-radius:99px;overflow:hidden}
+  .meter i{display:block;height:100%;border-radius:inherit;background:var(--violet)}
+  .score:nth-child(2) .meter i{background:var(--rose)}
+  .score:nth-child(3) .meter i{background:var(--mint)}
+  .score:nth-child(4) .meter i{background:var(--gold)}
+
+  .verdict{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:14px;border-radius:13px;padding:10px 11px;background:#332747;color:#f4effb}
+  .verdict strong{font-size:10px;font-weight:650}.verdict span{display:block;margin-top:3px;color:#bcb1ca;font-size:8px;line-height:1.3}
+  .cost{text-align:right;color:#eed18f!important;font:700 10px Georgia,serif!important;margin:0!important}
+  .file{margin-top:10px;display:flex;align-items:center;justify-content:space-between;color:#8b786c;font:8px ui-monospace,SFMono-Regular,monospace}
+  .file code{background:#efe0c3;color:#614f45;padding:4px 6px;border-radius:6px}
+
+  .bottom{
+    position:fixed;z-index:20;left:50%;bottom:20px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:6px;background:#0f0c20e8;border:1px solid #ffffff22;border-radius:999px;padding:6px;
+    box-shadow:0 12px 35px #0008;backdrop-filter:blur(14px)
+  }
+  .bottom button{border:0;color:#bcb3ce;background:transparent;border-radius:999px;padding:8px 12px;font:10px inherit;cursor:pointer}
+  .bottom button:hover{background:#ffffff10;color:#fff}.bottom button.active{background:#fff5df;color:#2e223d;font-weight:700}
+  .bottom .nav{font-size:16px;padding:4px 9px}
+  .proto{margin-left:5px;padding:0 9px;color:#807790;font-size:8px;letter-spacing:.08em;border-left:1px solid #ffffff1c}
+  body[data-focus]:not([data-focus="all"]) .board{grid-template-columns:minmax(0,560px);justify-content:center}
+  body[data-focus]:not([data-focus="all"]) .route{display:none}
+  body[data-focus="A"] .route[data-route="A"],body[data-focus="B"] .route[data-route="B"],body[data-focus="C"] .route[data-route="C"]{display:block}
+  body[data-focus]:not([data-focus="all"]) .route{padding:26px}.route.is-dim{opacity:.34;transform:scale(.985)}
+  @media(max-width:1100px){.board{grid-template-columns:1fr}.route{max-width:620px;margin:auto;width:100%}.header-note{display:none}}
+</style>
+</head>
+<body data-focus="all">
+<div class="shell">
+  <header>
+    <div>
+      <div class="eyebrow">Mimo DNA · DIY pet atelier</div>
+      <h1>一张图片，怎样长成一只米墨？</h1>
+      <div class="sub">三个方案的差别，不是“用哪个 API”，而是把创造力放在哪一层。</div>
+    </div>
+    <div class="header-note">共同终点：<b>透明像素形体 → Mimo compiler → pet.mimo</b><br>动作、表情、影子与状态继续使用同一套 house rig</div>
+  </header>
+
+  <main class="board">
+    <article class="route" data-route="A">
+      <h2><span class="route-id">A</span><span>Local Compiler</span></h2>
+      <p class="route-kicker">隐私优先 · 最像“像素版原图”</p>
+      <section class="flow">
+        <div class="source"></div><div class="arrow">›</div>
+        <div class="steps"><div class="step"><i></i>本地抠图</div><div class="step"><i></i>颜色量化</div><div class="step compile"><i></i>Mimo compiler</div></div>
+        <div class="arrow">›</div><div class="pet-frame"><svg class="pet" data-pet="local" data-level="2"></svg></div>
+      </section>
+      <section class="evo">
+        <div class="evo-title"><b>同一轮廓，逐步加细节</b><span>evolution</span></div>
+        <div class="evo-row"><div class="stage"><svg data-pet="local" data-level="0"></svg><label>初生</label></div><div class="stage"><svg data-pet="local" data-level="1"></svg><label>绽放</label></div><div class="stage"><svg data-pet="local" data-level="2"></svg><label>发光</label></div></div>
+      </section>
+      <section class="scores">
+        <div class="score"><div class="score-head"><span>像原图</span><b>5 / 5</b></div><div class="meter"><i style="width:100%"></i></div></div>
+        <div class="score"><div class="score-head"><span>Mimo 感</span><b>2 / 5</b></div><div class="meter"><i style="width:40%"></i></div></div>
+        <div class="score"><div class="score-head"><span>状态稳定</span><b>5 / 5</b></div><div class="meter"><i style="width:100%"></i></div></div>
+        <div class="score"><div class="score-head"><span>生成速度</span><b>~2 sec</b></div><div class="meter"><i style="width:95%"></i></div></div>
+      </section>
+      <div class="verdict"><div><strong>适合：privacy mode</strong><span>不上传；但只能“翻译”轮廓，较难创造一只真的可爱伴灵。</span></div><span class="cost">$0</span></div>
+      <div class="file"><span>output</span><code>pet.mimo · 20×18 grid</code></div>
+    </article>
+
+    <article class="route recommended" data-route="B">
+      <h2><span class="route-id">B</span><span>PixelLab-first</span></h2>
+      <p class="route-kicker">平衡最好 · 真正改变 shape</p>
+      <section class="flow">
+        <div class="source"></div><div class="arrow">›</div>
+        <div class="steps"><div class="step api"><i></i>PixelLab · 3 candidates</div><div class="step"><i></i>眼睛 / 锚点确认</div><div class="step compile"><i></i>Mimo compiler</div></div>
+        <div class="arrow">›</div><div class="pet-frame"><svg class="pet" data-pet="pixel" data-level="2"></svg></div>
+      </section>
+      <section class="evo">
+        <div class="evo-title"><b>身份不变，signature feature 生长</b><span>evolution</span></div>
+        <div class="evo-row"><div class="stage"><svg data-pet="pixel" data-level="0"></svg><label>初生</label></div><div class="stage"><svg data-pet="pixel" data-level="1"></svg><label>绽放</label></div><div class="stage"><svg data-pet="pixel" data-level="2"></svg><label>发光</label></div></div>
+      </section>
+      <section class="scores">
+        <div class="score"><div class="score-head"><span>像原图</span><b>4 / 5</b></div><div class="meter"><i style="width:80%"></i></div></div>
+        <div class="score"><div class="score-head"><span>Mimo 感</span><b>4 / 5</b></div><div class="meter"><i style="width:82%"></i></div></div>
+        <div class="score"><div class="score-head"><span>状态稳定</span><b>5 / 5</b></div><div class="meter"><i style="width:100%"></i></div></div>
+        <div class="score"><div class="score-head"><span>生成速度</span><b>~15 sec</b></div><div class="meter"><i style="width:72%"></i></div></div>
+      </section>
+      <div class="verdict"><div><strong>适合：第一个真实 prototype</strong><span>一次 API 得到真实像素轮廓；house rig 接管情绪、成长、睡眠与升级。</span></div><span class="cost">$</span></div>
+      <div class="file"><span>output</span><code>pet.mimo · PNG + manifest</code></div>
+    </article>
+
+    <article class="route" data-route="C">
+      <h2><span class="route-id">C</span><span>Concept → PixelLab</span></h2>
+      <p class="route-kicker">最有魔法 · 最像“重新想象”</p>
+      <section class="flow">
+        <div class="source"></div><div class="arrow">›</div>
+        <div class="steps"><div class="step api"><i></i>Image model · concept</div><div class="step api"><i></i>PixelLab · strict pixels</div><div class="step compile"><i></i>Mimo compiler</div></div>
+        <div class="arrow">›</div><div class="pet-frame"><svg class="pet" data-pet="magic" data-level="2"></svg></div>
+      </section>
+      <section class="evo">
+        <div class="evo-title"><b>形体也会进化，更有角色感</b><span>evolution</span></div>
+        <div class="evo-row"><div class="stage"><svg data-pet="magic" data-level="0"></svg><label>初生</label></div><div class="stage"><svg data-pet="magic" data-level="1"></svg><label>绽放</label></div><div class="stage"><svg data-pet="magic" data-level="2"></svg><label>发光</label></div></div>
+      </section>
+      <section class="scores">
+        <div class="score"><div class="score-head"><span>像原图</span><b>3 / 5</b></div><div class="meter"><i style="width:63%"></i></div></div>
+        <div class="score"><div class="score-head"><span>Mimo 感</span><b>5 / 5</b></div><div class="meter"><i style="width:100%"></i></div></div>
+        <div class="score"><div class="score-head"><span>状态稳定</span><b>4 / 5</b></div><div class="meter"><i style="width:82%"></i></div></div>
+        <div class="score"><div class="score-head"><span>生成速度</span><b>~35 sec</b></div><div class="meter"><i style="width:45%"></i></div></div>
+      </section>
+      <div class="verdict"><div><strong>适合：premium “make it magical”</strong><span>最可爱、最有个性；多一步生成，也更需要 identity consistency 检查。</span></div><span class="cost">$$</span></div>
+      <div class="file"><span>output</span><code>pet.mimo · 3 forms + manifest</code></div>
+    </article>
+  </main>
+</div>
+
+<nav class="bottom" aria-label="prototype focus">
+  <button class="nav" data-shift="-1">‹</button>
+  <button data-view="all">ALL · side by side</button>
+  <button data-view="A">A · local</button>
+  <button data-view="B">B · PixelLab</button>
+  <button data-view="C">C · hybrid</button>
+  <button class="nav" data-shift="1">›</button><span class="proto">THROWAWAY PROTOTYPE</span>
+</nav>
+
+<script>
+const PETS={
+  local:{pal:{p:'#b47758',l:'#e4b48d',a:'#789b83',k:'#332720',w:'#fff8e7'},base:[
+    '....pp....pp....','...plp....plp...','..plllpppplllp..','.pllllllllllllp.','pllllllllllllllp','pllllllllllllllp','pllkkllllllkkllp','pllkwllllllkwllp','pllllllkkllllllp','.pllllkllkllllp.','..pllllllllllp..','...pppllllppp...','....p......p....'],
+    add1:[[13,2,'a'],[14,1,'a'],[14,2,'a'],[15,2,'a']],add2:[[2,2,'a'],[1,1,'a'],[2,1,'a'],[15,9,'a'],[16,9,'a']]},
+  pixel:{pal:{p:'#d36f5b',l:'#f2b48b',a:'#75c4ad',k:'#32231f',w:'#fff6e6'},base:[
+    '....p..........p....','...plp........plp...','..pllp........pllp..','..plllpppppppplllp..','.pllllllllllllllllp.','pllllllllllllllllllp','plllkkllllllllkklllp','plllkwllllllllkwlllp','pllllllllllllllllllp','.plllllllkklllllllp.','..plllllkllklllllp..','...pllllllllllllp...','....pppllllllppp....','.....pp.....pp......'],
+    add1:[[9,2,'a'],[10,1,'a'],[11,0,'a'],[11,1,'a'],[10,2,'a'],[8,2,'a']],add2:[[1,5,'a'],[0,6,'a'],[19,5,'a'],[20,6,'a'],[9,0,'a'],[12,0,'a']]},
+  magic:{pal:{p:'#9477bd',l:'#d1b9ee',a:'#efb357',k:'#2b2135',w:'#fff8e7'},base:[
+    '.......a.....a.......','......apa...apa......','.....apppaaapppa.....','....aplllllllllpa....','...plllllllllllllp...','..plllllllllllllllp..','.plllkkllllllllkkllp.','.plllkwllllllllkwllp.','..plllllllllllllllp..','...plllllkkllllllp...','....plllkllklllp....','.....pllllllllp.....','....ppplllllppp.....','...pp.........pp....'],
+    add1:[[3,3,'a'],[2,2,'a'],[17,3,'a'],[18,2,'a'],[10,13,'a']],add2:[[0,7,'a'],[1,4,'a'],[4,1,'a'],[19,4,'a'],[20,7,'a'],[16,1,'a'],[10,14,'a']]}
+};
+function petSVG(el){
+  const p=PETS[el.dataset.pet],level=+el.dataset.level||0,px=4,rows=p.base.map(x=>x.split(''));
+  const add=(pts)=>pts.forEach(([x,y,c])=>{while(rows.length<=y)rows.push([]);rows[y][x]=c});
+  if(level>0)add(p.add1);if(level>1)add(p.add2);
+  let r='<ellipse cx="42" cy="61" rx="29" ry="5" fill="#6f554126"/>';
+  rows.forEach((row,y)=>row.forEach((c,x)=>{if(c!=='.'&&p.pal[c])r+=`<rect x="${x*px+1}" y="${y*px+1}" width="4.2" height="4.2" fill="${p.pal[c]}"/>`}));
+  if(level>1)r+='<circle cx="8" cy="13" r="2" fill="#f2c76b"/><circle cx="76" cy="18" r="1.6" fill="#f2c76b"/><circle cx="68" cy="7" r="1.2" fill="#fff4c6"/>';
+  el.setAttribute('viewBox','0 0 84 66');el.innerHTML=r;
+}
+document.querySelectorAll('[data-pet]').forEach(petSVG);
+const order=['all','A','B','C'];
+function setView(v){
+  document.body.dataset.focus=v;
+  const url=new URL(location.href);url.searchParams.set('variant',v);history.replaceState({},'',url);
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+function shift(n){const i=order.indexOf(document.body.dataset.focus);setView(order[(i+n+order.length)%order.length])}
+document.querySelectorAll('[data-shift]').forEach(b=>b.onclick=()=>shift(+b.dataset.shift));
+addEventListener('keydown',e=>{if(e.target.matches('input,textarea,[contenteditable]'))return;if(e.key==='ArrowLeft')shift(-1);if(e.key==='ArrowRight')shift(1)});
+setView(new URL(location.href).searchParams.get('variant')||'all');
+</script>
+</body>
+</html>

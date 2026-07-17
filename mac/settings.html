@@ -198,6 +198,13 @@ h1{ font-family:Georgia,serif; font-weight:600; font-size:26px; }
   white-space:nowrap; font-size:8px; }
 .candidate.sel::after{ content:'✓'; position:absolute; right:7px; top:7px; width:16px; height:16px;
   display:grid; place-items:center; border-radius:50%; color:#122a23; background:var(--good); font-size:8px; }
+.candidate-confirm{ display:flex; align-items:center; justify-content:space-between; gap:7px; margin-top:8px;
+  padding:7px 9px; color:#aaa3ba; border:1px solid #7df0cf28; border-radius:9px; background:#7df0cf08; font-size:9.5px; }
+.candidate-confirm b{ color:var(--good); font-weight:650; }.candidate-confirm button{ padding:3px 7px; font-size:9px; }
+.batch-results{ display:grid; gap:10px; }.batch-result{ padding:9px; border:1px solid #ffffff13;
+  border-radius:12px; background:#ffffff04; }.batch-result-head{ display:flex; align-items:center;
+  justify-content:space-between; gap:8px; margin-bottom:7px; color:#aaa3ba; font-size:9.5px; }
+.batch-result-head b{ color:var(--ink); font:600 11px Georgia,serif; }.batch-result .sheet-actions{ margin-top:7px; }
 .sheet-stages{ display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
 .sheet-stage{ position:relative; min-width:0; text-align:center; color:var(--dim); font-size:9.5px; }
 .sheet-frame{ aspect-ratio:1; margin-bottom:4px; overflow:hidden; border-radius:11px;
@@ -617,7 +624,8 @@ const STYLE_TUNING_SUGGESTIONS=[
   {id:'smaller-head',zh:'头小一点',en:'smaller head',phraseZh:'头部稍小，身体比例更自然',phraseEn:'a slightly smaller head with more natural body proportions'}
 ];
 const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],primaryReferenceID:null,requestID:null,draftID:null,
-  candidateDraftID:null,candidates:[],candidateIndex:null,temperamentID:'quiet-curious',quality:'medium',
+  candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,candidateAutoStartToken:null,
+  temperamentID:'quiet-curious',quality:'medium',
   styleTuningNote:'',
   sheetQuality:null,stageQualities:[null,null,null],preservedResult:false,
   status:'idle',operation:null,phase:'',phaseMessage:'',error:'',errorKind:'',errorCode:'',outputRetained:false,
@@ -627,7 +635,8 @@ const petLab={name:'我的小伴灵',source:null,sourceName:'',references:[],pri
   model:null,size:null,partialImages:null,referenceCount:null,styleBoardUsed:null,usage:null,providerDetail:null,
   startedAt:null,finishedElapsed:null,cancelArmedUntil:0,adoptedName:'',referenceNoticeZh:'',referenceNoticeEn:'',
   importing:0,referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,
-  referenceAmbiguous:false,referenceReviewMessageZh:'',referenceReviewMessageEn:''};
+  referenceAmbiguous:false,referenceReviewMessageZh:'',referenceReviewMessageEn:'',
+  evolutionQueue:[],activeCandidateIndex:null,batchTotal:0,batchCompleted:0,batchResults:[],installingBatchIndex:null};
 
 const studioBusy=()=>petLab.status==='busy'||petLab.status==='installing';
 const referencesImporting=()=>Math.max(0,+petLab.importing||0)>0;
@@ -648,10 +657,11 @@ function operationCost(operation=petLab.operation){
 }
 function renderStudioPrice(){
   const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
-  const total=(0.010+Number(quality.cost.replace('$',''))).toFixed(3);
+  const selected=Math.max(1,petLab.candidateIndices.length||0);
+  const total=(0.010+selected*Number(quality.cost.replace('$',''))).toFixed(3);
   const price=document.getElementById('studioTotalPrice'),breakdown=document.getElementById('studioPriceBreakdown');
   if(price)price.textContent=`~$${total}`;
-  if(breakdown)breakdown.textContent=`Low $0.010 + ${quality.name} ${quality.cost}`;
+  if(breakdown)breakdown.textContent=`Low $0.010 + ${selected>1?`${selected} × `:''}${quality.name} ${quality.cost}`;
 }
 function currentStudioStep(){
   if(petLab.operation==='evolution'||petLab.operation==='stage'||petLab.status==='adopted')return 2;
@@ -799,7 +809,7 @@ function invalidatePetDraft(){
   const keep=!!petLab.draftID&&!!petLab.sheet;
   const accepted=keep?{draftID:petLab.draftID,sheet:petLab.sheet,sheetQuality:petLab.sheetQuality,
     stageImages:[...petLab.stageImages],stageQualities:[...petLab.stageQualities]}:null;
-  Object.assign(petLab,{requestID:null,draftID:accepted?.draftID||null,candidateDraftID:null,candidates:[],candidateIndex:null,
+  Object.assign(petLab,{requestID:null,draftID:accepted?.draftID||null,candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,
     sheet:accepted?.sheet||null,sheetQuality:accepted?.sheetQuality||null,
     stageImages:accepted?.stageImages||[null,null,null],stageQualities:accepted?.stageQualities||[null,null,null],
     preservedResult:keep,stageBusyIndex:null,error:'',errorKind:'',errorCode:'',outputRetained:false,
@@ -807,7 +817,8 @@ function invalidatePetDraft(){
     localSeconds:null,providerCompleted:false,rawPreview:null,recoveryDraftID:null,recoveryRequestID:null,
     recoveryUntil:null,canRetryLocally:false,resetTo:null,localRetry:false,
     model:null,size:null,partialImages:null,referenceCount:null,styleBoardUsed:null,usage:null,providerDetail:null,
-    startedAt:null,finishedElapsed:null,adoptedName:''});renderPetLab();
+    startedAt:null,finishedElapsed:null,adoptedName:'',evolutionQueue:[],activeCandidateIndex:null,
+    batchTotal:0,batchCompleted:0,batchResults:[],installingBatchIndex:null});renderPetLab();
 }
 function selectTemperament(id){if(!studioBusy()&&petLab.status!=='review'&&!referencesImporting()&&TEMPERAMENTS.some(t=>t.id===id)&&id!==petLab.temperamentID){invalidatePetDraft();petLab.temperamentID=id;renderPetLab()}}
 function renderImageQualities(){
@@ -819,7 +830,7 @@ function renderImageQualities(){
 function selectImageQuality(id){
   if(!IMAGE_QUALITIES.some(q=>q.id===id)||id===petLab.quality||studioBusy())return;
   petLab.quality=id;
-  send({type:'petQuality',quality:id});renderPetLab();
+  send({type:'petQuality',quality:id});if(petLab.candidateIndices.length)armCandidateAutoStart();else renderPetLab();
 }
 function renderKeyState(){
   const openai=document.getElementById('openAIKeyState');if(!openai)return;
@@ -845,13 +856,13 @@ function diagnosticsHTML(){
   const disclosure=(details.length||warnings.length)?`<details class="generation-details"><summary>${summary}</summary>${warnings.length?`<div class="warning-list">${warnings.map(w=>`⚠ ${esc(typeof w==='string'?w:(LANG==='zh'?(w.zh||w.message):(w.en||w.message)))}`).join('<br>')}</div>`:''}${details.length?`<div>${details.map(esc).join('<br>')}</div>`:''}</details>`:'';
   return `${items.length?`<div class="diagnostics">${items.join('')}</div>`:''}${disclosure}`;
 }
-function sheetStages(sheet,allowRedo=true){
+function sheetStages(sheet,allowRedo=true,state=petLab){
   const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
   return `<div class="sheet-stages">${[0,1,2].map(i=>{
-    const override=petLab.stageImages[i],source=override||sheet;
+    const override=(state.stageImages||[])[i],source=override||sheet;
     const img=override?`<img class="single" src="${esc(source)}" alt="${['Seed','Bloom','Radiant'][i]}">`:`<img src="${esc(source)}" alt="${['Seed','Bloom','Radiant'][i]}">`;
     const busy=petLab.status==='busy'&&petLab.operation==='stage'&&petLab.stageBusyIndex===i;
-    const currentQuality=petLab.stageQualities[i]||(!petLab.sheetQuality||petLab.sheetQuality==='mixed'?null:petLab.sheetQuality);
+    const currentQuality=(state.stageQualities||[])[i]||(!state.sheetQuality||state.sheetQuality==='mixed'?null:state.sheetQuality);
     return `<div class="sheet-stage ${busy?'stage-busy':''}"><div class="sheet-frame s${i}">${img}</div><span>${[tx('初生','Seed'),tx('绽放','Bloom'),tx('发光','Radiant')][i]}</span>${currentQuality?`<span class="form-quality">${esc(currentQuality.toUpperCase())}</span>`:''}${allowRedo?`<div class="stage-tools"><button type="button" class="stage-redo" ${studioBusy()?'disabled':''} onclick="regenerateStage(${i})" aria-label="${esc(tx(`用 ${quality.name} 只重画${['初生','绽放','发光'][i]}`,`Redraw ${['Seed','Bloom','Radiant'][i]} only at ${quality.name}`))}">${tx(`只重画 · ${quality.name}`,`redraw · ${quality.name}`)}</button><span class="stage-cost">${quality.stageCost}+</span></div>`:''}</div>`;
   }).join('')}</div>`;
 }
@@ -878,7 +889,24 @@ function referenceReviewHTML(){
   return `<div class="reference-review"><img class="reference-review-preview" src="${esc(petLab.referencePreview||'')}" alt="${tx('米墨准备发送给 OpenAI 的身份板','Identity board Mimo is prepared to send to OpenAI')}"><div class="reference-review-copy"><strong>${tx('这就是将要发送的身份板','This is the identity board that will be sent')}</strong>${esc(message||tx('确认主角正确后，米墨才会调用 OpenAI。','Mimo calls OpenAI only after you confirm the subject.'))}</div>${tuningHTML}<div class="reference-review-meta"><span class="diag good">${esc(mode)}</span><span class="diag">${tx(`采用 ${petLab.referenceUsedCount} 张原图`,`${petLab.referenceUsedCount} source images used`)}</span><span class="diag">${tx(`${petLab.referenceEvidenceCount} 个证据角度`,`${petLab.referenceEvidenceCount} evidence views`)}</span>${petLab.referenceAmbiguous?`<span class="diag warn">${tx('需要仔细确认主角','check subject carefully')}</span>`:''}</div><div class="reference-review-actions"><button type="button" class="reference-confirm" onclick="confirmPetReferences()">${tx('确认主角 · 开始 Low 生成','Confirm subject · start Low generation')}</button><button type="button" onclick="cancelStudioOperation()">${tx('返回调整参考图','Back to references')}</button></div></div>`;
 }
 function candidateGridHTML(){
-  return `<div class="candidate-grid" role="radiogroup" aria-label="${tx('选择一个主角','Choose one master character')}">${petLab.candidates.map((candidate,i)=>`<button type="button" role="radio" aria-checked="${petLab.candidateIndex===i}" class="candidate ${petLab.candidateIndex===i?'sel':''}" onclick="selectCandidate(${i})"><img src="${esc(candidateImage(candidate))}" alt="${esc(tx(`草稿 ${i+1}`,`Draft ${i+1}`))}"><span>${petLab.candidateIndex===i?tx('选定的主角','selected master'):tx(`草稿 ${i+1}`,`draft ${i+1}`)}</span></button>`).join('')}</div>`;
+  const selected=new Set(petLab.candidateIndices);
+  return `<div class="candidate-grid" role="group" aria-label="${tx('可多选主角方案','Choose one or more character options')}">${petLab.candidates.map((candidate,i)=>`<button type="button" role="checkbox" aria-checked="${selected.has(i)}" class="candidate ${selected.has(i)?'sel':''}" onclick="selectCandidate(${i})"><img src="${esc(candidateImage(candidate))}" alt="${esc(tx(`草稿 ${i+1}`,`Draft ${i+1}`))}"><span>${selected.has(i)?tx(`已选 · 方案 ${i+1}`,`selected · option ${i+1}`):tx(`草稿 ${i+1}`,`draft ${i+1}`)}</span></button>`).join('')}</div>${candidateConfirmationHTML()}`;
+}
+function selectedEvolutionCost(){
+  const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
+  return `$${(petLab.candidateIndices.length*Number(quality.cost.replace('$',''))).toFixed(3)}`;
+}
+function candidateCountdownSeconds(){
+  return petLab.candidateAutoStartAt?Math.max(0,Math.ceil((petLab.candidateAutoStartAt-Date.now())/1000)):null;
+}
+function candidateConfirmationHTML(){
+  const count=petLab.candidateIndices.length;if(!count)return '';
+  const seconds=candidateCountdownSeconds(),auto=seconds!==null?tx(`${seconds}s 后自动开始`,`auto-start in ${seconds}s`):tx('已暂停自动开始','auto-start paused');
+  return `<div class="candidate-confirm"><span><b>${tx(`已选 ${count} 个`,`${count} selected`)}</b> · ${auto} · ~${selectedEvolutionCost()}</span><button type="button" onclick="cancelCandidateAutoStart()">${tx('暂停','pause')}</button></div>`;
+}
+function batchResultsHTML(){
+  if(!petLab.batchResults.length)return '';
+  return `<div class="batch-results">${petLab.batchResults.map((item,i)=>`<section class="batch-result"><div class="batch-result-head"><b>${tx(`方案 ${item.candidateIndex+1}`,`Option ${item.candidateIndex+1}`)}</b><span>${item.adopted?tx('已住进桌面 ✓','on desktop ✓'):`${String(item.quality||petLab.quality).toUpperCase()} · ~${IMAGE_QUALITIES.find(q=>q.id===item.quality)?.cost||''}`}</span></div>${sheetStages(item.sheet,false,item)}<div class="sheet-actions"><button class="sheet-adopt" type="button" ${item.adopted||studioBusy()?'disabled':''} onclick="installBatchResult(${i})">${item.adopted?tx('已安装','Installed'):tx('让这个住进桌面 ✦','Bring this one home ✦')}</button></div></section>`).join('')}</div>`;
 }
 function errorHTML(){
   const local=petLab.errorKind==='local',setup=petLab.errorKind==='setup',installFailure=petLab.operation==='install'&&petLab.errorCode==='install_failed';
@@ -919,11 +947,17 @@ function renderPetLab(){
   const likeness=document.getElementById('petLikeness');if(likeness)likeness.disabled=busy||importing;
   const petName=document.getElementById('petName');if(petName)petName.disabled=busy||importing;
   if(generate){generate.disabled=busy||importing;generate.textContent=importing?tx(`正在导入 ${petLab.importing} 张…`,`Importing ${petLab.importing}…`):petLab.status==='busy'&&petLab.operation==='candidates'?tx('正在检查主角…','Checking subject…'):petLab.candidates.length?tx('重画 3 个草稿 · ~$0.010','New 3 drafts · ~$0.010'):tx('画 3 个 Low 草稿 · ~$0.010','Make 3 Low drafts · ~$0.010')}
-  const finalControls=document.getElementById('finalControls');if(finalControls)finalControls.classList.toggle('show',petLab.candidateIndex!==null&&petLab.status!=='adopted');
+  const finalControls=document.getElementById('finalControls');if(finalControls)finalControls.classList.toggle('show',petLab.candidateIndices.length>0&&petLab.status!=='adopted');
   const quality=IMAGE_QUALITIES.find(q=>q.id===petLab.quality)||IMAGE_QUALITIES[0];
   const sheetQuality=IMAGE_QUALITIES.find(q=>q.id===petLab.sheetQuality)||quality;
   const sheetQualityLabel=petLab.sheetQuality==='mixed'?'MIXED':sheetQuality.name.toUpperCase();
-  if(evolve){evolve.disabled=busy||petLab.candidateIndex===null;evolve.textContent=petLab.status==='busy'&&petLab.operation==='evolution'?tx(`正在做 ${quality.name} 成长图…`,`Creating ${quality.name} evolution…`):tx(`生成 ${quality.name} 成长图 · ~${quality.cost}`,`Create ${quality.name} evolution · ~${quality.cost}`)}
+  if(evolve){
+    const count=petLab.candidateIndices.length,seconds=candidateCountdownSeconds();
+    evolve.disabled=busy||count===0;
+    evolve.textContent=petLab.status==='busy'&&petLab.operation==='evolution'
+      ?tx(`正在做方案 ${Math.min(petLab.batchCompleted+1,petLab.batchTotal||1)} / ${petLab.batchTotal||1}…`,`Creating option ${Math.min(petLab.batchCompleted+1,petLab.batchTotal||1)} / ${petLab.batchTotal||1}…`)
+      :tx(`确认 ${count} 个主角${seconds!==null?` · ${seconds}s`:''} · ~${selectedEvolutionCost()}`,`Confirm ${count}${seconds!==null?` · ${seconds}s`:''} · ~${selectedEvolutionCost()}`);
+  }
   const result=document.getElementById('petSheetResult'),state=document.getElementById('petLabState');if(!result||!state)return;
   result.setAttribute('aria-busy',petLab.status==='busy'?'true':'false');
   if(petLab.status==='review'){
@@ -931,11 +965,14 @@ function renderPetLab(){
   }else if(petLab.status==='busy'&&petLab.operation==='stage'&&petLab.sheet){
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('只重画这一段','Redrawing one form')}</b><span class="sheet-meta" id="sheetElapsed" aria-hidden="true">${durationText(elapsedSeconds())||'0.0s'}</span></div>${sheetStages(petLab.sheet,true)}${progressHTML()}`;
   }else if(petLab.status==='busy'){
-    const title=petLab.localRetry?tx('本机重新处理 · 不会调用 OpenAI','Local retry · no OpenAI call'):petLab.operation==='candidates'?tx('Step 1 · 画 3 个 Low 草稿','Step 1 · Make 3 Low drafts'):tx('Step 3 · 生成三段成长','Step 3 · Create 3-form evolution');
+    const batchSuffix=petLab.operation==='evolution'&&petLab.batchTotal>1?tx(` · ${Math.min(petLab.batchCompleted+1,petLab.batchTotal)}/${petLab.batchTotal}`,` · ${Math.min(petLab.batchCompleted+1,petLab.batchTotal)}/${petLab.batchTotal}`):'';
+    const title=petLab.localRetry?tx('本机重新处理 · 不会调用 OpenAI','Local retry · no OpenAI call'):petLab.operation==='candidates'?tx('Step 1 · 画 3 个 Low 草稿','Step 1 · Make 3 Low drafts'):`${tx('Step 3 · 生成三段成长','Step 3 · Create 3-form evolution')}${batchSuffix}`;
     result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${petLab.operation==='candidates'?'LOW':quality.name.toUpperCase()}</span></div>${progressHTML()}`;
   }else if(petLab.status==='error'){
     const preserved=petLab.sheet?`${sheetStages(petLab.sheet,!petLab.preservedResult)}<div style="height:8px"></div>`:petLab.candidates.length?`${candidateGridHTML()}<div style="height:8px"></div>`:'';
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('这一步没有完成','This step did not finish')}</b><span class="sheet-meta err">${petLab.errorKind==='local'?'LOCAL':petLab.errorKind==='setup'?'SETUP':'OPENAI'} · ${tx('失败','FAILED')}</span></div>${preserved}${errorHTML()}`;
+  }else if(petLab.batchResults.length){
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('已生成的主角方案','Generated character options')}</b><span class="sheet-meta">${petLab.batchResults.length} / ${petLab.batchTotal||petLab.batchResults.length}</span></div>${batchResultsHTML()}`;
   }else if(petLab.status==='adopted'&&petLab.sheet){
     result.innerHTML=`<div class="sheet-result-head"><b>${esc(tx(`${petLab.adoptedName} 已住进桌面`,`${petLab.adoptedName} is home`))}</b><span class="sheet-meta">ADOPTED · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,false)}${diagnosticsHTML()}`;
   }else if(petLab.candidates.length&&petLab.preservedResult&&petLab.sheet){
@@ -945,7 +982,7 @@ function renderPetLab(){
     const title=petLab.preservedResult?tx('上一套成长图 · 新设置尚未生成','Previous evolution · new settings not generated'):tx('同一个主角 · 三段成长','One master · three forms');
     result.innerHTML=`<div class="sheet-result-head"><b>${title}</b><span class="sheet-meta">${sheetQualityLabel} · ~${sheetQuality.cost}</span></div>${sheetStages(petLab.sheet,!petLab.preservedResult)}${diagnosticsHTML()}<div class="sheet-actions"><button class="sheet-adopt" type="button" onclick="installCharacterSheet()">${tx('让它住进桌面 ✦','Bring it home ✦')}</button>${redo}</div>`;
   }else if(petLab.candidates.length){
-    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 选一个最像它的主角','Step 2 · Pick the master that feels right')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}`;
+    result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 2 · 可以多选','Step 2 · Choose one or more')}</b><span class="sheet-meta">LOW · 3 DRAFTS</span></div>${candidateGridHTML()}${diagnosticsHTML()}`;
   }else{
     result.innerHTML=`<div class="sheet-result-head"><b>${tx('Step 1 · 先找出它是谁','Step 1 · Find who it is')}</b><span class="sheet-meta">LOW · ~$0.010</span></div><div class="sheet-empty">${tx('先画 3 个草稿，再决定要不要生成成长图。','Make 3 drafts first, then decide whether to create the evolution.')}</div>`;
   }
@@ -957,15 +994,18 @@ function renderPetLab(){
   else if(petLab.status==='error')state.innerHTML=`<span class="dot"></span>${petLab.errorCode==='install_failed'?tx('角色完整 · 只需重试本机保存','Character intact · retry local save only'):petLab.errorKind==='local'?tx('OpenAI 已完成 · 本机处理未通过','OpenAI finished · local processing failed'):petLab.errorKind==='setup'?tx('尚未发送请求','No request sent'):tx('OpenAI 请求未完成','OpenAI request did not finish')}`;
   else if(petLab.preservedResult)state.innerHTML=`<span class="dot"></span>${tx('上一套结果仍可安装；新设置要从 Low 草稿开始','Previous result remains installable; new settings start with Low drafts')}`;
   else if(petLab.sheet)state.innerHTML=`<span class="dot"></span>${tx('三段形态已对齐 · 每一段都可以单独重画','Three forms aligned · each one can be redrawn separately')}`;
-  else if(petLab.candidateIndex!==null)state.innerHTML=`<span class="dot"></span>${tx('主角已选定 · 现在选择最终精度','Master selected · choose final quality')}`;
-  else if(petLab.candidates.length)state.innerHTML=`<span class="dot"></span>${tx('3 个草稿已到 · 选一个作为同一角色的主形象','3 drafts arrived · choose one as the master identity')}`;
+  else if(petLab.candidateIndices.length)state.innerHTML=`<span class="dot"></span>${tx(`已选 ${petLab.candidateIndices.length} 个方案 · ${candidateCountdownSeconds()??'已暂停'}${candidateCountdownSeconds()!==null?'s 后自动开始':''}`,`${petLab.candidateIndices.length} selected · ${candidateCountdownSeconds()===null?'auto-start paused':`starts in ${candidateCountdownSeconds()}s`}`)}`;
+  else if(petLab.candidates.length)state.innerHTML=`<span class="dot"></span>${tx('3 个草稿已到 · 可以多选','3 drafts arrived · multiple selection is available')}`;
   else state.innerHTML=`<span class="dot"></span>${tx('参考图已就绪 · 第一步只生成 Low 草稿','Reference ready · step one only makes Low drafts')}`;
   syncVisibleDrafts();
 }
+let lastCandidateCountdown=null,candidateAutoTimer=null;
 setInterval(()=>{
+  const countdown=candidateCountdownSeconds();
+  if(countdown!==lastCandidateCountdown){lastCandidateCountdown=countdown;if(countdown!==null)renderPetLab()}
   if(petLab.status!=='busy'||!petLab.startedAt)return;const text=durationText(elapsedSeconds())||'0.0s';
   ['studioElapsed','sheetElapsed','stateElapsed'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=id==='studioElapsed'?`${text} · ${operationCost()} ${tx('输出估价','output est.')}`:text});
-},1000);
+},250);
 function savePetKeys(){send({type:'petSaveKeys',openAI:document.getElementById('openAIKey').value})}
 function clearPetKey(provider){send({type:'petClearKey',provider})}
 function petKeysSaved(state){
@@ -1039,14 +1079,39 @@ function generateCandidates(){
 }
 function selectCandidate(index){
   if(studioBusy()||index<0||index>=petLab.candidates.length)return;
-  if(index!==petLab.candidateIndex&&petLab.sheet)petLab.preservedResult=true;
-  petLab.candidateIndex=index;petLab.status='ready';petLab.error='';petLab.errorKind='';petLab.errorCode='';renderPetLab();
+  const selected=new Set(petLab.candidateIndices);
+  if(selected.has(index))selected.delete(index);else selected.add(index);
+  petLab.candidateIndices=[...selected].sort((a,b)=>a-b);petLab.candidateIndex=petLab.candidateIndices[0]??null;
+  if(petLab.sheet)petLab.preservedResult=true;
+  petLab.status='ready';petLab.error='';petLab.errorKind='';petLab.errorCode='';petLab.batchResults=[];
+  petLab.batchTotal=0;petLab.batchCompleted=0;petLab.evolutionQueue=[];petLab.activeCandidateIndex=null;
+  if(petLab.candidateIndices.length)armCandidateAutoStart();else{petLab.candidateAutoStartAt=null;renderPetLab()}
 }
-function generateEvolution(){
-  if(!canGenerate())return;if(!petLab.candidateDraftID||petLab.candidateIndex===null){setupStudioError(tx('先从三个草稿里选一个主角。','Choose a master from the three drafts first.'));return}
+function armCandidateAutoStart(){
+  if(!petLab.candidateIndices.length||studioBusy()){petLab.candidateAutoStartAt=null;renderPetLab();return}
+  if(candidateAutoTimer)clearTimeout(candidateAutoTimer);
+  const deadline=Date.now()+8000,token=newRequestID();petLab.candidateAutoStartAt=deadline;petLab.candidateAutoStartToken=token;
+  send({type:'petArmCandidateAutoStart',token,delaySeconds:8});
+  candidateAutoTimer=setTimeout(()=>petCandidateAutoStart({token}),8000);
+  renderPetLab();
+}
+function cancelCandidateAutoStart(){if(candidateAutoTimer)clearTimeout(candidateAutoTimer);candidateAutoTimer=null;petLab.candidateAutoStartAt=null;petLab.candidateAutoStartToken=null;renderPetLab()}
+function petCandidateAutoStart(event){
+  if(!event?.token||event.token!==petLab.candidateAutoStartToken||!petLab.candidateIndices.length||studioBusy())return;
+  if(candidateAutoTimer)clearTimeout(candidateAutoTimer);candidateAutoTimer=null;petLab.candidateAutoStartAt=null;petLab.candidateAutoStartToken=null;generateEvolution();
+}
+function startNextEvolution(){
+  if(studioBusy()||!petLab.evolutionQueue.length)return;
+  const index=petLab.evolutionQueue.shift();petLab.activeCandidateIndex=index;petLab.candidateIndex=index;
   const requestID=beginStudioOperation('evolution');
   send({type:'petGenerateEvolution',requestID,candidateDraftID:petLab.candidateDraftID,
-    candidateIndex:petLab.candidateIndex,quality:petLab.quality,styleTuningNote:styleTuningForBridge()});
+    candidateIndex:index,quality:petLab.quality,styleTuningNote:styleTuningForBridge()});
+}
+function generateEvolution(){
+  if(!canGenerate())return;const choices=petLab.candidateIndices.length?[...petLab.candidateIndices]:(petLab.candidateIndex!==null?[petLab.candidateIndex]:[]);
+  if(!petLab.candidateDraftID||!choices.length){setupStudioError(tx('先从三个草稿里至少选一个主角。','Choose at least one character from the three drafts.'));return}
+  if(candidateAutoTimer)clearTimeout(candidateAutoTimer);candidateAutoTimer=null;petLab.candidateAutoStartAt=null;petLab.candidateAutoStartToken=null;petLab.evolutionQueue=choices;petLab.batchTotal=petLab.evolutionQueue.length;
+  petLab.batchCompleted=0;petLab.batchResults=[];petLab.activeCandidateIndex=null;startNextEvolution();
 }
 function regenerateStage(stageIndex){
   if(!canGenerate())return;if(!petLab.draftID||!petLab.sheet||stageIndex<0||stageIndex>2)return;
@@ -1057,6 +1122,7 @@ function retryStudioOperation(){
   const operation=petLab.operation,stage=petLab.stageBusyIndex;
   petLab.status='ready';
   if(operation==='stage'&&stage!==null)return regenerateStage(stage);
+  if(operation==='evolution'&&petLab.batchTotal>1&&petLab.evolutionQueue.length){setTimeout(startNextEvolution,180);return}
   if(operation==='evolution')return generateEvolution();
   return generateCandidates();
 }
@@ -1074,7 +1140,8 @@ function cancelStudioOperation(){
   Object.assign(petLab,{requestID:null,status:nextStatus,phase:'',phaseMessage:'',partialImage:null,
     stageBusyIndex:null,localRetry:false,providerCompleted:false,rawPreview:null,recoveryDraftID:null,
     recoveryRequestID:null,recoveryUntil:null,canRetryLocally:false,resetTo:null,cancelArmedUntil:0,finishedElapsed:elapsedSeconds(),
-    referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,referenceAmbiguous:false});
+    referencePreview:null,referenceMode:null,referenceEvidenceCount:0,referenceUsedCount:0,referenceAmbiguous:false,
+    evolutionQueue:[],activeCandidateIndex:null,candidateAutoStartAt:null});
   renderPetLab();send({type:'petCancel',requestID:cancelledRequestID});
 }
 function petGenerationCancelled(event){
@@ -1083,7 +1150,7 @@ function petGenerationCancelled(event){
 }
 function petDraftExpired(event){
   if(event.kind==='candidate'&&event.draftID===petLab.candidateDraftID){
-    Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null});
+    Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,evolutionQueue:[]});
     if(!petLab.sheet)Object.assign(petLab,{status:'error',operation:'candidates',errorKind:'setup',errorCode:'candidate_expired',resetTo:'candidates',error:tx('这些 Low 草稿已经过期；不会自动产生新费用。','These Low drafts expired; no new cost was incurred automatically.')});
   }
   if(event.kind==='evolution'&&event.draftID===petLab.draftID){
@@ -1124,7 +1191,8 @@ function petCandidateResult(event){
   if(event.requestID!==petLab.requestID)return;const candidates=(event.candidates||event.images||[]).filter(candidate=>candidateImage(candidate));
   if(!candidates.length){petStudioError({...event,kind:'local',message:tx('OpenAI 返回了结果，但没有找到可展示的候选角色。','OpenAI returned a result, but no displayable character candidates were found.')});return}
   const keepPrevious=!!petLab.sheet&&!!petLab.draftID;finishStudioOperation(event);Object.assign(petLab,{requestID:null,status:'ready',operation:'candidates',candidates,
-    candidateDraftID:event.candidateDraftID||event.draftID||event.requestID,candidateIndex:null,preservedResult:keepPrevious,
+    candidateDraftID:event.candidateDraftID||event.draftID||event.requestID,candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,preservedResult:keepPrevious,
+    evolutionQueue:[],activeCandidateIndex:null,batchTotal:0,batchCompleted:0,batchResults:[],installingBatchIndex:null,
     stageBusyIndex:null,error:'',errorKind:'',errorCode:''});
   if(!keepPrevious)Object.assign(petLab,{draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null]});renderPetLab();
 }
@@ -1133,9 +1201,17 @@ function petEvolutionResult(event){
   if(!event.sheet){petStudioError({...event,kind:'local',message:tx('成长图已返回，但本机没有得到可安装的透明三段图。','The evolution returned, but local processing did not produce an installable transparent sheet.')});return}
   finishStudioOperation(event);if(IMAGE_QUALITIES.some(q=>q.id===event.quality))petLab.quality=event.quality;
   const finalQuality=IMAGE_QUALITIES.some(q=>q.id===event.quality)?event.quality:petLab.quality;
+  const completedCandidate=petLab.activeCandidateIndex;
   Object.assign(petLab,{requestID:null,status:'ready',operation:'evolution',sheet:event.sheet,draftID:event.draftID||event.requestID,
     sheetQuality:finalQuality,stageQualities:[finalQuality,finalQuality,finalQuality],preservedResult:false,
-    stageImages:[null,null,null],stageBusyIndex:null,error:'',errorKind:'',errorCode:''});renderPetLab();
+    stageImages:[null,null,null],stageBusyIndex:null,error:'',errorKind:'',errorCode:''});
+  if(petLab.batchTotal>1){
+    petLab.batchResults.push({candidateIndex:completedCandidate,sheet:event.sheet,draftID:event.draftID||event.requestID,
+      quality:finalQuality,sheetQuality:finalQuality,stageImages:[null,null,null],stageQualities:[finalQuality,finalQuality,finalQuality],adopted:false});
+    petLab.batchCompleted=petLab.batchResults.length;petLab.activeCandidateIndex=null;
+    if(petLab.evolutionQueue.length){renderPetLab();setTimeout(startNextEvolution,180);return}
+  }
+  renderPetLab();
 }
 function petStageResult(event){
   if(event.requestID!==petLab.requestID)return;const stageIndex=Number.isInteger(event.stageIndex)?event.stageIndex:petLab.stageBusyIndex;
@@ -1158,23 +1234,38 @@ function petStudioError(event){
   if(local&&event.providerCompleted&&event.canRetryLocally){
     petLab.recoveryRequestID=event.requestID||petLab.requestID;
   }else petLab.recoveryRequestID=null;
-  if(event.resetTo==='candidates'&&event.code==='candidate_expired')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,preservedResult:!!petLab.sheet});
-  else if(event.resetTo==='candidates')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
-  if(event.resetTo==='upload')Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  if(petLab.batchTotal>1&&petLab.operation==='evolution'&&petLab.activeCandidateIndex!==null&&!petLab.evolutionQueue.includes(petLab.activeCandidateIndex))petLab.evolutionQueue.unshift(petLab.activeCandidateIndex);
+  petLab.activeCandidateIndex=null;
+  if(event.resetTo==='candidates'&&event.code==='candidate_expired')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,preservedResult:!!petLab.sheet,evolutionQueue:[]});
+  else if(event.resetTo==='candidates')Object.assign(petLab,{candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,draftID:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false,evolutionQueue:[],batchResults:[],batchTotal:0,batchCompleted:0});
+  if(event.resetTo==='upload')Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false,evolutionQueue:[],batchResults:[],batchTotal:0,batchCompleted:0});
   if(event.draftID&&!petLab.draftID)petLab.draftID=event.draftID;renderPetLab();
 }
 function installCharacterSheet(){
+  if(petLab.installingBatchIndex!==null)return installBatchResult(petLab.installingBatchIndex);
   if(!petLab.draftID||!petLab.sheet||studioBusy())return;petLab.status='installing';renderPetLab();
   send({type:'petInstallRaster',draftID:petLab.draftID,name:petLab.name,temperamentID:petLab.temperamentID});
+}
+function installBatchResult(index){
+  const item=petLab.batchResults[index];if(!item||item.adopted||studioBusy())return;
+  petLab.installingBatchIndex=index;petLab.status='installing';renderPetLab();
+  const suffix=petLab.batchResults.length>1?` ${item.candidateIndex+1}`:'';
+  send({type:'petInstallRaster',draftID:item.draftID,name:`${petLab.name}${suffix}`,temperamentID:petLab.temperamentID});
 }
 function petInstallError(event){
   const expired=event.code==='preview_expired';Object.assign(petLab,{status:'error',operation:'install',errorKind:expired?'setup':'local',errorCode:event.code||'install_failed',resetTo:expired?'candidates':null,
     error:(LANG==='zh'?(event.messageZh||event.message):(event.messageEn||event.message))||tx('无法保存这套伴灵。','Could not save this familiar.')});
-  if(expired)Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
+  if(expired&&petLab.installingBatchIndex!==null){
+    petLab.batchResults.splice(petLab.installingBatchIndex,1);petLab.installingBatchIndex=null;petLab.status=petLab.batchResults.length?'ready':'error';
+  }else if(expired)Object.assign(petLab,{draftID:null,candidateDraftID:null,candidates:[],candidateIndex:null,candidateIndices:[],candidateAutoStartAt:null,sheet:null,sheetQuality:null,stageImages:[null,null,null],stageQualities:[null,null,null],preservedResult:false});
   renderPetLab();
 }
 function customPetAdopted(event){
   const spec=event.spec;if(!spec)return;S.customPets=(S.customPets||[]).filter(p=>p.characterID!==spec.characterID).concat([spec]);S.character=spec.characterID;
+  if(petLab.installingBatchIndex!==null&&petLab.batchResults[petLab.installingBatchIndex]){
+    petLab.batchResults[petLab.installingBatchIndex].adopted=true;petLab.batchResults[petLab.installingBatchIndex].spec=spec;
+    petLab.installingBatchIndex=null;petLab.status='ready';petLab.requestID=null;petLab.startedAt=null;renderCards();renderPetLab();return;
+  }
   petLab.status='adopted';petLab.requestID=null;petLab.draftID=null;petLab.preservedResult=false;petLab.adoptedName=spec.name||tx('新伴灵','New familiar');petLab.sheet=spec.assetURL||petLab.sheet;petLab.startedAt=null;renderCards();renderPetLab();
 }
 function removeCustomPet(characterID){send({type:'petDelete',characterID})}

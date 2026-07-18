@@ -471,6 +471,7 @@ extension AppDelegate {
             "imageQuality": PetFinalGenerationQuality.resolve(
                 d.string(forKey: "petImageQuality")).rawValue,
             "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),
+            "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
         ]
         if let customPet = storedCustomPetSpec() { state["customPet"] = customPet }
         state["customPets"] = (try? customPetStore.listRuntimeSpecs()) ?? []

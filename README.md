@@ -1,4 +1,4 @@
-# Focus Familiar — concept demo
+# Mimo 米墨 — concept demo
 
 A small creature that lives on top of your macOS screen. It is not just a pet:
 
@@ -49,10 +49,16 @@ mischievous, never corporate.
 The real thing — a creature that floats above your actual desktop:
 
 ```bash
-mac/build.sh                      # builds mac/build/FocusFamiliar.app with swiftc
-cp -R mac/build/FocusFamiliar.app "/Applications/Focus Familiar.app"
-open "/Applications/Focus Familiar.app"
+mac/build.sh                      # builds mac/build/Mimo.app with swiftc
+mac/test.sh                       # compiles and runs the unit tests
+cp -R mac/build/Mimo.app /Applications/Mimo.app
+open /Applications/Mimo.app
 ```
+
+`build.sh` ad-hoc signs by default, which mints a new identity every build —
+macOS then re-prompts for browser Automation and invalidates the Keychain ACL
+on the stored API key. Set `MIMO_SIGN_IDENTITY` to a stable self-signed
+certificate in your login keychain to keep both across rebuilds.
 
 - Transparent, always-on-top, click-through panel (bottom-right, all Spaces);
   never steals focus.
@@ -71,7 +77,7 @@ open "/Applications/Focus Familiar.app"
 ### Exports
 
 - `◐ → Export today's journal` — markdown to
-  `~/Library/Application Support/FocusFamiliar/exports/journal-YYYY-MM-DD.md`
+  `~/Library/Application Support/Mimo/exports/journal-YYYY-MM-DD.md`
   (+ clipboard). `◐ → Open journal as page ↗` renders the full journal
   (strip, quest log, complete lists, week heatmap) as a standalone HTML page
   in the browser.

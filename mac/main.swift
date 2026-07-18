@@ -172,8 +172,16 @@ func shortName(_ n: String) -> String { shortNames[n] ?? n }
 // working memory (JS, in-RAM) → episodic log (disk) → replayed on launch ──
 
 let logDir: URL = {
-    let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("FocusFamiliar")
+    let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+    let d = support.appendingPathComponent("Mimo")
+    // One-time move of pre-rename data. Only when the new home does not exist
+    // yet, so this can never clobber a live Mimo directory.
+    let legacy = support.appendingPathComponent("FocusFamiliar")
+    if !FileManager.default.fileExists(atPath: d.path),
+       FileManager.default.fileExists(atPath: legacy.path) {
+        try? FileManager.default.moveItem(at: legacy, to: d)
+    }
     try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
     return d
 }()

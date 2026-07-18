@@ -169,12 +169,25 @@ func automationStatus(_ bundleId: String) -> OSStatus {
     return AEDeterminePermissionToAutomateTarget(aeDesc, typeWildCard, typeWildCard, false)
 }
 
+/// Bounded: this is keyed by bundle id and holds a base64 PNG each, so an
+/// unbounded dictionary grew monotonically with every app the user ever
+/// focused, for the life of the process.
+private let appIconCacheLimit = 256
 var appIconCache: [String: String] = [:]
+private var appIconCacheOrder: [String] = []
+
+private func rememberAppIcon(_ bundleId: String, _ uri: String) {
+    if appIconCache[bundleId] == nil { appIconCacheOrder.append(bundleId) }
+    appIconCache[bundleId] = uri
+    while appIconCacheOrder.count > appIconCacheLimit {
+        appIconCache.removeValue(forKey: appIconCacheOrder.removeFirst())
+    }
+}
 
 func appIconDataURI(_ bundleId: String) -> String? {
     if let hit = appIconCache[bundleId] { return hit.isEmpty ? nil : hit }
     guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-        appIconCache[bundleId] = ""
+        rememberAppIcon(bundleId, "")
         return nil
     }
     let icon = NSWorkspace.shared.icon(forFile: url.path)
@@ -185,7 +198,7 @@ func appIconDataURI(_ bundleId: String) -> String? {
     guard let tiff = small.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
           let png = rep.representation(using: .png, properties: [:]) else { return nil }
     let uri = "data:image/png;base64," + png.base64EncodedString()
-    appIconCache[bundleId] = uri
+    rememberAppIcon(bundleId, uri)
     return uri
 }
 
@@ -357,6 +370,11 @@ extension AppDelegate {
     }
 
     func restoreCustomPetIfNeeded() {
+        // Repair legacy sheets once, off the main thread, instead of letting
+        // every image load rewrite them from inside the store lock.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.customPetStore.repairStoredSheets()
+        }
         if let spec = storedCustomPetSpec(),
            let data = try? JSONSerialization.data(withJSONObject: spec),
            let json = String(data: data, encoding: .utf8) {
@@ -597,7 +615,7 @@ extension AppDelegate {
         for requestID in expiredPreflights {
             pendingReferencePreflights.removeValue(forKey: requestID)
             if studioGenerationLedger.activeRequestID == requestID {
-                studioGenerationLedger.finish(requestID: requestID)
+                releaseStudioGeneration(requestID)
                 backgroundStudioRequests.remove(requestID)
             }
         }
@@ -779,6 +797,17 @@ extension AppDelegate {
         return false
     }
 
+    /// Releases a studio reservation and stops any background preprocessing
+    /// still polling for it. Both have to happen together, or a cancelled run
+    /// keeps burning Vision passes on work nobody will read.
+    private func releaseStudioGeneration(_ requestID: String) {
+        studioGenerationLedger.finish(requestID: requestID)
+        if activeStudioCancellationToken?.requestID == requestID {
+            activeStudioCancellationToken?.cancel()
+            activeStudioCancellationToken = nil
+        }
+    }
+
     private func retainedDraftExists(_ requestID: String) -> Bool {
         (try? generationDraftStore.manifest(requestID: requestID)) != nil
     }
@@ -805,7 +834,7 @@ extension AppDelegate {
         // draft bookkeeping always unwind. The user asked for it — release
         // everything, say nothing.
         if let generationError = error as? PetGenerationError, generationError.isCancellation {
-            studioGenerationLedger.finish(requestID: requestID)
+            releaseStudioGeneration(requestID)
             pendingReferencePreflights.removeValue(forKey: requestID)
             settingsCall("petStudioCancelled", ["requestID": requestID])
             return
@@ -819,7 +848,7 @@ extension AppDelegate {
                 "messageEn": "Connect OpenAI first; no image was sent and no cost was incurred.",
                 "outputRetained": false, "requestNotStarted": true,
             ])
-            studioGenerationLedger.finish(requestID: requestID)
+            releaseStudioGeneration(requestID)
             announceStudioBackground(requestID, kind: "warning", "生成前还需要检查 API 连接。", "Generation needs the API connection checked.")
             return
         }
@@ -836,7 +865,7 @@ extension AppDelegate {
             "providerSeconds": Date().timeIntervalSince(startedAt),
             "outputRetained": false,
         ])
-        studioGenerationLedger.finish(requestID: requestID)
+        releaseStudioGeneration(requestID)
         announceStudioBackground(requestID, kind: "error", "这次生成没有完成；打开设置可以查看原因。", "Generation did not finish; open Settings for details.")
     }
 
@@ -875,7 +904,7 @@ extension AppDelegate {
         payload["generationRecoveryCount"] = generationDraftStore.recoverableDraftCount()
         settingsCall("petStudioError", payload)
         activeStageParents.removeValue(forKey: requestID)
-        studioGenerationLedger.finish(requestID: requestID)
+        releaseStudioGeneration(requestID)
         announceStudioBackground(requestID, kind: "warning", "图片已回来，但本机检查没有通过；原图仍可查看。", "The image arrived, but local checks failed; the raw output is still available.")
     }
 
@@ -888,13 +917,17 @@ extension AppDelegate {
         guard reserveProviderGeneration(requestID) else { return }
         let startedAt = Date()
         studioProgress(requestID: requestID, phase: "analyzing", startedAt: startedAt)
+        // The preprocessor polls isCancelled at least 2N+3 times per run. That
+        // used to be a DispatchQueue.main.sync each time: a synchronous hop
+        // that stalls the Vision pipeline on main-runloop latency, and
+        // deadlocks outright if the main thread ever waits on this work. The
+        // token is mirrored into a lock-protected box instead, which is what
+        // process(_:isCancelled:) documents it wants.
+        let cancellationToken = StudioCancellationToken(requestID: requestID)
+        activeStudioCancellationToken = cancellationToken
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = MimoReferencePreprocessor().process(inputs, isCancelled: {
-                var cancelled = true
-                DispatchQueue.main.sync { [weak self] in
-                    cancelled = self?.studioGenerationLedger.activeRequestID != requestID
-                }
-                return cancelled
+                cancellationToken.isCancelled
             })
             let localSeconds = Date().timeIntervalSince(startedAt)
             DispatchQueue.main.async {
@@ -911,7 +944,7 @@ extension AppDelegate {
                         "localSeconds": localSeconds,
                         "outputRetained": false, "requestNotStarted": true,
                     ])
-                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.releaseStudioGeneration(requestID)
                     self.announceStudioBackground(requestID, kind: "warning",
                                                   "参考图需要更清楚的主角。",
                                                   "The references need a clearer primary subject.")
@@ -1063,7 +1096,7 @@ extension AppDelegate {
                         "referenceCount": recovery.styleBoardUsed ? 2 : 1,
                         "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
                     ])
-                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.releaseStudioGeneration(requestID)
                     self.announceStudioBackground(requestID, kind: "success", "3 个 Low 草稿已经画好，打开设置来选主角。", "Three Low drafts are ready; open Settings to pick the master.")
                 case .failure(let error):
                     let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
@@ -1391,7 +1424,7 @@ extension AppDelegate {
                         "referenceCount": recovery.styleBoardUsed ? 3 : 2,
                         "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
                     ])
-                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.releaseStudioGeneration(requestID)
                     self.announceStudioBackground(requestID, kind: "success", "三段成长图已经做好，打开设置可以预览或带回桌面。", "The three-form evolution is ready; open Settings to preview or install it.")
                 case .failure(let error):
                     let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
@@ -1558,7 +1591,7 @@ extension AppDelegate {
                         "referenceCount": recovery.styleBoardUsed ? 4 : 3,
                         "generationRecoveryCount": self.generationDraftStore.recoverableDraftCount(),
                     ])
-                    self.studioGenerationLedger.finish(requestID: requestID)
+                    self.releaseStudioGeneration(requestID)
                     self.announceStudioBackground(requestID, kind: "success", "这一段已经重画完成，另外两段保持不变。", "That form is redrawn; the other two are unchanged.")
                 case .failure(let error):
                     let canRetry = !salvageNearEdge && self.canSalvageNearEdge(error)
@@ -1635,19 +1668,30 @@ extension AppDelegate {
             panel.allowedContentTypes = [.image]
             panel.message = voice("最多选择 8 张同一主角的多角度参考", "Choose up to 8 views of the same subject")
             if panel.runModal() == .OK {
-                for url in panel.urls.prefix(8) {
-                    if let uri = petReferenceDataURI(url) {
-                    let name = url.deletingPathExtension().lastPathComponent
-                    settingsWeb?.evaluateJavaScript(
-                            "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)), {append:true})",
-                        completionHandler: nil)
-                    } else {
-                        settingsCall("petStudioError", [
-                            "kind": "setup", "phase": "input", "code": "invalid_reference",
-                            "messageZh": "有一张图片太大、尺寸异常或无法读取；已跳过它。请选择 20 MB 以内的 PNG、JPEG 或 WebP。",
-                            "messageEn": "One image was too large, had unsafe dimensions, or could not be read, so it was skipped. Choose PNG, JPEG, or WebP under 20 MB.",
-                            "requestNotStarted": true, "outputRetained": false,
-                        ])
+                // Each image is decoded, downsampled to 2048px, re-encoded as
+                // JPEG, and base64'd. Eight large screenshots is seconds of
+                // work and eight ~28MB strings live at once — it beachballed
+                // when it ran inline on the main thread.
+                let urls = Array(panel.urls.prefix(8))
+                for url in urls {
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        let uri = petReferenceDataURI(url)
+                        let name = url.deletingPathExtension().lastPathComponent
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            guard let uri else {
+                                self.settingsCall("petStudioError", [
+                                    "kind": "setup", "phase": "input", "code": "invalid_reference",
+                                    "messageZh": "有一张图片太大、尺寸异常或无法读取；已跳过它。请选择 20 MB 以内的 PNG、JPEG 或 WebP。",
+                                    "messageEn": "One image was too large, had unsafe dimensions, or could not be read, so it was skipped. Choose PNG, JPEG, or WebP under 20 MB.",
+                                    "requestNotStarted": true, "outputRetained": false,
+                                ])
+                                return
+                            }
+                            self.settingsWeb?.evaluateJavaScript(
+                                "loadPetImageData(\(jsonStr(uri)), \(jsonStr(name)), {append:true})",
+                                completionHandler: nil)
+                        }
                     }
                 }
             }
@@ -1722,7 +1766,7 @@ extension AppDelegate {
                 _ = try? generationDraftStore.delete(requestID: id)
                 // An expression run is now a plain UUID too, so cancel reaches it.
                 if expressionRunRequestID == id { endExpressionRun() }
-                studioGenerationLedger.finish(requestID: id)
+                releaseStudioGeneration(id)
                 settingsCall("petGenerationCancelled", [
                     "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),
                 ])

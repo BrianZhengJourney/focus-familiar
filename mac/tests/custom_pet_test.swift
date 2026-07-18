@@ -250,7 +250,15 @@ struct CustomPetTests {
         expect(legacyListed.count == 1, "legacy v2 manifests must remain readable")
         expect((legacyListed[0]["expressionURLs"] as? [String: String])?.isEmpty == true,
                "legacy manifests advertise no expression sheets")
+        // The runtime spec used to hardcode the current version, so a v2 pet
+        // was advertised as v3 with empty expressionURLs — indistinguishable
+        // from a migrated v3 pet that simply has no expression sheets.
+        expect(legacyListed[0]["schemaVersion"] as? Int == 2,
+               "a v2 manifest must report v2, not be silently relabelled v3")
         try v3ManifestData.write(to: manifestURL, options: [.atomic])
+        let currentListed = try store.listRuntimeSpecs()
+        expect(currentListed[0]["schemaVersion"] as? Int == 3,
+               "a v3 manifest still reports v3")
 
         let handler = CustomPetAssetSchemeHandler(store: store)
         let goodTask = FakeSchemeTask(URLRequest(url: URL(string: assetURLString)!))

@@ -432,6 +432,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     /// a single dropped completion left the run "busy" for the process
     /// lifetime, and every later expression run was refused.
     var expressionRunWatchdog: DispatchWorkItem?
+    /// Lets background reference preprocessing notice cancellation without
+    /// hopping to the main thread on every poll.
+    var activeStudioCancellationToken: StudioCancellationToken?
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 

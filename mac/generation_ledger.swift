@@ -78,6 +78,30 @@ struct StudioGenerationLedger {
     }
 }
 
+/// A cancellation flag a background worker can read without hopping to main.
+///
+/// The reference preprocessor takes a synchronous `isCancelled` closure so
+/// callers can pass a token check "without introducing shared mutable state".
+/// Satisfying it with `DispatchQueue.main.sync` defeated that: every poll
+/// stalled the worker on main-runloop latency, and any path where the main
+/// thread waited on the work would deadlock.
+final class StudioCancellationToken: @unchecked Sendable {
+    let requestID: String
+    private let lock = NSLock()
+    private var cancelled = false
+
+    init(requestID: String) { self.requestID = requestID }
+
+    var isCancelled: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock(); cancelled = true; lock.unlock()
+    }
+}
+
 func retainingStudioDrafts<Value>(_ values: [String: Value],
                                   newerThan cutoff: Date,
                                   pinnedIDs: Set<String>,

@@ -652,6 +652,16 @@ extension AppDelegate {
             self.visibleCandidateDraftID = nil
             settingsCall("petDraftExpired", ["kind": "candidate", "draftID": visibleCandidateDraftID])
         }
+        // Drop bookkeeping for requests that are no longer live. These are only
+        // cleared inside completion handlers gated on the ledger's active ID,
+        // so a dropped callback used to leak an entry that pinned a
+        // multi-megabyte draft for the rest of the process.
+        let liveRequestIDs = Set(pendingReferencePreflights.keys)
+            .union(pendingLocalRecoveries.keys)
+            .union(studioGenerationLedger.activeRequestID.map { Set([$0]) } ?? [])
+        activeStageParents = activeStageParents.filter { liveRequestIDs.contains($0.key) }
+        backgroundStudioRequests = backgroundStudioRequests.intersection(
+            liveRequestIDs.union(pendingEvolutionSheets.keys).union(pendingCandidateBoards.keys))
         studioGenerationLedger.prune(before: ledgerCutoff)
         _ = try? generationDraftStore.purgeExpired(now: now)
     }
@@ -1064,12 +1074,11 @@ extension AppDelegate {
                             "en": "The bundled Mimo style board was unavailable; prompt-only styling was used.",
                         ])
                     }
-                    if outputRetained {
-                        _ = try? self.generationDraftStore.markProcessed(
-                            requestID: requestID, pngData: board.pngData,
-                            localSeconds: localSeconds,
-                            warnings: warnings.compactMap { $0["en"] })
-                    }
+                    // No markProcessed here: it validates and writes a
+                    // multi-megabyte processed.png plus a re-encoded manifest,
+                    // and the next line deleted the whole directory anyway. The
+                    // draft has served its purpose once local processing
+                    // succeeded.
                     _ = try? self.generationDraftStore.delete(requestID: requestID)
                     self.pendingCandidateBoards[requestID] = PendingCandidateBoardDraft(
                         pngData: board.pngData, candidatePNGs: board.candidatePNGs,
@@ -1389,12 +1398,8 @@ extension AppDelegate {
                             "en": "The bundled Mimo style board was unavailable; master and prompt styling were used.",
                         ])
                     }
-                    if outputRetained {
-                        _ = try? self.generationDraftStore.markProcessed(
-                            requestID: requestID, pngData: sheet.pngData,
-                            localSeconds: localSeconds,
-                            warnings: warnings.compactMap { $0["en"] })
-                    }
+                    // markProcessed wrote a multi-megabyte processed.png that
+                    // the very next line deleted along with the directory.
                     _ = try? self.generationDraftStore.delete(requestID: requestID)
                     self.pendingEvolutionSheets[requestID] = PendingEvolutionSheetDraft(
                         pngData: sheet.pngData, stagePNGs: sheet.stagePNGs,

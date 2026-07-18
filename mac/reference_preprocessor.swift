@@ -485,6 +485,9 @@ final class MimoReferencePreprocessor {
         // Exists only for the duration of this call. Neither feature prints nor
         // source photos enter the returned value or any persistence layer.
         var identityFeatures: [String: MimoReferenceIdentityFeature] = [:]
+        // Scratch, local to this call — same lifetime as identityFeatures, so
+        // no analysis outlives the request that produced it.
+        var analyzedFrames: [Int: AnalyzedFrame] = [:]
         var totalBytes = 0
 
         for (index, input) in inputs.enumerated() {
@@ -502,7 +505,8 @@ final class MimoReferencePreprocessor {
             } else {
                 totalBytes += input.data.count
                 evidence.append(processOne(input, index: index,
-                                           identityFeatures: &identityFeatures))
+                                           identityFeatures: &identityFeatures,
+                                           analyzedFrames: &analyzedFrames))
             }
             guard !isCancelled() else {
                 return cancelledResult(inputs: inputs, evidence: evidence)
@@ -529,6 +533,7 @@ final class MimoReferencePreprocessor {
         }
         let payload = selected.isEmpty
             ? makeFallbackProviderPayload(inputs: inputs, evidence: evidence,
+                                          analyzedFrames: analyzedFrames,
                                           isCancelled: isCancelled)
             : makeProviderPayload(from: selected, isCancelled: isCancelled)
         guard !isCancelled() else {
@@ -553,8 +558,18 @@ final class MimoReferencePreprocessor {
                                                 providerPayload: nil)
     }
 
+    /// Everything the fallback board needs that `processOne` already computed.
+    /// Recomputing it means a second full Vision pass — two person requests, a
+    /// face request, and accurate bilingual OCR, across the full frame and four
+    /// collage tiles — for images that were just analyzed.
+    struct AnalyzedFrame {
+        let image: CGImage
+        let textRegions: [CGRect]
+    }
+
     private func processOne(_ input: MimoReferenceInput, index: Int,
-                            identityFeatures: inout [String: MimoReferenceIdentityFeature])
+                            identityFeatures: inout [String: MimoReferenceIdentityFeature],
+                            analyzedFrames: inout [Int: AnalyzedFrame])
         -> MimoReferenceImageEvidence {
         let decoded: DecodedReferenceImage
         do {
@@ -576,6 +591,9 @@ final class MimoReferencePreprocessor {
                 textRegionCount: 0, detectedPersonCount: 0, usablePeople: [],
                 rejectionReason: .analysisFailed, warnings: [])
         }
+
+        analyzedFrames[index] = AnalyzedFrame(image: decoded.image,
+                                              textRegions: analysis.textRegions)
 
         let candidates = buildCandidates(analysis)
         let areaQualified = candidates.filter {
@@ -1089,6 +1107,7 @@ final class MimoReferencePreprocessor {
 
     private func makeFallbackProviderPayload(
         inputs: [MimoReferenceInput], evidence: [MimoReferenceImageEvidence],
+        analyzedFrames: [Int: AnalyzedFrame],
         isCancelled: () -> Bool
     ) -> MimoReferenceProviderPayload? {
         let fallbackReasons: Set<MimoReferenceRejectionReason> = [
@@ -1103,11 +1122,23 @@ final class MimoReferencePreprocessor {
                   fallbackReasons.contains(reason),
                   inputs.indices.contains(imageEvidence.sourceIndex) else { continue }
             let input = inputs[imageEvidence.sourceIndex]
-            guard let decoded = try? decode(input.data),
-                  let fallbackAnalysis = try? analyzer.analyze(decoded.image) else { return nil }
+            // Reuse the analysis processOne already ran for this image. Falling
+            // back to a fresh decode+analyze is correct but expensive, so it is
+            // only the path when the scratch entry is missing.
+            let frame: AnalyzedFrame
+            if let cached = analyzedFrames[imageEvidence.sourceIndex] {
+                frame = cached
+            } else if let decoded = try? decode(input.data),
+                      let fresh = try? analyzer.analyze(decoded.image) {
+                frame = AnalyzedFrame(image: decoded.image, textRegions: fresh.textRegions)
+            } else {
+                // One unreadable image must not discard slots already built:
+                // this is a best-effort "up to 3 slots" gather.
+                continue
+            }
             guard !isCancelled() else { return nil }
             guard let cleaned = renderSanitizedFullFrame(
-                decoded.image, textRegions: fallbackAnalysis.textRegions) else { return nil }
+                frame.image, textRegions: frame.textRegions) else { continue }
             let id = "\(input.id):fallback"
             slots.append(BoardSlot(id: id, sourceInputID: input.id, png: cleaned.png))
             metadata.append([

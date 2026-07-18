@@ -102,9 +102,31 @@ final class StudioCancellationToken: @unchecked Sendable {
     }
 }
 
+/// Retention for in-memory studio drafts.
+///
+/// Each draft holds several full-size PNGs plus a base64 data URI — 5-15MB
+/// apiece. Retention used to be purely temporal with no cap on how many could
+/// pile up inside the window, and pinned IDs were exempt from expiry
+/// *unconditionally*, so a leaked pin held its draft for the process lifetime.
+/// Pins now buy a longer life, not an unlimited one, and a hard count cap
+/// keeps the most recently touched regardless.
 func retainingStudioDrafts<Value>(_ values: [String: Value],
                                   newerThan cutoff: Date,
                                   pinnedIDs: Set<String>,
+                                  maximumCount: Int = 6,
+                                  pinnedLifetimeMultiplier: Double = 4,
+                                  now: Date = Date(),
                                   lastTouchedAt: (Value) -> Date) -> [String: Value] {
-    values.filter { lastTouchedAt($0.value) >= cutoff || pinnedIDs.contains($0.key) }
+    let window = now.timeIntervalSince(cutoff)
+    let pinnedCutoff = now.addingTimeInterval(-window * pinnedLifetimeMultiplier)
+    let surviving = values.filter { entry in
+        let touched = lastTouchedAt(entry.value)
+        if pinnedIDs.contains(entry.key) { return touched >= pinnedCutoff }
+        return touched >= cutoff
+    }
+    guard surviving.count > maximumCount else { return surviving }
+    let newest = surviving
+        .sorted { lastTouchedAt($0.value) > lastTouchedAt($1.value) }
+        .prefix(maximumCount)
+    return Dictionary(uniqueKeysWithValues: newest.map { ($0.key, $0.value) })
 }

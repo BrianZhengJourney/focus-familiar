@@ -10,6 +10,7 @@ enum FamiliarGenerationPhase: String, Codable, Sendable {
     case candidates
     case evolution
     case replacement
+    case expressionSheet
 }
 
 enum FamiliarGenerationDraftStatus: String, Codable, Sendable {

@@ -1302,6 +1302,9 @@ function petExpressionResult(event){
     phase:'stage-done',completed:event.completed||0,total:event.total||3,error:null};
   renderPetLab();
 }
+function petExpressionCancelled(event){
+  petLab.expr=null;renderPetLab();
+}
 function petExpressionError(event){
   petLab.expr={status:'error',characterID:event.characterID,stageIndex:event.stageIndex||0,
     completed:petLab.expr?.completed||0,total:petLab.expr?.total||3,

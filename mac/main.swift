@@ -426,6 +426,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     /// Character currently receiving post-adoption expression sheets (one
     /// sequential run at a time; nil when idle).
     var expressionRunCharacterID: String?
+    /// The in-flight expression request, so ◐ → cancel can actually reach it.
+    var expressionRunRequestID: String?
+    /// Clears expressionRunCharacterID if no callback ever arrives. Without it
+    /// a single dropped completion left the run "busy" for the process
+    /// lifetime, and every later expression run was refused.
+    var expressionRunWatchdog: DispatchWorkItem?
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 

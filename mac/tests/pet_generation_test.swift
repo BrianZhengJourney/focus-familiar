@@ -335,6 +335,26 @@ struct PetGenerationTests {
                       "expression reference roles must stay deterministic")
         expect(expressionBody.contains("EXPRESSION SHEET FOR THE BLOOM STAGE"),
                "expression prompt should name its locked stage")
+
+        // The production run passes no identity board: it used to pass bytes
+        // identical to the locked stage frame, uploaded a second time and
+        // described to the model as an independent identity reference.
+        let noIdentity = requireRequest(PetGenerationCoordinator.expressionSheetRequest(
+            stage: .bloom, stageFrameData: master, referenceData: nil,
+            styleBoardData: style, personalityVisual: "quiet and curious",
+            quality: .medium, apiKey: "expression-key",
+            boundary: "mimo-expression-single"), "expressionSheetRequest")
+        let noIdentityBody = String(decoding: noIdentity.httpBody ?? Data(), as: UTF8.self)
+        expect(occurrences(of: "name=\"image[]\"", in: noIdentityBody) == 2,
+               "without an identity board only the stage frame and style board are uploaded")
+        expect(!noIdentityBody.contains("filename=\"identity-reference.png\""),
+               "no identity part is attached when none is supplied")
+        expect(noIdentityBody.contains("Image 2 is Mimo's internal STYLE BOARD"),
+               "prompt image numbering must follow the references actually attached")
+        expect(noIdentityBody.contains("Image 1 is the sole identity authority"),
+               "the prompt must not reference an identity board that was not sent")
+        expect(expressionBody.contains("Image 3 is Mimo's internal STYLE BOARD"),
+               "numbering still accounts for an identity board when one is sent")
         expect(expressionBody.contains("LEFT — NEUTRAL") &&
                expressionBody.contains("CENTER — JOY") &&
                expressionBody.contains("RIGHT — REST"),

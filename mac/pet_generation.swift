@@ -649,7 +649,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
     /// the overlay can blink and emote by frame-swapping. Runs once per stage
     /// at adoption; a failure only costs that stage its expressions.
     func generateExpressionSheet(requestID: String, stage: PetEvolutionStage,
-                                 stageFrameData: Data, sourceDataURI: String,
+                                 stageFrameData: Data, sourceDataURI: String?,
                                  styleBoardData: Data?,
                                  personalityVisual: String,
                                  quality: PetFinalGenerationQuality,
@@ -671,8 +671,9 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             guard !self.isCancelled(requestID) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
             }
+            let reference = sourceDataURI.flatMap { Self.validatedDataURI($0) }
             guard Self.validReference(stageFrameData),
-                  let reference = Self.validatedDataURI(sourceDataURI),
+                  reference != nil || sourceDataURI == nil,
                   Self.validReference(styleBoardData) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
                 return
@@ -1078,7 +1079,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
     /// repeats it three times changing ONLY the facial expression, so all
     /// frames share one silhouette and frame-swaps cannot jitter.
     static func expressionSheetRequest(stage: PetEvolutionStage,
-                                       stageFrameData: Data, referenceData: Data,
+                                       stageFrameData: Data, referenceData: Data? = nil,
                                        styleBoardData: Data? = nil,
                                        personalityVisual: String,
                                        quality: PetFinalGenerationQuality = .medium,
@@ -1087,8 +1088,11 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                        boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "locked-stage-design.png", data: stageFrameData),
-            PetMultipartImage(filename: "identity-reference.png", data: referenceData),
         ]
+        if let referenceData {
+            references.append(PetMultipartImage(filename: "identity-reference.png",
+                                                data: referenceData))
+        }
         if let styleBoardData {
             references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
         }
@@ -1096,7 +1100,8 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             references: references,
             prompt: expressionSheetPrompt(stage: stage,
                                           personalityVisual: personalityVisual,
-                                          hasStyleBoard: styleBoardData != nil),
+                                          hasStyleBoard: styleBoardData != nil,
+                                          hasIdentityBoard: referenceData != nil),
             size: PetGenerationArtifact.expressionSheet(stage).outputSize,
             quality: quality.providerQuality,
             apiKey: apiKey,
@@ -1108,10 +1113,18 @@ final class PetGenerationCoordinator: @unchecked Sendable {
 
     static func expressionSheetPrompt(stage: PetEvolutionStage,
                                       personalityVisual: String,
-                                      hasStyleBoard: Bool) -> String {
+                                      hasStyleBoard: Bool,
+                                      hasIdentityBoard: Bool = true) -> String {
+        // Numbering has to track which references are actually attached: the
+        // identity board is optional now, so the style board is Image 2 when
+        // it is absent.
+        let styleIndex = hasIdentityBoard ? 3 : 2
         let styleReference = hasStyleBoard
-            ? "Image 3 is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
+            ? "Image \(styleIndex) is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
             : "No style-board image is supplied; preserve the established rendering language from Image 1 exactly."
+        let identityReference = hasIdentityBoard
+            ? "Image 2 is the locally prepared identity evidence board; consult it only to keep facial features on-model."
+            : "No separate identity board is supplied; Image 1 is the sole identity authority."
         return """
         MIMO ASSET PASS 3 — EXPRESSION SHEET FOR THE \(stage.rawValue.uppercased()) STAGE
 
@@ -1119,7 +1132,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
         Image 1 is the LOCKED \(stage.rawValue.uppercased()) STAGE DESIGN and the absolute identity, pose, and scale
         lock. Reproduce its species, face structure, hairstyle or markings, palette, outfit, outline weight, shading,
         proportions, and silhouette EXACTLY in every panel.
-        Image 2 is the locally prepared identity evidence board; consult it only to keep facial features on-model.
+        \(identityReference)
         \(styleReference)
         Temperament: \(personalityVisual)
 

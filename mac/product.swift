@@ -1102,12 +1102,41 @@ extension AppDelegate {
                           total: valid.count, completed: 0)
     }
 
+    /// Every exit from an expression run goes through here, so the run can
+    /// never be left holding `expressionRunCharacterID`.
+    private func endExpressionRun() {
+        expressionRunWatchdog?.cancel()
+        expressionRunWatchdog = nil
+        expressionRunRequestID = nil
+        expressionRunCharacterID = nil
+    }
+
+    private func armExpressionRunWatchdog(characterID: String, requestID: String) {
+        expressionRunWatchdog?.cancel()
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self, self.expressionRunCharacterID == characterID,
+                  self.expressionRunRequestID == requestID else { return }
+            self.petGenerator.cancel(requestID)
+            self.settingsCall("petExpressionError", [
+                "characterID": characterID, "stageIndex": 0,
+                "code": "timed_out",
+                "messageZh": "表情生成超时，已停止。",
+                "messageEn": "Expression generation timed out and was stopped.",
+            ])
+            self.endExpressionRun()
+            self.pushSettingsState()
+        }
+        expressionRunWatchdog = watchdog
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + StudioGenerationLedger.reservationLifetime, execute: watchdog)
+    }
+
     private func stepExpressionRun(characterID: String, stagePNGs: [Data],
                                    temperamentID: String, remaining: [Int],
                                    total: Int, completed: Int) {
         guard expressionRunCharacterID == characterID else { return }
         guard let stageIndex = remaining.first else {
-            expressionRunCharacterID = nil
+            endExpressionRun()
             settingsCall("petExpressionDone", [
                 "characterID": characterID, "completed": completed, "total": total,
             ])
@@ -1116,7 +1145,12 @@ extension AppDelegate {
         let rest = Array(remaining.dropFirst())
         let profile = CustomPetTemperaments.profile(for: temperamentID)
         let style = MimoStyleReference.requestData()
-        let requestID = "expr-\(UUID().uuidString)"
+        // A plain UUID: petCancel parses its argument with UUID(uuidString:),
+        // so the old "expr-<uuid>" form could never be matched and an in-flight
+        // paid expression request was uncancellable.
+        let requestID = UUID().uuidString.lowercased()
+        expressionRunRequestID = requestID
+        armExpressionRunWatchdog(characterID: characterID, requestID: requestID)
         let stageFrame = stagePNGs[stageIndex]
         let stageKinds: [PetEvolutionStage] = [.seed, .bloom, .radiant]
         let advance: (Bool) -> Void = { [weak self] succeeded in
@@ -1132,7 +1166,11 @@ extension AppDelegate {
         petGenerator.generateExpressionSheet(
             requestID: requestID, stage: stageKinds[stageIndex],
             stageFrameData: stageFrame,
-            sourceDataURI: PetGenerationCoordinator.dataURI(stageFrame),
+            // No separate identity reference. This used to pass the same bytes
+            // as stageFrameData, uploaded again as a second multipart part and
+            // described to the model as an independent identity board — paid
+            // image-input tokens for a duplicate, plus a misleading prompt.
+            sourceDataURI: nil,
             styleBoardData: style,
             personalityVisual: profile.promptFragment,
             quality: .medium,
@@ -1146,6 +1184,14 @@ extension AppDelegate {
                 guard let self, self.expressionRunCharacterID == characterID else { return }
                 switch result {
                 case .failure(let error):
+                    // Cancellation ends the run rather than marching on to the
+                    // next stage and spending again.
+                    if let generationError = error as? PetGenerationError,
+                       generationError.isCancellation {
+                        self.endExpressionRun()
+                        self.settingsCall("petExpressionCancelled", ["characterID": characterID])
+                        return
+                    }
                     self.settingsCall("petExpressionError", [
                         "characterID": characterID, "stageIndex": stageIndex,
                         "code": "provider_failed",
@@ -1158,6 +1204,7 @@ extension AppDelegate {
                                                 stageIndex: stageIndex,
                                                 rawPNG: output.data,
                                                 completed: completed, total: total,
+                                                requestID: requestID,
                                                 advance: advance)
                 }
             }
@@ -1166,13 +1213,26 @@ extension AppDelegate {
 
     private func installExpressionSheet(characterID: String, stageIndex: Int,
                                         rawPNG: Data, completed: Int, total: Int,
+                                        requestID: String,
+                                        salvageNearEdge: Bool = false,
                                         advance: @escaping (Bool) -> Void) {
         settingsCall("petExpressionProgress", [
             "characterID": characterID, "stageIndex": stageIndex,
             "phase": "processing", "completed": completed, "total": total,
         ])
+        // The image is already paid for. Retain it before local processing can
+        // reject it, exactly as the studio paths do — this run used to drop
+        // `rawPNG` on the floor with no recovery at all.
+        if !salvageNearEdge {
+            _ = retainRaw(rawPNG, requestID: requestID, phase: .expressionSheet,
+                          quality: PetFinalGenerationQuality.medium.rawValue,
+                          providerSeconds: 0)
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = Result { try CharacterSheetProcessor.process(pngData: rawPNG) }
+            let result = Result {
+                try CharacterSheetProcessor.process(pngData: rawPNG,
+                                                    allowNearEdgeRecovery: salvageNearEdge)
+            }
             DispatchQueue.main.async {
                 guard let self, self.expressionRunCharacterID == characterID else { return }
                 do {
@@ -1191,11 +1251,23 @@ extension AppDelegate {
                         ])
                         self.pushSettingsState()
                     }
+                    _ = try? self.generationDraftStore.delete(requestID: requestID)
                     advance(true)
                 } catch {
+                    // The same near-edge layout deviation the studio paths treat
+                    // as salvageable used to burn a paid generation here.
+                    if !salvageNearEdge, self.canSalvageNearEdge(error) {
+                        self.installExpressionSheet(
+                            characterID: characterID, stageIndex: stageIndex,
+                            rawPNG: rawPNG, completed: completed, total: total,
+                            requestID: requestID, salvageNearEdge: true, advance: advance)
+                        return
+                    }
                     self.settingsCall("petExpressionError", [
                         "characterID": characterID, "stageIndex": stageIndex,
                         "code": "local_failed",
+                        "providerCompleted": true,
+                        "outputRetained": self.retainedDraftExists(requestID),
                         "messageZh": "第 \(stageIndex + 1) 段的表情处理失败：\(error.localizedDescription)",
                         "messageEn": "Expressions for form \(stageIndex + 1) could not be processed: \(error.localizedDescription)",
                     ])
@@ -1648,6 +1720,8 @@ extension AppDelegate {
                 if visibleCandidateDraftID == id { visibleCandidateDraftID = nil }
                 if visibleEvolutionDraftID == id { visibleEvolutionDraftID = nil }
                 _ = try? generationDraftStore.delete(requestID: id)
+                // An expression run is now a plain UUID too, so cancel reaches it.
+                if expressionRunRequestID == id { endExpressionRun() }
                 studioGenerationLedger.finish(requestID: id)
                 settingsCall("petGenerationCancelled", [
                     "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),

@@ -501,6 +501,7 @@ extension AppDelegate {
             "projects": GitWatcher.projectsDir().lastPathComponent,
             "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
             "openAIConfigured": MimoSecret.openAI.isConfigured,
+            "openAIKeySource": MimoSecret.openAI.source.rawValue,
             "imageQuality": PetFinalGenerationQuality.resolve(
                 d.string(forKey: "petImageQuality")).rawValue,
             "generationRecoveryCount": generationDraftStore.recoverableDraftCount(),
@@ -1622,7 +1623,18 @@ extension AppDelegate {
             ])
             return
         }
-        guard reserveLocalProcessing(requestID) else { return }
+        guard reserveLocalProcessing(requestID) else {
+            // Every other rejection path emits a petStudioError; this one left
+            // the panel sitting there after the user clicked "retry locally".
+            settingsCall("petStudioError", [
+                "requestID": requestID, "kind": "setup", "phase": "input",
+                "code": "generation_in_progress",
+                "messageZh": "另一项生成正在进行，或这次结果已经过期，无法在本机重试。",
+                "messageEn": "Another generation is in progress, or this result has expired and can no longer be reprocessed locally.",
+                "requestNotStarted": true, "outputRetained": retainedDraftExists(requestID),
+            ])
+            return
+        }
         switch recovery {
         case .candidates(let context):
             processCandidateGeneration(requestID: requestID, recovery: context,
@@ -1711,6 +1723,7 @@ extension AppDelegate {
             var keyState: [String: Any] = [
                 "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
                 "openAIConfigured": MimoSecret.openAI.isConfigured,
+            "openAIKeySource": MimoSecret.openAI.source.rawValue,
             ]
             if !failed.isEmpty {
                 keyState["failed"] = failed
@@ -1723,6 +1736,7 @@ extension AppDelegate {
             var keyState: [String: Any] = [
                 "pixelLabConfigured": MimoSecret.pixelLab.isConfigured,
                 "openAIConfigured": MimoSecret.openAI.isConfigured,
+            "openAIKeySource": MimoSecret.openAI.source.rawValue,
                 "cleared": provider,
             ]
             if !cleared { keyState["error"] = voice("无法清除 \(provider)", "Could not clear \(provider)") }
@@ -1828,7 +1842,7 @@ extension AppDelegate {
         case "petGenerateEvolution":
             pruneStudioState()
             guard let requestID = generationRequestID(body["requestID"]),
-                  let candidateDraftID = body["candidateDraftID"] as? String,
+                  let candidateDraftID = generationRequestID(body["candidateDraftID"]),
                   let candidate = pendingCandidateBoards[candidateDraftID],
                   let index = (body["candidateIndex"] as? NSNumber)?.intValue,
                   candidate.candidatePNGs.indices.contains(index) else {
@@ -1860,7 +1874,7 @@ extension AppDelegate {
         case "petRegenerateStage":
             pruneStudioState()
             guard let requestID = generationRequestID(body["requestID"]),
-                  let draftID = body["draftID"] as? String,
+                  let draftID = generationRequestID(body["draftID"]),
                   let evolution = pendingEvolutionSheets[draftID],
                   let index = (body["stageIndex"] as? NSNumber)?.intValue,
                   let stage = PetEvolutionStage.allCases.first(where: { $0.sheetIndex == index }) else {
@@ -1906,9 +1920,13 @@ extension AppDelegate {
         case "petRevealGenerationDrafts":
             NSWorkspace.shared.activateFileViewerSelecting([generationDraftStore.folderURL])
         case "petInstallRaster":
-            guard let draftID = body["draftID"] as? String,
+            // Canonicalized like requestID: these index in-memory dictionaries,
+            // so an uppercase UUID from the WebView silently read as "draft
+            // expired" — exactly the confusion generationRequestID exists to
+            // prevent.
+            guard let draftID = generationRequestID(body["draftID"]),
                   let evolution = pendingEvolutionSheets[draftID] else {
-                if visibleEvolutionDraftID == body["draftID"] as? String {
+                if visibleEvolutionDraftID == generationRequestID(body["draftID"]) {
                     visibleEvolutionDraftID = nil
                 }
                 settingsCall("petInstallError", [

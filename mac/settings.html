@@ -845,7 +845,13 @@ function selectImageQuality(id){
 }
 function renderKeyState(){
   const openai=document.getElementById('openAIKeyState');if(!openai)return;
-  openai.textContent=S.openAIConfigured?tx('已连接','connected'):tx('未设置','not set');openai.className=S.openAIConfigured?'ok':'';
+  /* The environment wins over the Keychain, so "clear key" can leave the app
+     still configured and still spending. Say which one is actually in use. */
+  const fromEnv=S.openAIKeySource==='environment';
+  openai.textContent=!S.openAIConfigured?tx('未设置','not set')
+    :fromEnv?tx('已连接（环境变量 OPENAI_API_KEY）','connected (OPENAI_API_KEY from environment)')
+    :tx('已连接','connected');
+  openai.className=S.openAIConfigured?'ok':'';
 }
 function candidateImage(candidate){return typeof candidate==='string'?candidate:(candidate?.image||candidate?.url||candidate?.preview||candidate?.dataURI||'')}
 function diagnosticsHTML(){
@@ -1020,7 +1026,7 @@ setInterval(()=>{
 function savePetKeys(){send({type:'petSaveKeys',openAI:document.getElementById('openAIKey').value})}
 function clearPetKey(provider){send({type:'petClearKey',provider})}
 function petKeysSaved(state){
-  S.openAIConfigured=!!state.openAIConfigured;const input=document.getElementById('openAIKey');
+  S.openAIConfigured=!!state.openAIConfigured;S.openAIKeySource=state.openAIKeySource||'none';const input=document.getElementById('openAIKey');
   if(input&&(state.cleared==='OpenAI'||!(state.failed||[]).includes('OpenAI')))input.value='';
   renderKeyState();if(state.error){document.getElementById('apiSetup').open=true;petLab.error=state.error;petLab.errorKind='setup';petLab.status='error';renderPetLab()}
   else if(S.openAIConfigured)document.getElementById('apiSetup').open=false;

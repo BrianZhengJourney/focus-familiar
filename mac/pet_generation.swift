@@ -75,16 +75,28 @@ enum MimoSecret: String {
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
+    /// Where the credential actually comes from. The environment wins over the
+    /// Keychain in `read()`, so after "clear key" the UI still reported
+    /// configured and generations kept spending — with no way to tell which
+    /// credential was in use.
+    enum Source: String { case environment, keychain, none }
+
+    var source: Source {
+        for key in environmentNames {
+            if let raw = ProcessInfo.processInfo.environment[key], validated(raw) != nil {
+                return .environment
+            }
+        }
+        return keychainHasValue ? .keychain : .none
+    }
+
+    var isConfigured: Bool { source != .none }
+
     /// Settings only needs to know whether a credential exists. Asking for its
     /// bytes here can summon SecurityAgent and block the app's main thread on
     /// every ad-hoc development build. Attribute lookup is non-interactive;
     /// the value is requested only after the user starts a generation.
-    var isConfigured: Bool {
-        for key in environmentNames {
-            if let raw = ProcessInfo.processInfo.environment[key], validated(raw) != nil {
-                return true
-            }
-        }
+    private var keychainHasValue: Bool {
         let context = LAContext()
         context.interactionNotAllowed = true
         let query: [String: Any] = [
@@ -1336,7 +1348,8 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                 return
             }
             do {
-                let (bytes, response) = try await self.session.bytes(for: request)
+                let (bytes, response) = try await self.session.bytes(
+                    for: Self.idempotent(request, requestID: requestID))
                 guard !Task.isCancelled, !self.isCancelled(requestID) else {
                     self.finishStaged(completion, result: .failure(PetGenerationError.cancelled))
                     return
@@ -1498,7 +1511,9 @@ final class PetGenerationCoordinator: @unchecked Sendable {
         request.setValue("image/png,image/jpeg,image/webp", forHTTPHeaderField: "Accept")
         request.setValue("bytes=0-\(maximumImageBytes)", forHTTPHeaderField: "Range")
         let token = UUID()
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(
+            with: Self.idempotent(request, requestID: requestID)
+        ) { data, response, error in
             self.untrack(token, requestID: requestID)
             if let error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode,
@@ -1515,7 +1530,9 @@ final class PetGenerationCoordinator: @unchecked Sendable {
     private func performJSON(_ request: URLRequest, provider: String, requestID: String, attempt: Int = 0,
                              completion: @escaping (Result<[String: Any], Error>) -> Void) {
         let token = UUID()
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(
+            with: Self.idempotent(request, requestID: requestID)
+        ) { data, response, error in
             self.untrack(token, requestID: requestID)
             guard !self.isCancelled(requestID) else {
                 completion(.failure(PetGenerationError.cancelled)); return
@@ -1554,6 +1571,19 @@ final class PetGenerationCoordinator: @unchecked Sendable {
 
     private func finishSheet(_ callback: @escaping SheetCompletion, result: Result<Data, Error>) {
         callbackQueue.async { callback(result) }
+    }
+
+
+    /// The app already mints a per-generation request ID and gates on it
+    /// locally, but never told the provider. Sending it as an idempotency key
+    /// makes the *provider* collapse a replay, which covers the case the local
+    /// ledger cannot: the app is killed after the multipart body goes out but
+    /// before the response lands, and `usedRequestIDs` — in memory only — comes
+    /// back empty on relaunch.
+    private static func idempotent(_ request: URLRequest, requestID: String) -> URLRequest {
+        var keyed = request
+        keyed.setValue(requestID, forHTTPHeaderField: "Idempotency-Key")
+        return keyed
     }
 
     private func begin(_ requestID: String) {
@@ -1686,8 +1716,11 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                 if lower.hasPrefix("data:image/") { embedded.append(string) }
                 else if (key == "base64" || key == "b64_json"), string.count > 200 {
                     embedded.append("data:image/png;base64," + string)
-                } else if (lower.hasPrefix("https://") || lower.hasPrefix("http://")),
+                } else if lower.hasPrefix("https://"),
                           lower.contains(".png") || lower.contains("image") { urls.append(string) }
+                // Plaintext http was collected here and then rejected by
+                // resolveImage's https guard, so a provider-response problem
+                // surfaced as "the reference image could not be read".
             }
         }
         visit(value)

@@ -440,7 +440,12 @@ private struct PetMultipartImage {
     let data: Data
 }
 
-final class PetGenerationCoordinator {
+/// Unchecked because the compiler cannot see the lock: every mutable property
+/// below (`cancelled`, `activeTasks`, `activeStreams`) is only ever touched
+/// while holding `lock`, and everything else is a `let`. The coordinator has
+/// always been driven from several queues at once — the credential queue, the
+/// URLSession delegate queue, and the main callback queue.
+final class PetGenerationCoordinator: @unchecked Sendable {
     typealias SheetProgress = (_ phase: String, _ detail: String?) -> Void
     typealias SheetCompletion = (Result<Data, Error>) -> Void
     typealias StagedProgress = (_ phase: String, _ partialImage: Data?, _ partialIndex: Int?) -> Void
@@ -1314,6 +1319,8 @@ final class PetGenerationCoordinator {
                             attempt: attempt,
                             retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
                         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
+                            [weak self] in
+                            guard let self else { return }
                             guard !self.isCancelled(requestID) else {
                                 self.finishStaged(completion,
                                                   result: .failure(PetGenerationError.cancelled))

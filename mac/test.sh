@@ -20,6 +20,7 @@ mkdir -p "$OUT" "$MODULE_CACHE"
 test_sources() {
   case "$1" in
     panel_geometry_test)        echo "panel_geometry.swift" ;;
+    activity_log_test)          echo "activity_log.swift" ;;
     edit_menu_test)             echo "app_menu.swift" ;;
     generation_ledger_test)     echo "generation_ledger.swift" ;;
     style_reference_test)       echo "style_reference.swift" ;;

@@ -186,11 +186,11 @@ let logDir: URL = {
     return d
 }()
 
-func todayLogURL() -> URL {
-    let f = DateFormatter()
-    f.dateFormat = "yyyy-MM-dd"
-    return logDir.appendingPathComponent("activity-\(f.string(from: Date())).jsonl")
+func logURL(for date: Date) -> URL {
+    logDir.appendingPathComponent("activity-\(logDayStamp(date)).jsonl")
 }
+
+func todayLogURL() -> URL { logURL(for: Date()) }
 
 func appendLog(_ entry: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: entry),
@@ -213,11 +213,10 @@ func readTodayLog() -> String {
 
 // past 6 days (today comes from the live in-page history, so skip it)
 func readWeekLog() -> String {
-    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
     var lines: [String] = []
     for i in 1...6 {
         guard let d = Calendar.current.date(byAdding: .day, value: -i, to: Date()) else { continue }
-        let url = logDir.appendingPathComponent("activity-\(f.string(from: d)).jsonl")
+        let url = logURL(for: d)
         if let text = try? String(contentsOf: url, encoding: .utf8) {
             lines.append(contentsOf: text.split(separator: "\n").map(String.init))
         }
@@ -860,10 +859,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     @objc func exportJournal() {
         webView.evaluateJavaScript("famExportMD()") { result, _ in
             guard let md = result as? String else { return }
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
             let dir = logDir.appendingPathComponent("exports")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).md")
+            let url = dir.appendingPathComponent("journal-\(logDayStamp()).md")
             try? md.write(to: url, atomically: true, encoding: .utf8)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(md, forType: .string)
@@ -880,10 +878,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     @objc func openJournalPage() {
         webView.evaluateJavaScript("famExportHTML()") { result, _ in
             guard let html = result as? String else { return }
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
             let dir = logDir.appendingPathComponent("exports")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).html")
+            let url = dir.appendingPathComponent("journal-\(logDayStamp()).html")
             try? html.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.open(url)
         }

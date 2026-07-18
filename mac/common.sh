@@ -8,6 +8,7 @@ MODULE_CACHE="${TMPDIR:-/private/tmp}/mimo-swift-module-cache"
 # Every .swift in mac/, in the order build.sh links them.
 APP_SOURCES=(
   panel_geometry.swift
+  activity_log.swift
   app_menu.swift
   custom_pet.swift
   character_sheet.swift

@@ -103,26 +103,41 @@ func pruneOldLogs() {
     let days = UserDefaults.standard.object(forKey: "retentionDays") as? Int ?? 90
     guard days > 0 else { return }
     let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
-    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
     guard let files = try? FileManager.default.contentsOfDirectory(at: logDir, includingPropertiesForKeys: nil) else { return }
     for url in files where url.lastPathComponent.hasPrefix("activity-") {
         let name = url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "activity-", with: "")
-        if let d = f.date(from: name), d < cutoff { try? FileManager.default.removeItem(at: url) }
+        if let d = logDateFormatter.date(from: name), d < cutoff {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 }
 
-// drop everything recorded after `ts` (ms epoch) from today's log
-func eraseSince(_ ts: Double) {
-    let url = todayLogURL()
-    guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
-    let kept = text.split(separator: "\n").filter { line in
-        guard let data = line.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let t1 = obj["t1"] as? Double else { return false }
-        return t1 <= ts
+/// Drop everything recorded after `ts` (ms epoch).
+///
+/// Returns false if any day's file could not be rewritten, so the caller can
+/// avoid telling the user their history is gone when it is not.
+@discardableResult
+func eraseSince(_ ts: Double) -> Bool {
+    var ok = true
+    for day in logDaysToErase(after: ts) {
+        let url = logURL(for: day)
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+        let kept = retainedLogLines(in: text, erasingAfter: ts)
+        let out = kept.joined(separator: "\n") + (kept.isEmpty ? "" : "\n")
+        do { try out.write(to: url, atomically: true, encoding: .utf8) } catch { ok = false }
     }
-    let out = kept.joined(separator: "\n") + (kept.isEmpty ? "" : "\n")
-    try? out.write(to: url, atomically: true, encoding: .utf8)
+    return ok
+}
+
+/// A silent write failure used to read as a successful erase.
+func warnEraseIncomplete() {
+    let a = NSAlert()
+    a.messageText = voice("部分记录没有删除成功", "Some entries could not be erased")
+    a.informativeText = voice("写入日志文件时出错，部分记录仍在这台 Mac 上。可以再试一次。",
+                              "Writing the log files failed, so some entries are still on this Mac. You can try again.")
+    a.alertStyle = .warning
+    NSApp.activate(ignoringOtherApps: true)
+    a.runModal()
 }
 
 func eraseAllHistory() {
@@ -1934,19 +1949,27 @@ extension AppDelegate {
             switch body["span"] as? String ?? "" {
             case "hour":
                 let ts = Date().timeIntervalSince1970 * 1000 - 3_600_000
-                eraseSince(ts); js("famEraseSince(\(ts))")
+                let erased = eraseSince(ts); js("famEraseSince(\(ts))")
+                if !erased { warnEraseIncomplete() }
             case "today":
                 let start = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000
-                eraseSince(start); js("famEraseSince(\(start))")
+                let erased = eraseSince(start); js("famEraseSince(\(start))")
+                if !erased { warnEraseIncomplete() }
             case "all":
                 let a = NSAlert()
                 a.messageText = voice("删除全部历史记录？", "Delete all history?")
-                a.informativeText = voice("所有活动记录都会消失；XP 和等级会保留。此操作无法撤销。", "Every day of activity, gone. XP and level stay. No undo.")
+                a.informativeText = voice("所有活动记录和未采用的生成草稿都会消失；XP、等级和已采用的伴灵会保留。此操作无法撤销。",
+                                         "Every day of activity and every unadopted generation draft, gone. XP, level, and adopted familiars stay. No undo.")
                 a.addButton(withTitle: voice("全部删除", "Delete Everything"))
                 a.addButton(withTitle: voice("取消", "Cancel"))
                 a.alertStyle = .warning
                 if a.runModal() == .alertFirstButtonReturn {
-                    eraseAllHistory(); js("famEraseSince(0)")
+                    eraseAllHistory()
+                    // Generated drafts are derived from the user's own uploaded
+                    // photos and live for up to 24h. A "delete everything"
+                    // framed as a privacy eraser must not leave them behind.
+                    _ = try? generationDraftStore.purgeExpired(now: .distantFuture)
+                    js("famEraseSince(0)")
                 }
             default: break
             }

@@ -41,6 +41,33 @@ struct GenerationLedgerTests {
             pinnedIDs: ["paid-parent"], lastTouchedAt: { $0 })
         expect(Set(retained.keys) == ["paid-parent", "fresh"],
                "an active/recoverable stage must pin its paid parent across the expiry boundary")
+
+        // A dropped completion handler used to leave activeRequestID set with
+        // no expiry, refusing every later generation until the app restarted.
+        var wedged = StudioGenerationLedger()
+        expect(wedged.reserve(requestID: "lost", now: now) == .accepted,
+               "the first request reserves")
+        expect(wedged.reserve(requestID: "next", now: now.addingTimeInterval(60))
+               == .anotherRequestActive,
+               "a live request still blocks a parallel one")
+        let afterLifetime = now.addingTimeInterval(StudioGenerationLedger.reservationLifetime + 1)
+        expect(wedged.reserve(requestID: "next", now: afterLifetime) == .accepted,
+               "a reservation outliving the longest request must expire, not wedge the studio")
+        expect(wedged.activeRequestID == "next",
+               "the expired reservation is replaced by the new one")
+
+        // Local recovery is only meaningful while the request is still recent.
+        var stale = StudioGenerationLedger()
+        _ = stale.reserve(requestID: "old", now: now)
+        stale.finish(requestID: "old")
+        expect(!stale.reserveLocalProcessing(requestID: "old",
+                                             now: now.addingTimeInterval(3600),
+                                             maximumAge: 1800),
+               "a request older than the recovery window is not a live candidate")
+        expect(stale.reserveLocalProcessing(requestID: "old",
+                                            now: now.addingTimeInterval(60),
+                                            maximumAge: 1800),
+               "a recent request is still recoverable locally")
         print("generation ledger tests passed")
     }
 }

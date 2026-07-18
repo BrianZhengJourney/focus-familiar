@@ -10,31 +10,60 @@ enum StudioGenerationReservationDecision: Equatable {
 }
 
 struct StudioGenerationLedger {
+    /// A reservation is taken before the request goes out, and every later
+    /// studio call is gated on it. If a completion handler is ever dropped the
+    /// reservation has to expire on its own, or every subsequent generation is
+    /// refused for the rest of the process lifetime.
+    static let reservationLifetime: TimeInterval = 960
+
     private(set) var activeRequestID: String?
+    private(set) var activeReservedAt: Date?
     private(set) var usedRequestIDs: [String: Date] = [:]
 
     mutating func reserve(requestID: String, now: Date = Date())
         -> StudioGenerationReservationDecision {
+        releaseExpiredReservation(now: now)
         if let activeRequestID {
             return activeRequestID == requestID ? .duplicateActive : .anotherRequestActive
         }
         guard usedRequestIDs[requestID] == nil else { return .requestIDReused }
         usedRequestIDs[requestID] = now
         activeRequestID = requestID
+        activeReservedAt = now
         return .accepted
     }
 
     mutating func finish(requestID: String) {
-        if activeRequestID == requestID { activeRequestID = nil }
+        if activeRequestID == requestID { activeRequestID = nil; activeReservedAt = nil }
     }
 
-    mutating func reserveLocalProcessing(requestID: String) -> Bool {
-        guard activeRequestID == nil, usedRequestIDs[requestID] != nil else { return false }
+    /// Re-reserving for local reprocessing is only sensible while the request
+    /// is still recent; a 24h-old ID lingering in `usedRequestIDs` is not a
+    /// live recovery candidate.
+    mutating func reserveLocalProcessing(requestID: String, now: Date = Date(),
+                                         maximumAge: TimeInterval = 1800) -> Bool {
+        releaseExpiredReservation(now: now)
+        guard activeRequestID == nil, let reservedAt = usedRequestIDs[requestID],
+              now.timeIntervalSince(reservedAt) <= maximumAge else { return false }
         activeRequestID = requestID
+        activeReservedAt = now
         return true
     }
 
+    /// Drops an active reservation that has outlived the longest possible
+    /// request, so a lost callback cannot wedge the studio permanently.
+    mutating func releaseExpiredReservation(now: Date = Date()) {
+        guard activeRequestID != nil else { return }
+        guard let reservedAt = activeReservedAt,
+              now.timeIntervalSince(reservedAt) <= Self.reservationLifetime else {
+            activeRequestID = nil
+            activeReservedAt = nil
+            return
+        }
+    }
+
     mutating func prune(before cutoff: Date, maximumEntries: Int = 512) {
+        releaseExpiredReservation()
         usedRequestIDs = usedRequestIDs.filter {
             $0.value >= cutoff || $0.key == activeRequestID
         }

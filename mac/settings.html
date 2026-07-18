@@ -1236,6 +1236,16 @@ function petStageResult(event){
   const used=[...new Set(petLab.stageQualities.filter(Boolean))];petLab.sheetQuality=used.length===1?used[0]:'mixed';
   Object.assign(petLab,{requestID:null,status:'ready',operation:'stage',preservedResult:false,stageBusyIndex:null,error:'',errorKind:'',errorCode:''});renderPetLab();
 }
+/* The user cancelled. Every request now terminates through its completion
+   handler so the ledger unwinds, but there is nothing to report here — drop
+   back to idle instead of flashing an error. */
+function petStudioCancelled(event){
+  if(event.requestID&&event.requestID!==petLab.requestID)return;
+  finishStudioOperation(event);
+  Object.assign(petLab,{status:petLab.sheet?'ready':'idle',error:null,errorCode:'',
+    errorKind:null,activeCandidateIndex:null,recoveryRequestID:null,requestID:null,startedAt:null});
+  renderPetLab();
+}
 function petStudioError(event){
   if(event.requestID&&event.requestID!==petLab.requestID)return;const marker=`${event.kind||''} ${event.scope||''} ${event.phase||''} ${event.code||''} ${event.message||''} ${event.messageEn||''}`.toLowerCase();
   const setup=!!event.requestNotStarted||/setup|input|stale|expired|missing_api_key|request_id|generation_in_progress/.test(marker);

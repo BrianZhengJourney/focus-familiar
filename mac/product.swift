@@ -786,6 +786,15 @@ extension AppDelegate {
                                      startedAt: Date, phase: String) {
         guard studioGenerationLedger.activeRequestID == requestID else { return }
         activeStageParents.removeValue(forKey: requestID)
+        // Cancellation now arrives as a real completion so the ledger and the
+        // draft bookkeeping always unwind. The user asked for it — release
+        // everything, say nothing.
+        if let generationError = error as? PetGenerationError, generationError.isCancellation {
+            studioGenerationLedger.finish(requestID: requestID)
+            pendingReferencePreflights.removeValue(forKey: requestID)
+            settingsCall("petStudioCancelled", ["requestID": requestID])
+            return
+        }
         if let generationError = error as? PetGenerationError,
            case .missingKey = generationError {
             settingsCall("petStudioError", [

@@ -492,6 +492,44 @@ struct PetGenerationTests {
                "cancelled credential reads must not advance provider progress")
         expect(unexpectedCompletion.wait(timeout: .now() + 0.25) == .timedOut,
                "cancelled credential reads must not start or finish a paid request")
+        // Retry used to be gated on `httpMethod != "POST"`. Every image request
+        // is a POST, so the backoff path was unreachable and a single 429 killed
+        // a run. Retryable must mean "the provider produced nothing", not a verb.
+        expect(PetGenerationCoordinator.isRetryable(status: 429),
+               "a rate limit produced no image and is safe to replay")
+        expect(PetGenerationCoordinator.isRetryable(status: 500),
+               "a server error produced no image and is safe to replay")
+        expect(PetGenerationCoordinator.isRetryable(status: 503),
+               "an upstream outage is safe to replay")
+        expect(!PetGenerationCoordinator.isRetryable(status: 200),
+               "a success is never replayed — that would double-bill")
+        expect(!PetGenerationCoordinator.isRetryable(status: 400),
+               "a malformed request will fail identically on replay")
+        expect(!PetGenerationCoordinator.isRetryable(status: 401),
+               "a bad key will fail identically on replay")
+
+        let firstDelay = PetGenerationCoordinator.retryDelay(attempt: 0, retryAfter: nil)
+        let secondDelay = PetGenerationCoordinator.retryDelay(attempt: 1, retryAfter: nil)
+        expect(firstDelay >= 1 && firstDelay <= 12, "backoff stays inside its bounds")
+        expect(secondDelay > firstDelay, "backoff grows with each attempt")
+        expect(PetGenerationCoordinator.retryDelay(attempt: 0, retryAfter: "5") >= 3,
+               "a provider Retry-After header is honored")
+        expect(PetGenerationCoordinator.retryDelay(attempt: 3, retryAfter: "600") <= 12,
+               "an absurd Retry-After is still capped")
+
+        // SSE arrives in arbitrarily split chunks; the payload must survive
+        // being cut at any byte, including mid-token and across CRLF framing.
+        let sse = "data: {\"type\":\"x\"}\r\ndata: [DONE]\r\n\r\n"
+        var whole = PetImageStreamDecoder()
+        let wholeEvents = (try? whole.append(Data(sse.utf8))) ?? []
+        var split = PetImageStreamDecoder()
+        var splitEvents: [PetImageStreamEvent] = []
+        for byte in Array(sse.utf8) {
+            splitEvents.append(contentsOf: (try? split.append(Data([byte]))) ?? [])
+        }
+        expect(wholeEvents.count == splitEvents.count,
+               "chunked decoding must agree with byte-at-a-time decoding")
+
         print("pet generation tests passed")
     }
 }

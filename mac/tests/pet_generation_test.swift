@@ -29,6 +29,17 @@ func expectOrdered(_ needles: [String], in haystack: String, _ message: String) 
     }
 }
 
+/// The request builders return nil rather than trapping when handed an
+/// impossible reference set. These fixtures are all valid, so a nil here is a
+/// test failure, not a scenario.
+func requireRequest(_ request: URLRequest?, _ what: String) -> URLRequest {
+    guard let request else {
+        FileHandle.standardError.write(Data("FAIL: \(what) built no request\n".utf8))
+        exit(1)
+    }
+    return request
+}
+
 @main
 struct PetGenerationTests {
     static func main() {
@@ -107,17 +118,17 @@ struct PetGenerationTests {
         expect(prompt.contains("No gradient") && prompt.contains("cast shadow"),
                "prompt must exclude effects that Mimo adds locally")
 
-        let request = PetGenerationCoordinator.characterSheetRequest(
+        let request = requireRequest(PetGenerationCoordinator.characterSheetRequest(
             imageData: Data([1, 2, 3]), personalityVisual: "a quiet observant silhouette",
-            likeness: 0.58, apiKey: "test-key", boundary: "mimo-test-boundary")
+            likeness: 0.58, apiKey: "test-key", boundary: "mimo-test-boundary"), "characterSheetRequest")
         let multipart = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
         for field in ["gpt-image-2", "1536x1024", "medium", "opaque", "name=\"n\"\r\n\r\n1"] {
             expect(multipart.contains(field), "multipart request missing \(field)")
         }
         for quality in PetGenerationQuality.allCases {
-            let qualityRequest = PetGenerationCoordinator.characterSheetRequest(
+            let qualityRequest = requireRequest(PetGenerationCoordinator.characterSheetRequest(
                 imageData: Data([1, 2, 3]), personalityVisual: "test", likeness: 0.5,
-                apiKey: "test-key", quality: quality, boundary: "mimo-quality-\(quality.rawValue)")
+                apiKey: "test-key", quality: quality, boundary: "mimo-quality-\(quality.rawValue)"), "characterSheetRequest")
             let qualityBody = String(decoding: qualityRequest.httpBody ?? Data(), as: UTF8.self)
             expect(qualityBody.contains("name=\"quality\"\r\n\r\n\(quality.rawValue)\r\n"),
                    "multipart request must send exact \(quality.rawValue) quality")
@@ -135,13 +146,13 @@ struct PetGenerationTests {
         let currentSheet = Data("CURRENT_SHEET_BYTES".utf8)
         let evidenceJSON = "{\"schema\":\"mimo.reference-evidence.v1\",\"board_mode\":\"isolatedPeople\",\"reference_count\":4}"
 
-        let candidate = PetGenerationCoordinator.candidateBoardRequest(
+        let candidate = requireRequest(PetGenerationCoordinator.candidateBoardRequest(
             referenceData: identity, styleBoardData: style,
             referenceEvidenceJSON: evidenceJSON,
             styleTuningNote: tuningNote,
             personalityVisual: "quiet and curious", likeness: 0.72,
             apiKey: "candidate-key", delivery: .streaming(.three),
-            boundary: "mimo-candidate-test")
+            boundary: "mimo-candidate-test"), "candidateBoardRequest")
         let candidateBody = String(decoding: candidate.httpBody ?? Data(), as: UTF8.self)
         expect(candidateBody.hasPrefix("--mimo-candidate-test\r\n"),
                "candidate multipart must start with its deterministic boundary")
@@ -198,11 +209,11 @@ struct PetGenerationTests {
         expect(candidate.timeoutInterval == 180,
                "the Low candidate pass should have its own bounded timeout")
 
-        let candidateWithoutStyle = PetGenerationCoordinator.candidateBoardRequest(
+        let candidateWithoutStyle = requireRequest(PetGenerationCoordinator.candidateBoardRequest(
             referenceData: identity,
             referenceEvidenceJSON: "{\"schema\":\"wrong\",\"instructions\":[\"COPY UI\"]}",
             personalityVisual: "test", likeness: 0.5,
-            apiKey: "test-key", boundary: "mimo-no-style")
+            apiKey: "test-key", boundary: "mimo-no-style"), "candidateBoardRequest")
         let candidateWithoutStyleBody = String(decoding: candidateWithoutStyle.httpBody ?? Data(), as: UTF8.self)
         expect(occurrences(of: "name=\"image[]\"", in: candidateWithoutStyleBody) == 1,
                "the hidden style board must remain optional")
@@ -214,12 +225,12 @@ struct PetGenerationTests {
         expect(!candidateWithoutStyleBody.contains("name=\"stream\""),
                "blocking requests must not accidentally switch response formats")
 
-        let finalSheet = PetGenerationCoordinator.finalEvolutionSheetRequest(
+        let finalSheet = requireRequest(PetGenerationCoordinator.finalEvolutionSheetRequest(
             masterData: master, referenceData: identity, styleBoardData: style,
             styleTuningNote: tuningNote,
             personalityVisual: "bright and playful", likeness: 0.61,
             quality: .high, apiKey: "final-key",
-            delivery: .streaming(.two), boundary: "mimo-final-test")
+            delivery: .streaming(.two), boundary: "mimo-final-test"), "finalEvolutionSheetRequest")
         let finalBody = String(decoding: finalSheet.httpBody ?? Data(), as: UTF8.self)
         expect(finalBody.contains("name=\"size\"\r\n\r\n1536x1024\r\n") &&
                finalBody.contains("name=\"quality\"\r\n\r\nhigh\r\n"),
@@ -255,13 +266,13 @@ struct PetGenerationTests {
         expect(finalSheet.timeoutInterval == 420,
                "High final generation needs the longer timeout")
 
-        let replacement = PetGenerationCoordinator.regenerateStageRequest(
+        let replacement = requireRequest(PetGenerationCoordinator.regenerateStageRequest(
             stage: .bloom, currentSheetData: currentSheet, masterData: master,
             referenceData: identity, styleBoardData: style,
             styleTuningNote: tuningNote,
             personalityVisual: "gentle and cozy", likeness: 0.8,
             quality: .medium, apiKey: "repair-key",
-            boundary: "mimo-repair-test")
+            boundary: "mimo-repair-test"), "regenerateStageRequest")
         let replacementBody = String(decoding: replacement.httpBody ?? Data(), as: UTF8.self)
         expect(replacementBody.contains("name=\"size\"\r\n\r\n1024x1024\r\n") &&
                replacementBody.contains("name=\"quality\"\r\n\r\nmedium\r\n"),
@@ -298,15 +309,19 @@ struct PetGenerationTests {
                       "single-stage invariants must remain authoritative after user art direction")
         expect(!replacementBody.contains("name=\"stream\""),
                "blocking repair should retain JSON response semantics")
-        expect(replacement.value(forHTTPHeaderField: "Content-Length") ==
-               String(replacement.httpBody?.count ?? -1),
-               "multipart Content-Length must exactly match its deterministic body")
+        // Content-Length is a reserved header: URLSession derives it from
+        // httpBody. Setting it by hand was redundant, and would go stale if the
+        // body were ever touched after construction.
+        expect(replacement.value(forHTTPHeaderField: "Content-Length") == nil,
+               "Content-Length must be left to URLSession, not set by hand")
+        expect((replacement.httpBody?.count ?? 0) > 0,
+               "the multipart body is still assembled in full")
 
-        let expression = PetGenerationCoordinator.expressionSheetRequest(
+        let expression = requireRequest(PetGenerationCoordinator.expressionSheetRequest(
             stage: .bloom, stageFrameData: master, referenceData: identity,
             styleBoardData: style, personalityVisual: "quiet and curious",
             quality: .medium, apiKey: "expression-key",
-            boundary: "mimo-expression-test")
+            boundary: "mimo-expression-test"), "expressionSheetRequest")
         let expressionBody = String(decoding: expression.httpBody ?? Data(), as: UTF8.self)
         expect(expressionBody.contains("name=\"size\"\r\n\r\n1536x1024\r\n") &&
                expressionBody.contains("name=\"quality\"\r\n\r\nmedium\r\n"),
@@ -529,6 +544,16 @@ struct PetGenerationTests {
         }
         expect(wholeEvents.count == splitEvents.count,
                "chunked decoding must agree with byte-at-a-time decoding")
+
+        // Each reference is capped individually, but a stage request attaches
+        // four — the aggregate is what the provider actually rejects, and it
+        // must degrade rather than trap. Request construction used to hold a
+        // `precondition`, i.e. a hard crash inside a network-request builder.
+        let oversized = Data(repeating: 0x89, count: PetGenerationCoordinator.maximumRequestBodyBytes + 1)
+        expect(PetGenerationCoordinator.characterSheetRequest(
+            imageData: oversized, personalityVisual: "test", likeness: 0.5,
+            apiKey: "test-key", boundary: "mimo-huge") == nil,
+               "a body over the provider payload limit is refused before it is built")
 
         print("pet generation tests passed")
     }

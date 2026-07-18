@@ -301,10 +301,16 @@ final class AppleVisionReferenceAnalyzer: MimoReferenceVisionAnalyzing {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
         let sourceRowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        // A zero-dimension buffer made `baseAddress` nil and the force-unwrap
+        // trapped — a hard crash in a path whose contract (see the doc above)
+        // is that returning nil is the safe degradation.
+        guard width > 0, height > 0, sourceRowBytes >= width else { return nil }
         var bytes = [UInt8](repeating: 0, count: width * height)
-        for row in 0..<height {
-            _ = bytes.withUnsafeMutableBytes { destination in
-                memcpy(destination.baseAddress!.advanced(by: row * width),
+        // one withUnsafeMutableBytes for the whole copy, not one per row
+        bytes.withUnsafeMutableBytes { destination in
+            guard let target = destination.baseAddress else { return }
+            for row in 0..<height {
+                memcpy(target.advanced(by: row * width),
                        base.advanced(by: row * sourceRowBytes), width)
             }
         }
@@ -1192,9 +1198,16 @@ final class MimoReferencePreprocessor {
     private func darkChromeContentRect(_ image: CGImage) -> CGRect {
         let sampleWidth = 64
         let sampleHeight = 64
-        var pixels = [UInt8](repeating: 0, count: sampleWidth * sampleHeight * 4)
+        // This one reads the buffer back after drawing, so it owns the memory
+        // explicitly. `&pixels` on a local Array only guaranteed the pointer
+        // for the duration of the CGContext call, not for the draw and the
+        // scan that follow.
+        let byteCount = sampleWidth * sampleHeight * 4
+        let pixels = UnsafeMutablePointer<UInt8>.allocate(capacity: byteCount)
+        pixels.initialize(repeating: 0, count: byteCount)
+        defer { pixels.deinitialize(count: byteCount); pixels.deallocate() }
         guard let context = CGContext(
-            data: &pixels, width: sampleWidth, height: sampleHeight,
+            data: pixels, width: sampleWidth, height: sampleHeight,
             bitsPerComponent: 8, bytesPerRow: sampleWidth * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
@@ -1347,9 +1360,14 @@ final class MimoReferencePreprocessor {
                                draw: (CGContext) -> Void) -> CGImage? {
         guard width > 0, height > 0,
               width <= 4_096, height <= 4_096 else { return nil }
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        // `data: nil` lets CoreGraphics own the backing store for as long as
+        // the context and any CGImage derived from it need it. Passing
+        // `&pixels` from a local Array was undefined behaviour: that pointer is
+        // only guaranteed valid for the duration of the CGContext call itself,
+        // while the context keeps writing to it through draw() and makeImage().
+        // Nothing here reads the buffer back, so there is no reason to own it.
         guard let context = CGContext(
-            data: &pixels, width: width, height: height,
+            data: nil, width: width, height: height,
             bitsPerComponent: 8, bytesPerRow: width * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }

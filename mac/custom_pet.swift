@@ -637,9 +637,16 @@ final class CustomPetStore: @unchecked Sendable {
         }
 
         let bytesPerRow = sheetWidth * 4
-        var pixels = [UInt8](repeating: 0, count: bytesPerRow * sheetHeight)
+        // Owned explicitly because the alpha scan below reads it back after
+        // draw(). `&pixels` on a local Array only guarantees the pointer for
+        // the duration of the CGContext call, while the context keeps writing
+        // through it — undefined behaviour that happened to work.
+        let byteCount = bytesPerRow * sheetHeight
+        let pixels = UnsafeMutablePointer<UInt8>.allocate(capacity: byteCount)
+        pixels.initialize(repeating: 0, count: byteCount)
+        defer { pixels.deinitialize(count: byteCount); pixels.deallocate() }
         guard let context = CGContext(
-            data: &pixels,
+            data: pixels,
             width: sheetWidth,
             height: sheetHeight,
             bitsPerComponent: 8,

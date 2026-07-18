@@ -527,6 +527,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             guard !self.isCancelled(requestID) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
             }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .candidateBoard, progress: progress,
                                     completion: completion)
@@ -575,6 +579,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             )
             guard !self.isCancelled(requestID) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
             }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .evolutionSheet, progress: progress,
@@ -627,6 +635,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             guard !self.isCancelled(requestID) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
             }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .replacement(stage), progress: progress,
                                     completion: completion)
@@ -676,6 +688,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             guard !self.isCancelled(requestID) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
             }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .expressionSheet(stage), progress: progress,
                                     completion: completion)
@@ -716,6 +732,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
             guard !self.isCancelled(requestID) else {
                 self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
             }
+            guard let request else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performJSON(request, provider: "OpenAI", requestID: requestID) { result in
                 guard !self.isCancelled(requestID) else {
                     self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
@@ -747,7 +767,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                       likeness: Double, apiKey: String,
                                       quality: PetGenerationQuality = .medium,
                                       boundary: String = "mimo-\(UUID().uuidString)",
-                                      delivery: PetGenerationDelivery = .blocking) -> URLRequest {
+                                      delivery: PetGenerationDelivery = .blocking) -> URLRequest? {
         imageEditRequest(
             references: [PetMultipartImage(filename: "reference.png", data: imageData)],
             prompt: characterSheetPrompt(personalityVisual: personalityVisual, likeness: likeness),
@@ -811,7 +831,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                       personalityVisual: String, likeness: Double,
                                       apiKey: String,
                                       delivery: PetGenerationDelivery = .blocking,
-                                      boundary: String = "mimo-candidates-\(UUID().uuidString)") -> URLRequest {
+                                      boundary: String = "mimo-candidates-\(UUID().uuidString)") -> URLRequest? {
         var references = [PetMultipartImage(filename: "identity-reference.png", data: referenceData)]
         if let styleBoardData {
             references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
@@ -897,7 +917,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                            quality: PetFinalGenerationQuality = .medium,
                                            apiKey: String,
                                            delivery: PetGenerationDelivery = .blocking,
-                                           boundary: String = "mimo-evolution-\(UUID().uuidString)") -> URLRequest {
+                                           boundary: String = "mimo-evolution-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "approved-master.png", data: masterData),
             PetMultipartImage(filename: "identity-reference.png", data: referenceData),
@@ -986,7 +1006,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                        quality: PetFinalGenerationQuality = .medium,
                                        apiKey: String,
                                        delivery: PetGenerationDelivery = .blocking,
-                                       boundary: String = "mimo-stage-\(UUID().uuidString)") -> URLRequest {
+                                       boundary: String = "mimo-stage-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "current-evolution-sheet.png", data: currentSheetData),
             PetMultipartImage(filename: "approved-master.png", data: masterData),
@@ -1064,7 +1084,7 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                        quality: PetFinalGenerationQuality = .medium,
                                        apiKey: String,
                                        delivery: PetGenerationDelivery = .blocking,
-                                       boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest {
+                                       boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "locked-stage-design.png", data: stageFrameData),
             PetMultipartImage(filename: "identity-reference.png", data: referenceData),
@@ -1179,9 +1199,17 @@ final class PetGenerationCoordinator: @unchecked Sendable {
                                          apiKey: String,
                                          delivery: PetGenerationDelivery,
                                          timeout: TimeInterval,
-                                         boundary: String) -> URLRequest {
-        precondition(!references.isEmpty && references.count <= 10,
-                     "OpenAI image edits require 1...10 reference images")
+                                         boundary: String) -> URLRequest? {
+        // A hard trap is the wrong failure mode for a network-request builder
+        // in a shipping app: returning nil lets the caller surface
+        // .invalidImage instead of killing the process.
+        guard !references.isEmpty, references.count <= 10 else { return nil }
+        // Each reference is capped at 20MB individually, but a stage request
+        // attaches four. The multipart body accumulates them all and
+        // `httpBody = body` copies again, so an unchecked aggregate meant a
+        // ~160MB transient peak and a 413 from the provider.
+        let referenceBytes = references.reduce(0) { $0 + $1.data.count }
+        guard referenceBytes <= maximumRequestBodyBytes else { return nil }
         let url = URL(string: "https://api.openai.com/v1/images/edits")!
         var body = Data()
         func field(_ name: String, _ value: String) {
@@ -1213,7 +1241,8 @@ final class PetGenerationCoordinator: @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
+        // Content-Length is reserved — URLSession computes it from httpBody.
+        // Setting it by hand is redundant at best and conflicting at worst.
         if case .streaming = delivery {
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         }
@@ -1585,6 +1614,10 @@ final class PetGenerationCoordinator: @unchecked Sendable {
         guard let data = dataFromDataURI(value), validReference(data) else { return nil }
         return data
     }
+
+    /// OpenAI's images/edits payload limit, with headroom for the multipart
+    /// framing and the prompt.
+    static let maximumRequestBodyBytes = 45 * 1024 * 1024
 
     private static func validReference(_ data: Data?) -> Bool {
         guard let data else { return true }

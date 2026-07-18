@@ -2523,15 +2523,15 @@ document.addEventListener('DOMContentLoaded', () => {
           const d = new Date(now); d.setHours(hour, minute, 0, 0); return d.getTime();
         };
         Fam.history = [
-          {app:'VS Code',kind:'code',detail:'Focus Familiar — overlay.html',canon:'Focus Familiar overlay',t0:at(8,10),t1:at(9,20)},
+          {app:'VS Code',kind:'code',detail:'Mimo — overlay.html',canon:'Mimo overlay',t0:at(8,10),t1:at(9,20)},
           {app:'Arc',kind:'neutral',detail:'morning tabs',canon:'Arc research',t0:at(9,30),t1:at(10,15)},
           {app:'Preview',kind:'paper',detail:'Designing Data-Intensive Applications',canon:'Designing Data-Intensive Applications',t0:at(10,20),t1:at(11,50)},
           {app:'Mail',kind:'neutral',detail:'inbox',canon:'Mail',t0:at(12,0),t1:at(12,40)},
           {app:'Figma',kind:'cad',detail:'Woven Day studies',canon:'Woven Day',t0:at(12,45),t1:at(14,30)},
           {app:'X',kind:'distraction',detail:'Home / X',canon:'X feed',t0:at(14,30),t1:at(15,10)},
-          {app:'Notion',kind:'notes',detail:'Focus Familiar — design notes',canon:'Focus Familiar design notes',t0:at(15,20),t1:at(17,45)},
+          {app:'Notion',kind:'notes',detail:'Mimo — design notes',canon:'Mimo design notes',t0:at(15,20),t1:at(17,45)},
           {app:'Messages',kind:'neutral',detail:'catch up',canon:'Messages',t0:at(18,0),t1:at(18,50)},
-          {app:'Terminal',kind:'term',detail:'focus-familiar — zsh',canon:'Focus Familiar build',t0:at(19,0),t1:at(20,10)},
+          {app:'Terminal',kind:'term',detail:'mimo — zsh',canon:'Mimo build',t0:at(19,0),t1:at(20,10)},
           {app:'YouTube',kind:'distraction',detail:'Home',canon:'YouTube',t0:at(20,10),t1:at(20,35)}
         ].map(h => ({...h, t1:Math.min(h.t1, now)})).filter(h => h.t0 < now && h.t1 > h.t0);
         Fam.cur = {app:'VS Code',kind:'code',detail:'Cozy Parchment journal',canon:'Cozy Parchment journal',t0:now-32*m};

@@ -359,7 +359,7 @@ select{ font-family:inherit; font-size:11.5px; color:var(--ink); background:#1c1
 </head>
 <body>
 
-<h1>🐾 Mimo <span style="font-size:.62em;color:var(--dim)">米墨</span></h1>
+<h1>🐾 Mimo <span style="font-size:.62em;color:var(--dim)">米墨</span> <span id="betaBadge" style="font-size:.5em;vertical-align:middle;color:var(--dim);background:#ffffff12;border-radius:5px;padding:2px 8px">Beta</span></h1>
 <div class="tagline" data-zh="住在桌面角落，陪你一起成长。活动记录只留在这台 Mac；DIY 图片只在你点击生成时发送。" data-en="A tiny familiar who grows with your attention. Activity stays on this Mac; DIY images leave only when you choose Generate.">住在桌面角落，陪你一起成长。活动记录只留在这台 Mac；DIY 图片只在你点击生成时发送。</div>
 
 <nav class="settings-tabs" aria-label="Settings sections">
@@ -628,7 +628,6 @@ const STUDIO_STAGES=[
 const MAX_STYLE_TUNING=160;
 const STYLE_TUNING_SUGGESTIONS=[
   {id:'mature-glam',zh:'御姐感',en:'mature glam',phraseZh:'明确成年主体：成熟自信、有御姐气场',phraseEn:'adult: mature, confident'},
-  {id:'alluring',zh:'性感一点',en:'more alluring',phraseZh:'明确成年主体：更性感有魅力，穿搭得体',phraseEn:'adult: alluring, tasteful'},
   {id:'source-faithful',zh:'贴近原图',en:'closer to source',phraseZh:'整体更贴近原图',phraseEn:'closer to source'},
   {id:'slimmer',zh:'纤细一点',en:'slimmer build',phraseZh:'身形更纤细轻巧',phraseEn:'a slimmer, lighter silhouette'},
   {id:'longer',zh:'拉长比例',en:'longer proportions',phraseZh:'身体和四肢比例更修长',phraseEn:'longer body and limb proportions'},
@@ -846,7 +845,13 @@ function selectImageQuality(id){
 }
 function renderKeyState(){
   const openai=document.getElementById('openAIKeyState');if(!openai)return;
-  openai.textContent=S.openAIConfigured?tx('已连接','connected'):tx('未设置','not set');openai.className=S.openAIConfigured?'ok':'';
+  /* The environment wins over the Keychain, so "clear key" can leave the app
+     still configured and still spending. Say which one is actually in use. */
+  const fromEnv=S.openAIKeySource==='environment';
+  openai.textContent=!S.openAIConfigured?tx('未设置','not set')
+    :fromEnv?tx('已连接（环境变量 OPENAI_API_KEY）','connected (OPENAI_API_KEY from environment)')
+    :tx('已连接','connected');
+  openai.className=S.openAIConfigured?'ok':'';
 }
 function candidateImage(candidate){return typeof candidate==='string'?candidate:(candidate?.image||candidate?.url||candidate?.preview||candidate?.dataURI||'')}
 function diagnosticsHTML(){
@@ -1021,7 +1026,7 @@ setInterval(()=>{
 function savePetKeys(){send({type:'petSaveKeys',openAI:document.getElementById('openAIKey').value})}
 function clearPetKey(provider){send({type:'petClearKey',provider})}
 function petKeysSaved(state){
-  S.openAIConfigured=!!state.openAIConfigured;const input=document.getElementById('openAIKey');
+  S.openAIConfigured=!!state.openAIConfigured;S.openAIKeySource=state.openAIKeySource||'none';const input=document.getElementById('openAIKey');
   if(input&&(state.cleared==='OpenAI'||!(state.failed||[]).includes('OpenAI')))input.value='';
   renderKeyState();if(state.error){document.getElementById('apiSetup').open=true;petLab.error=state.error;petLab.errorKind='setup';petLab.status='error';renderPetLab()}
   else if(S.openAIConfigured)document.getElementById('apiSetup').open=false;
@@ -1237,6 +1242,16 @@ function petStageResult(event){
   const used=[...new Set(petLab.stageQualities.filter(Boolean))];petLab.sheetQuality=used.length===1?used[0]:'mixed';
   Object.assign(petLab,{requestID:null,status:'ready',operation:'stage',preservedResult:false,stageBusyIndex:null,error:'',errorKind:'',errorCode:''});renderPetLab();
 }
+/* The user cancelled. Every request now terminates through its completion
+   handler so the ledger unwinds, but there is nothing to report here — drop
+   back to idle instead of flashing an error. */
+function petStudioCancelled(event){
+  if(event.requestID&&event.requestID!==petLab.requestID)return;
+  finishStudioOperation(event);
+  Object.assign(petLab,{status:petLab.sheet?'ready':'idle',error:null,errorCode:'',
+    errorKind:null,activeCandidateIndex:null,recoveryRequestID:null,requestID:null,startedAt:null});
+  renderPetLab();
+}
 function petStudioError(event){
   if(event.requestID&&event.requestID!==petLab.requestID)return;const marker=`${event.kind||''} ${event.scope||''} ${event.phase||''} ${event.code||''} ${event.message||''} ${event.messageEn||''}`.toLowerCase();
   const setup=!!event.requestNotStarted||/setup|input|stale|expired|missing_api_key|request_id|generation_in_progress/.test(marker);
@@ -1292,6 +1307,9 @@ function petExpressionResult(event){
   petLab.expr={status:'busy',characterID:event.characterID,stageIndex:event.stageIndex||0,
     phase:'stage-done',completed:event.completed||0,total:event.total||3,error:null};
   renderPetLab();
+}
+function petExpressionCancelled(event){
+  petLab.expr=null;renderPetLab();
 }
 function petExpressionError(event){
   petLab.expr={status:'error',characterID:event.characterID,stageIndex:event.stageIndex||0,
@@ -1483,6 +1501,8 @@ function initSettings(state){
   document.getElementById('loginTog').checked = !!state.login;
   document.getElementById('stats').textContent = state.stats || '';
   document.getElementById('projBtn').textContent = (state.projects || tx('选择','choose')) + '…';
+  const beta = document.getElementById('betaBadge');
+  if(beta && state.appVersion) beta.textContent = `Beta v${state.appVersion}`;
   setSettingsTab(activeSettingsTab);
 }
 applyLanguage();

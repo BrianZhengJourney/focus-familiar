@@ -10,6 +10,7 @@ enum FamiliarGenerationPhase: String, Codable, Sendable {
     case candidates
     case evolution
     case replacement
+    case expressionSheet
 }
 
 enum FamiliarGenerationDraftStatus: String, Codable, Sendable {
@@ -118,7 +119,7 @@ final class FamiliarGenerationDraftStore: @unchecked Sendable {
             try encode(manifest).write(to: temporary.appendingPathComponent(Self.manifestFilename), options: [.atomic])
             try fileManager.moveItem(at: temporary, to: destination)
             cleanup = false
-            try enforceMaximumStorageLocked()
+            try enforceMaximumStorageLocked(preserving: requestID)
             return manifest
         }
     }
@@ -293,12 +294,18 @@ final class FamiliarGenerationDraftStore: @unchecked Sendable {
         }
     }
 
-    private func enforceMaximumStorageLocked() throws {
+    /// `preserving` is the request that just wrote, or is otherwise live.
+    /// Records are evicted oldest-first, so without it the draft saved
+    /// moments ago could be reclaimed between saveRaw and the caller reading
+    /// it back — silently turning `outputRetained: true` into a missing file.
+    /// The ledger's own prune already pins its active ID this way.
+    private func enforceMaximumStorageLocked(preserving: String? = nil) throws {
         let entries = try fileManager.contentsOfDirectory(
             at: draftsURL,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ).filter { UUID(uuidString: $0.lastPathComponent) != nil }
+        let pinned = preserving.flatMap { UUID(uuidString: $0)?.uuidString.lowercased() }
         var records: [(url: URL, date: Date, bytes: Int)] = entries.map { entry in
             let manifest = try? loadManifest(entry.lastPathComponent)
             let modified = (try? entry.resourceValues(
@@ -314,6 +321,7 @@ final class FamiliarGenerationDraftStore: @unchecked Sendable {
         var total = records.reduce(0) { $0 + $1.bytes }
         records.sort { $0.date < $1.date }
         for record in records where total > Self.maximumStoredBytes {
+            guard record.url.lastPathComponent.lowercased() != pinned else { continue }
             try? fileManager.removeItem(at: record.url)
             total -= record.bytes
         }

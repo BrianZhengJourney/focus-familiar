@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mimo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-I", "-c", "import os,functools,socketserver,http.server; H=functools.partial(http.server.SimpleHTTPRequestHandler, directory='/private/tmp/mimo-serve'); socketserver.TCPServer.allow_reuse_address=True; s=socketserver.TCPServer(('127.0.0.1', int(os.environ.get('PORT','5199'))), H); s.serve_forever()"],
+      "autoPort": true
+    }
+  ]
+}

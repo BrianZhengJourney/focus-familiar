@@ -395,10 +395,33 @@ final class CustomPetStore: @unchecked Sendable {
               Self.isDescendant(sheetURL, of: petsURL) else {
             throw CustomPetStoreError.unsafeAssetPath
         }
-        _ = try sanitizedSheetData(at: sheetURL)
+        try verifySheetIsLoadable(at: sheetURL)
         return runtimeSpec(for: manifest)
     }
 
+    /// Path and container checks only — no rasterization.
+    ///
+    /// `validateNormalizedPNG` decodes a 1536x512 sheet and scans 786k pixels.
+    /// Running that per pet on every `pushSettingsState` (which fires on every
+    /// Settings open, language change, and expression-sheet completion) and per
+    /// `mimo-pet://` asset request meant seconds of main-thread work for a
+    /// property the install path already guaranteed. The cheap check is what
+    /// the code comment at `validatePNGMetadata` always said belonged here.
+    private func verifySheetIsLoadable(at sheetURL: URL) throws {
+        guard Self.isSafeRegularFile(sheetURL, maximumBytes: Self.maximumPNGBytes,
+                                     fileManager: fileManager),
+              Self.isDescendant(sheetURL, of: petsURL) else {
+            throw CustomPetStoreError.unsafeAssetPath
+        }
+        let data = try Data(contentsOf: sheetURL, options: [.mappedIfSafe])
+        try Self.validatePNGMetadata(data)
+    }
+
+    /// Bytes to hand the WebView. Sanitizes for rendering but never writes:
+    /// a read path that mutates persistent state turned a transient IO error
+    /// into a broken image, and rewrote multi-megabyte files from inside the
+    /// store lock on the main thread. Persisting the repair is
+    /// `repairStoredSheets()`'s job.
     private func sanitizedSheetData(at sheetURL: URL) throws -> Data {
         guard Self.isSafeRegularFile(sheetURL, maximumBytes: Self.maximumPNGBytes,
                                      fileManager: fileManager),
@@ -407,13 +430,32 @@ final class CustomPetStore: @unchecked Sendable {
         }
         let data = try Data(contentsOf: sheetURL, options: [.mappedIfSafe])
         let sanitized = try CharacterSheetProcessor.sanitizeNormalizedSheet(pngData: data)
-        try Self.validateNormalizedPNG(sanitized)
-        if sanitized != data {
-            try sanitized.write(to: sheetURL, options: [.atomic])
-            try? fileManager.setAttributes([.posixPermissions: 0o600],
-                                           ofItemAtPath: sheetURL.path)
-        }
+        try Self.validatePNGMetadata(sanitized)
         return sanitized
+    }
+
+    /// One-shot repair of sheets written before the install path sanitized
+    /// them. Explicit and off the hot paths, rather than a hidden side effect
+    /// of every image load. Safe to call from a background queue.
+    func repairStoredSheets() {
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: petsURL, includingPropertiesForKeys: nil) else { return }
+        for directory in entries {
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil) else { continue }
+            for sheetURL in files where sheetURL.pathExtension == "png" {
+                guard Self.isSafeRegularFile(sheetURL, maximumBytes: Self.maximumPNGBytes,
+                                             fileManager: fileManager),
+                      Self.isDescendant(sheetURL, of: petsURL),
+                      let data = try? Data(contentsOf: sheetURL, options: [.mappedIfSafe]),
+                      let sanitized = try? CharacterSheetProcessor.sanitizeNormalizedSheet(pngData: data),
+                      sanitized != data,
+                      (try? Self.validateNormalizedPNG(sanitized)) != nil else { continue }
+                try? sanitized.write(to: sheetURL, options: [.atomic])
+                try? fileManager.setAttributes([.posixPermissions: 0o600],
+                                               ofItemAtPath: sheetURL.path)
+            }
+        }
     }
 
     private func loadManifest(uuidString: String) throws -> CustomPetManifest {
@@ -463,7 +505,11 @@ final class CustomPetStore: @unchecked Sendable {
                 "\(Self.scheme)://\(Self.schemeHost)/\(manifest.id)/\(filename)?v=\(Self.assetRevision)"
         }
         return CustomPetRuntimeSpec(
-            schemaVersion: Self.schemaVersion,
+            // The manifest's own version, not the current one. Hardcoding
+            // Self.schemaVersion advertised a v2 pet as v3 with empty
+            // expressionURLs — indistinguishable from a v3 pet that simply has
+            // no expression sheets, and no record of what was ever migrated.
+            schemaVersion: manifest.schemaVersion,
             kind: Self.kind,
             id: manifest.id,
             characterID: Self.characterPrefix + manifest.id,
@@ -637,9 +683,16 @@ final class CustomPetStore: @unchecked Sendable {
         }
 
         let bytesPerRow = sheetWidth * 4
-        var pixels = [UInt8](repeating: 0, count: bytesPerRow * sheetHeight)
+        // Owned explicitly because the alpha scan below reads it back after
+        // draw(). `&pixels` on a local Array only guarantees the pointer for
+        // the duration of the CGContext call, while the context keeps writing
+        // through it — undefined behaviour that happened to work.
+        let byteCount = bytesPerRow * sheetHeight
+        let pixels = UnsafeMutablePointer<UInt8>.allocate(capacity: byteCount)
+        pixels.initialize(repeating: 0, count: byteCount)
+        defer { pixels.deinitialize(count: byteCount); pixels.deallocate() }
         guard let context = CGContext(
-            data: &pixels,
+            data: pixels,
             width: sheetWidth,
             height: sheetHeight,
             bitsPerComponent: 8,

@@ -75,16 +75,28 @@ enum MimoSecret: String {
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
+    /// Where the credential actually comes from. The environment wins over the
+    /// Keychain in `read()`, so after "clear key" the UI still reported
+    /// configured and generations kept spending — with no way to tell which
+    /// credential was in use.
+    enum Source: String { case environment, keychain, none }
+
+    var source: Source {
+        for key in environmentNames {
+            if let raw = ProcessInfo.processInfo.environment[key], validated(raw) != nil {
+                return .environment
+            }
+        }
+        return keychainHasValue ? .keychain : .none
+    }
+
+    var isConfigured: Bool { source != .none }
+
     /// Settings only needs to know whether a credential exists. Asking for its
     /// bytes here can summon SecurityAgent and block the app's main thread on
     /// every ad-hoc development build. Attribute lookup is non-interactive;
     /// the value is requested only after the user starts a generation.
-    var isConfigured: Bool {
-        for key in environmentNames {
-            if let raw = ProcessInfo.processInfo.environment[key], validated(raw) != nil {
-                return true
-            }
-        }
+    private var keychainHasValue: Bool {
         let context = LAContext()
         context.interactionNotAllowed = true
         let query: [String: Any] = [
@@ -106,6 +118,9 @@ enum PetGenerationError: LocalizedError {
     case invalidResponse(String)
     case provider(String)
     case timedOut
+    /// Delivered so every request terminates through its completion handler.
+    /// Callers release their bookkeeping on it and show nothing to the user.
+    case cancelled
 
     var errorDescription: String? {
         switch self {
@@ -114,7 +129,13 @@ enum PetGenerationError: LocalizedError {
         case .invalidResponse(let provider): return "\(provider) returned an unreadable response"
         case .provider(let message): return message
         case .timedOut: return "Generation timed out"
+        case .cancelled: return "Generation cancelled"
         }
+    }
+
+    var isCancellation: Bool {
+        if case .cancelled = self { return true }
+        return false
     }
 }
 
@@ -303,6 +324,41 @@ enum PetImageStreamDecodingError: Error {
     case oversizedEvent
 }
 
+extension URLSession.AsyncBytes {
+    /// Batches the per-byte async sequence into `Data` chunks.
+    ///
+    /// This collapses the *consumer* cost: the decoder and the cancellation
+    /// check ran once per byte, so a ~28MB base64 payload meant ~30 million
+    /// `Data.append` calls and ~30 million lock round-trips against `cancel()`.
+    /// Both now run once per chunk.
+    ///
+    /// It does not remove the per-byte `await` on `URLSession.AsyncBytes`
+    /// itself — that needs a `URLSessionDataDelegate` receiving real `Data`
+    /// callbacks instead of `session.bytes(for:)`.
+    func chunked(into size: Int) -> AsyncThrowingStream<Data, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var buffer = Data()
+                buffer.reserveCapacity(size)
+                do {
+                    for try await byte in self {
+                        buffer.append(byte)
+                        if buffer.count >= size {
+                            continuation.yield(buffer)
+                            buffer.removeAll(keepingCapacity: true)
+                        }
+                    }
+                    if !buffer.isEmpty { continuation.yield(buffer) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
 /// Incremental SSE framing shared by the live URLSession byte stream and the
 /// regression replay seam. OpenAI can split a JSON payload at any byte, and a
 /// terminal event is still valid when the connection closes without a final
@@ -313,6 +369,32 @@ struct PetImageStreamDecoder {
 
     private var line = Data()
     private var eventData = Data()
+
+    /// Bulk entry point. A completed 1536x1024 PNG arrives as ~28MB of base64;
+    /// feeding that in one byte at a time cost ~30 million async suspensions
+    /// and lock round-trips per generation. SSE is line-framed, so scan for the
+    /// newline and hand whole slices to the line buffer.
+    mutating func append(_ chunk: Data) throws -> [PetImageStreamEvent] {
+        var events: [PetImageStreamEvent] = []
+        var rest = chunk[...]
+        while let newline = rest.firstIndex(of: 0x0a) {
+            try appendToLine(rest[rest.startIndex..<newline])
+            events.append(contentsOf: try consumeLine())
+            line.removeAll(keepingCapacity: true)
+            rest = rest[rest.index(after: newline)...]
+        }
+        try appendToLine(rest)
+        return events
+    }
+
+    private mutating func appendToLine(_ slice: Data.SubSequence) throws {
+        // strip CR from CRLF framing; anything else goes in verbatim
+        let body = slice.last == 0x0d ? slice.dropLast() : slice
+        guard line.count + body.count <= Self.maximumLineBytes else {
+            throw PetImageStreamDecodingError.oversizedEvent
+        }
+        line.append(contentsOf: body)
+    }
 
     mutating func append(_ byte: UInt8) throws -> [PetImageStreamEvent] {
         if byte == 0x0a {
@@ -370,7 +452,12 @@ private struct PetMultipartImage {
     let data: Data
 }
 
-final class PetGenerationCoordinator {
+/// Unchecked because the compiler cannot see the lock: every mutable property
+/// below (`cancelled`, `activeTasks`, `activeStreams`) is only ever touched
+/// while holding `lock`, and everything else is a `let`. The coordinator has
+/// always been driven from several queues at once — the credential queue, the
+/// URLSession delegate queue, and the main callback queue.
+final class PetGenerationCoordinator: @unchecked Sendable {
     typealias SheetProgress = (_ phase: String, _ detail: String?) -> Void
     typealias SheetCompletion = (Result<Data, Error>) -> Void
     typealias StagedProgress = (_ phase: String, _ partialImage: Data?, _ partialIndex: Int?) -> Void
@@ -389,8 +476,13 @@ final class PetGenerationCoordinator {
     init(openAIKeyReader: @escaping () -> String? = { MimoSecret.openAI.read() }) {
         self.openAIKeyReader = openAIKeyReader
         let config = URLSessionConfiguration.ephemeral
+        // timeoutIntervalForRequest is the inactivity budget; for a stream it
+        // resets on every byte. timeoutIntervalForResource is a hard wall-clock
+        // cap on the whole task and must sit well above the largest per-request
+        // timeout (420 for .high) — when they were equal, a high-quality job
+        // was torn down at the moment it was billed, with nothing retained.
         config.timeoutIntervalForRequest = 180
-        config.timeoutIntervalForResource = 420
+        config.timeoutIntervalForResource = 900
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: config)
     }
@@ -417,13 +509,20 @@ final class PetGenerationCoordinator {
                                 completion: @escaping StagedCompletion) {
         begin(requestID)
         credentialQueue.async { [weak self] in
-            guard let self, !self.isCancelled(requestID) else { return }
+            guard let self else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let key = self.openAIKeyReader() else {
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
                 return
             }
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let reference = Self.validatedDataURI(sourceDataURI),
                   Self.validReference(styleBoardData) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
@@ -437,7 +536,13 @@ final class PetGenerationCoordinator {
                 personalityVisual: personalityVisual, likeness: likeness,
                 apiKey: key, delivery: .streaming(.one)
             )
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .candidateBoard, progress: progress,
                                     completion: completion)
@@ -454,13 +559,20 @@ final class PetGenerationCoordinator {
                                      completion: @escaping StagedCompletion) {
         begin(requestID)
         credentialQueue.async { [weak self] in
-            guard let self, !self.isCancelled(requestID) else { return }
+            guard let self else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let key = self.openAIKeyReader() else {
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
                 return
             }
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard Self.validReference(masterData),
                   let reference = Self.validatedDataURI(sourceDataURI),
                   Self.validReference(styleBoardData) else {
@@ -477,7 +589,13 @@ final class PetGenerationCoordinator {
                 likeness: likeness, quality: quality, apiKey: key,
                 delivery: .streaming(.one)
             )
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .evolutionSheet, progress: progress,
                                     completion: completion)
@@ -495,13 +613,20 @@ final class PetGenerationCoordinator {
                                   completion: @escaping StagedCompletion) {
         begin(requestID)
         credentialQueue.async { [weak self] in
-            guard let self, !self.isCancelled(requestID) else { return }
+            guard let self else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let key = self.openAIKeyReader() else {
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
                 return
             }
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard Self.validReference(currentSheetData), Self.validReference(masterData),
                   let reference = Self.validatedDataURI(sourceDataURI),
                   Self.validReference(styleBoardData) else {
@@ -519,7 +644,13 @@ final class PetGenerationCoordinator {
                 likeness: likeness, quality: quality, apiKey: key,
                 delivery: .streaming(.one)
             )
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .replacement(stage), progress: progress,
                                     completion: completion)
@@ -530,7 +661,7 @@ final class PetGenerationCoordinator {
     /// the overlay can blink and emote by frame-swapping. Runs once per stage
     /// at adoption; a failure only costs that stage its expressions.
     func generateExpressionSheet(requestID: String, stage: PetEvolutionStage,
-                                 stageFrameData: Data, sourceDataURI: String,
+                                 stageFrameData: Data, sourceDataURI: String?,
                                  styleBoardData: Data?,
                                  personalityVisual: String,
                                  quality: PetFinalGenerationQuality,
@@ -538,15 +669,23 @@ final class PetGenerationCoordinator {
                                  completion: @escaping StagedCompletion) {
         begin(requestID)
         credentialQueue.async { [weak self] in
-            guard let self, !self.isCancelled(requestID) else { return }
+            guard let self else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let key = self.openAIKeyReader() else {
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 self.finishStaged(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
                 return
             }
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            let reference = sourceDataURI.flatMap { Self.validatedDataURI($0) }
             guard Self.validReference(stageFrameData),
-                  let reference = Self.validatedDataURI(sourceDataURI),
+                  reference != nil || sourceDataURI == nil,
                   Self.validReference(styleBoardData) else {
                 self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
                 return
@@ -559,7 +698,13 @@ final class PetGenerationCoordinator {
                 quality: quality, apiKey: key,
                 delivery: .streaming(.one)
             )
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performImageStream(request, provider: "OpenAI", requestID: requestID,
                                     artifact: .expressionSheet(stage), progress: progress,
                                     completion: completion)
@@ -573,13 +718,20 @@ final class PetGenerationCoordinator {
                                 completion: @escaping SheetCompletion) {
         lock.lock(); cancelled.remove(requestID); lock.unlock()
         credentialQueue.async { [weak self] in
-            guard let self, !self.isCancelled(requestID) else { return }
+            guard let self else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let openAIKey = self.openAIKeyReader() else {
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 self.finishSheet(completion, result: .failure(PetGenerationError.missingKey("OpenAI")))
                 return
             }
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
             guard let imageData = Self.dataFromDataURI(sourceDataURI),
                   Self.isSupportedImageData(imageData), imageData.count <= 12 * 1024 * 1024 else {
                 self.finishSheet(completion, result: .failure(PetGenerationError.invalidImage)); return
@@ -590,9 +742,17 @@ final class PetGenerationCoordinator {
                                                      likeness: likeness,
                                                      apiKey: openAIKey,
                                                      quality: quality)
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+            }
+            guard let request else {
+                self.finishSheet(completion, result: .failure(PetGenerationError.invalidImage))
+                return
+            }
             self.performJSON(request, provider: "OpenAI", requestID: requestID) { result in
-                guard !self.isCancelled(requestID) else { return }
+                guard !self.isCancelled(requestID) else {
+                    self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+                }
                 switch result {
                 case .failure(let error): self.finishSheet(completion, result: .failure(error))
                 case .success(let json):
@@ -600,7 +760,9 @@ final class PetGenerationCoordinator {
                         self.finishSheet(completion, result: .failure(PetGenerationError.invalidResponse("OpenAI"))); return
                     }
                     self.resolveImage(first, requestID: requestID) { resolved in
-                        guard !self.isCancelled(requestID) else { return }
+                        guard !self.isCancelled(requestID) else {
+                            self.finishSheet(completion, result: .failure(PetGenerationError.cancelled)); return
+                        }
                         let checked = resolved.flatMap { data -> Result<Data, Error> in
                             guard let size = Self.pngPixelSize(data), size.0 == 1536, size.1 == 1024 else {
                                 return .failure(PetGenerationError.invalidResponse("OpenAI character sheet"))
@@ -618,7 +780,7 @@ final class PetGenerationCoordinator {
                                       likeness: Double, apiKey: String,
                                       quality: PetGenerationQuality = .medium,
                                       boundary: String = "mimo-\(UUID().uuidString)",
-                                      delivery: PetGenerationDelivery = .blocking) -> URLRequest {
+                                      delivery: PetGenerationDelivery = .blocking) -> URLRequest? {
         imageEditRequest(
             references: [PetMultipartImage(filename: "reference.png", data: imageData)],
             prompt: characterSheetPrompt(personalityVisual: personalityVisual, likeness: likeness),
@@ -682,7 +844,7 @@ final class PetGenerationCoordinator {
                                       personalityVisual: String, likeness: Double,
                                       apiKey: String,
                                       delivery: PetGenerationDelivery = .blocking,
-                                      boundary: String = "mimo-candidates-\(UUID().uuidString)") -> URLRequest {
+                                      boundary: String = "mimo-candidates-\(UUID().uuidString)") -> URLRequest? {
         var references = [PetMultipartImage(filename: "identity-reference.png", data: referenceData)]
         if let styleBoardData {
             references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
@@ -768,7 +930,7 @@ final class PetGenerationCoordinator {
                                            quality: PetFinalGenerationQuality = .medium,
                                            apiKey: String,
                                            delivery: PetGenerationDelivery = .blocking,
-                                           boundary: String = "mimo-evolution-\(UUID().uuidString)") -> URLRequest {
+                                           boundary: String = "mimo-evolution-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "approved-master.png", data: masterData),
             PetMultipartImage(filename: "identity-reference.png", data: referenceData),
@@ -857,7 +1019,7 @@ final class PetGenerationCoordinator {
                                        quality: PetFinalGenerationQuality = .medium,
                                        apiKey: String,
                                        delivery: PetGenerationDelivery = .blocking,
-                                       boundary: String = "mimo-stage-\(UUID().uuidString)") -> URLRequest {
+                                       boundary: String = "mimo-stage-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "current-evolution-sheet.png", data: currentSheetData),
             PetMultipartImage(filename: "approved-master.png", data: masterData),
@@ -929,17 +1091,20 @@ final class PetGenerationCoordinator {
     /// repeats it three times changing ONLY the facial expression, so all
     /// frames share one silhouette and frame-swaps cannot jitter.
     static func expressionSheetRequest(stage: PetEvolutionStage,
-                                       stageFrameData: Data, referenceData: Data,
+                                       stageFrameData: Data, referenceData: Data? = nil,
                                        styleBoardData: Data? = nil,
                                        personalityVisual: String,
                                        quality: PetFinalGenerationQuality = .medium,
                                        apiKey: String,
                                        delivery: PetGenerationDelivery = .blocking,
-                                       boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest {
+                                       boundary: String = "mimo-expression-\(UUID().uuidString)") -> URLRequest? {
         var references = [
             PetMultipartImage(filename: "locked-stage-design.png", data: stageFrameData),
-            PetMultipartImage(filename: "identity-reference.png", data: referenceData),
         ]
+        if let referenceData {
+            references.append(PetMultipartImage(filename: "identity-reference.png",
+                                                data: referenceData))
+        }
         if let styleBoardData {
             references.append(PetMultipartImage(filename: "mimo-style-board.png", data: styleBoardData))
         }
@@ -947,7 +1112,8 @@ final class PetGenerationCoordinator {
             references: references,
             prompt: expressionSheetPrompt(stage: stage,
                                           personalityVisual: personalityVisual,
-                                          hasStyleBoard: styleBoardData != nil),
+                                          hasStyleBoard: styleBoardData != nil,
+                                          hasIdentityBoard: referenceData != nil),
             size: PetGenerationArtifact.expressionSheet(stage).outputSize,
             quality: quality.providerQuality,
             apiKey: apiKey,
@@ -959,10 +1125,18 @@ final class PetGenerationCoordinator {
 
     static func expressionSheetPrompt(stage: PetEvolutionStage,
                                       personalityVisual: String,
-                                      hasStyleBoard: Bool) -> String {
+                                      hasStyleBoard: Bool,
+                                      hasIdentityBoard: Bool = true) -> String {
+        // Numbering has to track which references are actually attached: the
+        // identity board is optional now, so the style board is Image 2 when
+        // it is absent.
+        let styleIndex = hasIdentityBoard ? 3 : 2
         let styleReference = hasStyleBoard
-            ? "Image 3 is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
+            ? "Image \(styleIndex) is Mimo's internal STYLE BOARD; use rendering language only, never its identities or layout."
             : "No style-board image is supplied; preserve the established rendering language from Image 1 exactly."
+        let identityReference = hasIdentityBoard
+            ? "Image 2 is the locally prepared identity evidence board; consult it only to keep facial features on-model."
+            : "No separate identity board is supplied; Image 1 is the sole identity authority."
         return """
         MIMO ASSET PASS 3 — EXPRESSION SHEET FOR THE \(stage.rawValue.uppercased()) STAGE
 
@@ -970,7 +1144,7 @@ final class PetGenerationCoordinator {
         Image 1 is the LOCKED \(stage.rawValue.uppercased()) STAGE DESIGN and the absolute identity, pose, and scale
         lock. Reproduce its species, face structure, hairstyle or markings, palette, outfit, outline weight, shading,
         proportions, and silhouette EXACTLY in every panel.
-        Image 2 is the locally prepared identity evidence board; consult it only to keep facial features on-model.
+        \(identityReference)
         \(styleReference)
         Temperament: \(personalityVisual)
 
@@ -1050,9 +1224,17 @@ final class PetGenerationCoordinator {
                                          apiKey: String,
                                          delivery: PetGenerationDelivery,
                                          timeout: TimeInterval,
-                                         boundary: String) -> URLRequest {
-        precondition(!references.isEmpty && references.count <= 10,
-                     "OpenAI image edits require 1...10 reference images")
+                                         boundary: String) -> URLRequest? {
+        // A hard trap is the wrong failure mode for a network-request builder
+        // in a shipping app: returning nil lets the caller surface
+        // .invalidImage instead of killing the process.
+        guard !references.isEmpty, references.count <= 10 else { return nil }
+        // Each reference is capped at 20MB individually, but a stage request
+        // attaches four. The multipart body accumulates them all and
+        // `httpBody = body` copies again, so an unchecked aggregate meant a
+        // ~160MB transient peak and a 413 from the provider.
+        let referenceBytes = references.reduce(0) { $0 + $1.data.count }
+        guard referenceBytes <= maximumRequestBodyBytes else { return nil }
         let url = URL(string: "https://api.openai.com/v1/images/edits")!
         var body = Data()
         func field(_ name: String, _ value: String) {
@@ -1084,7 +1266,8 @@ final class PetGenerationCoordinator {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
+        // Content-Length is reserved — URLSession computes it from httpBody.
+        // Setting it by hand is redundant at best and conflicting at worst.
         if case .streaming = delivery {
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         }
@@ -1150,19 +1333,27 @@ final class PetGenerationCoordinator {
     }
 
     private func performImageStream(_ request: URLRequest, provider: String,
-                                    requestID: String, artifact _: PetGenerationArtifact,
+                                    requestID: String, artifact: PetGenerationArtifact,
+                                    attempt: Int = 0,
                                     progress: @escaping StagedProgress,
                                     completion: @escaping StagedCompletion) {
         let token = UUID()
         let (registrationEvents, registrationContinuation) = AsyncStream<Void>.makeStream()
         let stream = Task { [weak self] in
             for await _ in registrationEvents { break }
-            guard !Task.isCancelled else { return }
             guard let self else { return }
             defer { self.untrackStream(token, requestID: requestID) }
+            guard !Task.isCancelled else {
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled))
+                return
+            }
             do {
-                let (bytes, response) = try await self.session.bytes(for: request)
-                guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                let (bytes, response) = try await self.session.bytes(
+                    for: Self.idempotent(request, requestID: requestID))
+                guard !Task.isCancelled, !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled))
+                    return
+                }
                 guard let http = response as? HTTPURLResponse else {
                     self.finishStaged(completion, result: .failure(PetGenerationError.invalidResponse(provider)))
                     return
@@ -1171,9 +1362,31 @@ final class PetGenerationCoordinator {
                 guard 200..<300 ~= http.statusCode else {
                     var body = Data()
                     body.reserveCapacity(64 * 1024)
-                    for try await byte in bytes {
-                        guard body.count < 64 * 1024 else { break }
-                        body.append(byte)
+                    for try await chunk in bytes.chunked(into: 16 * 1024) {
+                        body.append(chunk)
+                        if body.count >= 64 * 1024 { break }
+                    }
+                    // The provider rejected the request before generating, so
+                    // replaying it cannot double-bill.
+                    let retryLimit = 2
+                    if attempt < retryLimit, Self.isRetryable(status: http.statusCode) {
+                        let delay = Self.retryDelay(
+                            attempt: attempt,
+                            retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+                        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
+                            [weak self] in
+                            guard let self else { return }
+                            guard !self.isCancelled(requestID) else {
+                                self.finishStaged(completion,
+                                                  result: .failure(PetGenerationError.cancelled))
+                                return
+                            }
+                            self.performImageStream(request, provider: provider,
+                                                    requestID: requestID, artifact: artifact,
+                                                    attempt: attempt + 1,
+                                                    progress: progress, completion: completion)
+                        }
+                        return
                     }
                     let object = try? JSONSerialization.jsonObject(with: body)
                     let providerMessage = Self.providerMessage(object as Any)
@@ -1193,14 +1406,11 @@ final class PetGenerationCoordinator {
                     switch event {
                     case .partial(let image, let index):
                         partialEventCount += 1
-                        guard partialEventCount <= 3 else {
-                            terminal = true
-                            self.finishStaged(
-                                completion,
-                                result: .failure(PetGenerationError.invalidResponse(streamDescription))
-                            )
-                            return true
-                        }
+                        // Past the cap, stop *emitting* but keep draining: the
+                        // billable final image rides on the .completed event
+                        // that follows. Failing here threw away a paid result
+                        // over a provider-side protocol quirk.
+                        guard partialEventCount <= 3 else { return false }
                         self.emitStaged(progress, phase: "partial", partialImage: image,
                                         partialIndex: index)
                     case .completed(let output):
@@ -1217,10 +1427,14 @@ final class PetGenerationCoordinator {
                     return terminal
                 }
 
-                streamBytes: for try await byte in bytes {
-                    guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                streamBytes: for try await chunk in bytes.chunked(into: 64 * 1024) {
+                    guard !Task.isCancelled, !self.isCancelled(requestID) else {
+                        self.finishStaged(completion,
+                                          result: .failure(PetGenerationError.cancelled))
+                        return
+                    }
                     do {
-                        for event in try decoder.append(byte) {
+                        for event in try decoder.append(chunk) {
                             if consume(event) { break streamBytes }
                         }
                     } catch {
@@ -1249,16 +1463,29 @@ final class PetGenerationCoordinator {
                         )
                     }
                 }
-                if !terminal && !Task.isCancelled && !self.isCancelled(requestID) {
+                if !terminal {
+                    let cancelled = Task.isCancelled || self.isCancelled(requestID)
                     self.finishStaged(
                         completion,
-                        result: .failure(PetGenerationError.invalidResponse(streamDescription))
+                        result: .failure(cancelled
+                            ? PetGenerationError.cancelled
+                            : PetGenerationError.invalidResponse(streamDescription))
                     )
                 }
             } catch is CancellationError {
-                return
+                self.finishStaged(completion, result: .failure(PetGenerationError.cancelled))
             } catch {
-                guard !Task.isCancelled, !self.isCancelled(requestID) else { return }
+                guard !Task.isCancelled, !self.isCancelled(requestID) else {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.cancelled))
+                    return
+                }
+                // surface a timeout as itself rather than leaving callers to
+                // substring-match a localized NSURLError description
+                if (error as NSError).code == NSURLErrorTimedOut,
+                   (error as NSError).domain == NSURLErrorDomain {
+                    self.finishStaged(completion, result: .failure(PetGenerationError.timedOut))
+                    return
+                }
                 self.finishStaged(completion, result: .failure(error))
             }
         }
@@ -1284,7 +1511,9 @@ final class PetGenerationCoordinator {
         request.setValue("image/png,image/jpeg,image/webp", forHTTPHeaderField: "Accept")
         request.setValue("bytes=0-\(maximumImageBytes)", forHTTPHeaderField: "Range")
         let token = UUID()
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(
+            with: Self.idempotent(request, requestID: requestID)
+        ) { data, response, error in
             self.untrack(token, requestID: requestID)
             if let error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode,
@@ -1301,21 +1530,24 @@ final class PetGenerationCoordinator {
     private func performJSON(_ request: URLRequest, provider: String, requestID: String, attempt: Int = 0,
                              completion: @escaping (Result<[String: Any], Error>) -> Void) {
         let token = UUID()
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(
+            with: Self.idempotent(request, requestID: requestID)
+        ) { data, response, error in
             self.untrack(token, requestID: requestID)
-            guard !self.isCancelled(requestID) else { return }
+            guard !self.isCancelled(requestID) else {
+                completion(.failure(PetGenerationError.cancelled)); return
+            }
             if let error { completion(.failure(error)); return }
             guard let http = response as? HTTPURLResponse, let data else {
                 completion(.failure(PetGenerationError.invalidResponse(provider))); return
             }
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             guard 200..<300 ~= http.statusCode else {
-                let retryable = request.httpMethod != "POST"
-                    && (http.statusCode == 429 || 500...599 ~= http.statusCode)
                 let retryLimit = 2
-                if attempt < retryLimit && retryable {
-                    let headerDelay = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 2
-                    let delay = min(12, max(1, headerDelay * pow(2, Double(attempt))))
+                if attempt < retryLimit,
+                   Self.isRetryable(status: http.statusCode) {
+                    let delay = Self.retryDelay(attempt: attempt,
+                                                retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
                     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
                         self.performJSON(request, provider: provider, requestID: requestID,
                                          attempt: attempt + 1, completion: completion)
@@ -1341,8 +1573,41 @@ final class PetGenerationCoordinator {
         callbackQueue.async { callback(result) }
     }
 
+
+    /// The app already mints a per-generation request ID and gates on it
+    /// locally, but never told the provider. Sending it as an idempotency key
+    /// makes the *provider* collapse a replay, which covers the case the local
+    /// ledger cannot: the app is killed after the multipart body goes out but
+    /// before the response lands, and `usedRequestIDs` — in memory only — comes
+    /// back empty on relaunch.
+    private static func idempotent(_ request: URLRequest, requestID: String) -> URLRequest {
+        var keyed = request
+        keyed.setValue(requestID, forHTTPHeaderField: "Idempotency-Key")
+        return keyed
+    }
+
     private func begin(_ requestID: String) {
         lock.lock(); cancelled.remove(requestID); lock.unlock()
+    }
+
+    /// Retryable means the provider demonstrably has not produced an image yet:
+    /// it rejected the request outright with a rate limit or a server error, so
+    /// nothing was generated and nothing was billed. Anything past a 2xx has
+    /// possibly already cost money and is never replayed automatically.
+    ///
+    /// This used to key off `httpMethod != "POST"`, and since every image
+    /// request is a POST the whole backoff path below was unreachable — one 429
+    /// killed the run.
+    static func isRetryable(status: Int) -> Bool {
+        status == 429 || (500...599).contains(status)
+    }
+
+    static func retryDelay(attempt: Int, retryAfter: String?) -> Double {
+        let headerDelay = retryAfter.flatMap(Double.init) ?? 2
+        // deterministic jitter per attempt so a burst of parallel stage
+        // requests does not retry in lockstep
+        let jitter = 0.75 + Double((attempt &* 7) % 5) / 10
+        return min(12, max(1, headerDelay * pow(2, Double(attempt)) * jitter))
     }
 
     private func emitStaged(_ callback: @escaping StagedProgress, phase: String,
@@ -1392,6 +1657,10 @@ final class PetGenerationCoordinator {
         guard let data = dataFromDataURI(value), validReference(data) else { return nil }
         return data
     }
+
+    /// OpenAI's images/edits payload limit, with headroom for the multipart
+    /// framing and the prompt.
+    static let maximumRequestBodyBytes = 45 * 1024 * 1024
 
     private static func validReference(_ data: Data?) -> Bool {
         guard let data else { return true }
@@ -1447,8 +1716,11 @@ final class PetGenerationCoordinator {
                 if lower.hasPrefix("data:image/") { embedded.append(string) }
                 else if (key == "base64" || key == "b64_json"), string.count > 200 {
                     embedded.append("data:image/png;base64," + string)
-                } else if (lower.hasPrefix("https://") || lower.hasPrefix("http://")),
+                } else if lower.hasPrefix("https://"),
                           lower.contains(".png") || lower.contains("image") { urls.append(string) }
+                // Plaintext http was collected here and then rejected by
+                // resolveImage's https guard, so a provider-response problem
+                // surfaced as "the reference image could not be read".
             }
         }
         visit(value)

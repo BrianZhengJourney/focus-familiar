@@ -172,17 +172,25 @@ func shortName(_ n: String) -> String { shortNames[n] ?? n }
 // working memory (JS, in-RAM) → episodic log (disk) → replayed on launch ──
 
 let logDir: URL = {
-    let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("FocusFamiliar")
+    let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+    let d = support.appendingPathComponent("Mimo")
+    // One-time move of pre-rename data. Only when the new home does not exist
+    // yet, so this can never clobber a live Mimo directory.
+    let legacy = support.appendingPathComponent("FocusFamiliar")
+    if !FileManager.default.fileExists(atPath: d.path),
+       FileManager.default.fileExists(atPath: legacy.path) {
+        try? FileManager.default.moveItem(at: legacy, to: d)
+    }
     try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
     return d
 }()
 
-func todayLogURL() -> URL {
-    let f = DateFormatter()
-    f.dateFormat = "yyyy-MM-dd"
-    return logDir.appendingPathComponent("activity-\(f.string(from: Date())).jsonl")
+func logURL(for date: Date) -> URL {
+    logDir.appendingPathComponent("activity-\(logDayStamp(date)).jsonl")
 }
+
+func todayLogURL() -> URL { logURL(for: Date()) }
 
 func appendLog(_ entry: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: entry),
@@ -205,11 +213,10 @@ func readTodayLog() -> String {
 
 // past 6 days (today comes from the live in-page history, so skip it)
 func readWeekLog() -> String {
-    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
     var lines: [String] = []
     for i in 1...6 {
         guard let d = Calendar.current.date(byAdding: .day, value: -i, to: Date()) else { continue }
-        let url = logDir.appendingPathComponent("activity-\(f.string(from: d)).jsonl")
+        let url = logURL(for: d)
         if let text = try? String(contentsOf: url, encoding: .utf8) {
             lines.append(contentsOf: text.split(separator: "\n").map(String.init))
         }
@@ -419,6 +426,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     /// Character currently receiving post-adoption expression sheets (one
     /// sequential run at a time; nil when idle).
     var expressionRunCharacterID: String?
+    /// The in-flight expression request, so ◐ → cancel can actually reach it.
+    var expressionRunRequestID: String?
+    /// Clears expressionRunCharacterID if no callback ever arrives. Without it
+    /// a single dropped completion left the run "busy" for the process
+    /// lifetime, and every later expression run was refused.
+    var expressionRunWatchdog: DispatchWorkItem?
+    /// Lets background reference preprocessing notice cancellation without
+    /// hopping to the main thread on every poll.
+    var activeStudioCancellationToken: StudioCancellationToken?
     var lockTokens: [NSObjectProtocol] = []
     var isIdle = false
 
@@ -852,10 +868,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     @objc func exportJournal() {
         webView.evaluateJavaScript("famExportMD()") { result, _ in
             guard let md = result as? String else { return }
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
             let dir = logDir.appendingPathComponent("exports")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).md")
+            let url = dir.appendingPathComponent("journal-\(logDayStamp()).md")
             try? md.write(to: url, atomically: true, encoding: .utf8)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(md, forType: .string)
@@ -872,10 +887,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     @objc func openJournalPage() {
         webView.evaluateJavaScript("famExportHTML()") { result, _ in
             guard let html = result as? String else { return }
-            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
             let dir = logDir.appendingPathComponent("exports")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let url = dir.appendingPathComponent("journal-\(f.string(from: Date())).html")
+            let url = dir.appendingPathComponent("journal-\(logDayStamp()).html")
             try? html.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.open(url)
         }

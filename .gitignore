@@ -1,3 +1,4 @@
 mac/build/
-.claude/
+.claude/*
+!.claude/launch.json
 .DS_Store
